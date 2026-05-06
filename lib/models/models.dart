@@ -1,0 +1,105 @@
+enum RoomStatus { occupied, vacant, maintenance }
+enum InvoiceStatus { unpaid, pending, paid }
+enum MessageType { text, maintenanceRequest, parcelNotification, maintenanceUpdate }
+
+class Room {
+  final String id;
+  final String floor;
+  final RoomStatus status;
+  final String? tenantName;
+  final String? phoneNumber;
+  final double price;
+
+  Room({
+    required this.id,
+    required this.floor,
+    required this.status,
+    this.tenantName,
+    this.phoneNumber,
+    required this.price,
+  });
+}
+
+class Tenant {
+  final String name;
+  final String roomNumber;
+  final String phoneNumber;
+
+  Tenant({required this.name, required this.roomNumber, required this.phoneNumber});
+}
+
+class Invoice {
+  final String id;
+  final String roomNumber;
+  final String tenantName;
+  final double waterUnits;
+  final double electricityUnits;
+  final double roomPrice;
+  final InvoiceStatus status;
+  final DateTime date;
+  final bool hasSlip;
+
+  Invoice({
+    required this.id,
+    required this.roomNumber,
+    required this.tenantName,
+    required this.waterUnits,
+    required this.electricityUnits,
+    required this.roomPrice,
+    required this.status,
+    required this.date,
+    this.hasSlip = false,
+  });
+
+  double get waterCost => waterUnits * 18;
+  double get electricityCost => electricityUnits * 8;
+  double get total => roomPrice + waterCost + electricityCost;
+}
+
+class MeterReading {
+  final String roomNumber;
+  final String tenantName;
+  final double previousValue;
+  double? currentValue;
+
+  MeterReading({
+    required this.roomNumber,
+    required this.tenantName,
+    required this.previousValue,
+    this.currentValue,
+  });
+}
+
+class ChatMessage {
+  final String id;
+  final String senderName;
+  final String text;
+  final DateTime timestamp;
+  final bool isFromOwner;
+  final MessageType type;
+
+  ChatMessage({
+    required this.id,
+    required this.senderName,
+    required this.text,
+    required this.timestamp,
+    required this.isFromOwner,
+    this.type = MessageType.text,
+  });
+}
+
+class ChatPreview {
+  final String roomNumber;
+  final String tenantName;
+  final String lastMessage;
+  final int unreadCount;
+  final bool hasPendingMaintenance;
+
+  ChatPreview({
+    required this.roomNumber,
+    required this.tenantName,
+    required this.lastMessage,
+    required this.unreadCount,
+    this.hasPendingMaintenance = false,
+  });
+}
