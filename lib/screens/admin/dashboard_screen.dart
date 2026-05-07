@@ -1,25 +1,136 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../models/models.dart';
+import '../../services/supabase_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
-import '../../models/models.dart';
-import '../../mock/mock_data.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   final String dormSlug;
 
   const DashboardScreen({super.key, required this.dormSlug});
 
   @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final SupabaseService _service = SupabaseService();
+  bool _isLoading = true;
+  String? _errorMessage;
+  List<Room> _rooms = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRooms();
+  }
+
+  Future<void> _loadRooms() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final rooms = await _service.fetchRooms();
+
+      if (!mounted) return;
+
+      setState(() {
+        _rooms = rooms;
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = error.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final occupiedRooms = _rooms.where((room) => room.status == RoomStatus.occupied).toList();
+    final occupiedCount = occupiedRooms.length;
+    final totalRooms = _rooms.length;
+    final occupancyRate = totalRooms == 0 ? 0 : ((occupiedCount / totalRooms) * 100).round();
+    final estimatedMonthlyRevenue = occupiedRooms.fold<double>(
+      0,
+      (sum, room) => sum + room.price,
+    );
+    final floorNumbers = _rooms
+        .map((room) => room.floor)
+        .toSet()
+        .toList()
+      ..sort((a, b) => int.parse(a).compareTo(int.parse(b)));
+
     return Scaffold(
       appBar: const MobileHeader(subtitle: 'หน้าหลัก'),
-      body: SingleChildScrollView(
+      body: _buildBody(
+        context,
+        occupiedCount: occupiedCount,
+        totalRooms: totalRooms,
+        occupancyRate: occupancyRate,
+        estimatedMonthlyRevenue: estimatedMonthlyRevenue,
+        floorNumbers: floorNumbers,
+      ),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context, {
+    required int occupiedCount,
+    required int totalRooms,
+    required int occupancyRate,
+    required double estimatedMonthlyRevenue,
+    required List<String> floorNumbers,
+  }) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: AppColors.destructive, size: 32),
+              const SizedBox(height: 12),
+              Text(
+                'โหลดข้อมูลแดชบอร์ดไม่สำเร็จ',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 16),
+              PrimaryButton(
+                label: 'ลองใหม่',
+                icon: Icons.refresh,
+                onPressed: _loadRooms,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadRooms,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1.1 Stats Grid
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -27,42 +138,41 @@ class DashboardScreen extends StatelessWidget {
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
               childAspectRatio: 1.4,
-              children: const [
+              children: [
                 StatCard(
-                  title: 'รายได้เดือนนี้',
-                  value: '฿85,500',
+                  title: 'รายได้คาดการณ์',
+                  value: '฿${estimatedMonthlyRevenue.toStringAsFixed(0)}',
+                  subtitle: 'จากห้องที่มีผู้พักอาศัย',
                   icon: Icons.account_balance_wallet,
                   variant: BadgeVariant.primary,
                 ),
                 StatCard(
                   title: 'อัตราเข้าพัก',
-                  value: '90%',
-                  subtitle: '18/20 ห้อง',
+                  value: '$occupancyRate%',
+                  subtitle: '$occupiedCount/$totalRooms ห้อง',
                   icon: Icons.home,
                   variant: BadgeVariant.success,
                 ),
                 StatCard(
                   title: 'ผู้พักอาศัยทั้งหมด',
-                  value: '18',
+                  value: '$occupiedCount',
                   icon: Icons.people,
                 ),
                 StatCard(
-                  title: 'สลิปรอตรวจ',
-                  value: '3',
-                  icon: Icons.warning_amber,
+                  title: 'ห้องว่าง',
+                  value: '${_rooms.where((room) => room.status == RoomStatus.vacant).length}',
+                  icon: Icons.meeting_room_outlined,
                   variant: BadgeVariant.warning,
                 ),
               ],
             ),
             const SizedBox(height: 24),
-
-            // 1.2 Floor Plan
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('แผนผังห้องพัก', style: Theme.of(context).textTheme.titleMedium),
                 TextButton(
-                  onPressed: () => context.go('/$dormSlug/admin/rooms'),
+                  onPressed: () => context.go('/${widget.dormSlug}/admin/rooms'),
                   child: const Text('จัดการห้อง →', style: TextStyle(color: AppColors.ring)),
                 ),
               ],
@@ -82,17 +192,28 @@ class DashboardScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  _buildFloorSection(context, 'ชั้น 1', MockData.rooms.where((r) => r.floor == '1').toList()),
-                  const SizedBox(height: 16),
-                  _buildFloorSection(context, 'ชั้น 2', MockData.rooms.where((r) => r.floor == '2').toList()),
-                  const SizedBox(height: 16),
-                  _buildFloorSection(context, 'ชั้น 3', MockData.rooms.where((r) => r.floor == '3').toList()),
+                  if (floorNumbers.isEmpty)
+                    Text(
+                      'ยังไม่มีข้อมูลห้องพัก',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    )
+                  else
+                    ...floorNumbers.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final floor = entry.value;
+                      final roomsOnFloor = _rooms.where((room) => room.floor == floor).toList();
+
+                      return Column(
+                        children: [
+                          if (index > 0) const SizedBox(height: 16),
+                          _buildFloorSection(context, 'ชั้น $floor', roomsOnFloor),
+                        ],
+                      );
+                    }),
                 ],
               ),
             ),
             const SizedBox(height: 24),
-
-            // 1.3 Quick Actions
             Text('เมนูด่วน', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             GridView.count(
@@ -106,27 +227,27 @@ class DashboardScreen extends StatelessWidget {
                   icon: Icons.speed,
                   label: 'บันทึกมิเตอร์',
                   color: AppColors.primary,
-                  onTap: () => context.go('/$dormSlug/admin/meter'),
+                  onTap: () => context.go('/${widget.dormSlug}/admin/meter'),
                 ),
                 _QuickActionItem(
                   icon: Icons.receipt_long,
                   label: 'สร้างบิล',
                   color: AppColors.success,
                   badge: '5',
-                  onTap: () => context.go('/$dormSlug/admin/billing'),
+                  onTap: () => context.go('/${widget.dormSlug}/admin/billing'),
                 ),
                 _QuickActionItem(
                   icon: Icons.description,
                   label: 'สัญญาเช่า',
                   color: AppColors.warning,
-                  onTap: () => context.go('/$dormSlug/admin/lease'),
+                  onTap: () => context.go('/${widget.dormSlug}/admin/lease'),
                 ),
                 _QuickActionItem(
                   icon: Icons.chat_bubble_outline,
                   label: 'แชท',
                   color: AppColors.ring,
                   badge: '2',
-                  onTap: () => context.go('/$dormSlug/admin/chat'),
+                  onTap: () => context.go('/${widget.dormSlug}/admin/chat'),
                 ),
               ],
             ),
@@ -218,8 +339,10 @@ class _RoomTile extends StatelessWidget {
             Text(room.id, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 2),
             Text(
-              room.status == RoomStatus.occupied ? (room.tenantName ?? '') : (room.status == RoomStatus.vacant ? 'ว่าง' : 'ซ่อม'),
-              style: TextStyle(color: textColor.withOpacity(0.8), fontSize: 9),
+              room.status == RoomStatus.occupied
+                  ? (room.tenantFirstName ?? room.tenantName ?? '')
+                  : (room.status == RoomStatus.vacant ? 'ว่าง' : 'ซ่อม'),
+              style: TextStyle(color: textColor.withValues(alpha: 0.8), fontSize: 9),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -258,7 +381,7 @@ class _QuickActionItem extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 24),

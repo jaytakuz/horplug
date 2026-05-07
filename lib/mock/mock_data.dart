@@ -3,28 +3,28 @@ import '../models/models.dart';
 class MockData {
   static List<Room> rooms = [
     // Floor 1
-    Room(id: "101", floor: "1", status: RoomStatus.occupied, tenantName: "คุณตั้ม", phoneNumber: "081-111-XXXX", price: 3500),
-    Room(id: "102", floor: "1", status: RoomStatus.vacant, price: 3500),
-    Room(id: "103", floor: "1", status: RoomStatus.occupied, tenantName: "คุณนิดหน่อย", phoneNumber: "082-222-XXXX", price: 3500),
-    Room(id: "104", floor: "1", status: RoomStatus.occupied, tenantName: "คุณจอย", phoneNumber: "083-333-XXXX", price: 3500),
-    Room(id: "105", floor: "1", status: RoomStatus.maintenance, price: 3500),
-    Room(id: "106", floor: "1", status: RoomStatus.occupied, tenantName: "คุณเอก", phoneNumber: "084-444-XXXX", price: 3500),
-    // Floor 2
-    Room(id: "201", floor: "2", status: RoomStatus.occupied, tenantName: "คุณบี", phoneNumber: "085-555-XXXX", price: 3700),
-    Room(id: "202", floor: "2", status: RoomStatus.occupied, tenantName: "คุณแอน", phoneNumber: "086-666-XXXX", price: 3700),
-    Room(id: "203", floor: "2", status: RoomStatus.vacant, price: 3700),
-    Room(id: "204", floor: "2", status: RoomStatus.occupied, tenantName: "คุณกอล์ฟ", phoneNumber: "087-777-XXXX", price: 3700),
-    Room(id: "205", floor: "2", status: RoomStatus.occupied, tenantName: "คุณหยก", phoneNumber: "088-888-XXXX", price: 3700),
-    Room(id: "206", floor: "2", status: RoomStatus.occupied, tenantName: "คุณนิว", phoneNumber: "089-999-XXXX", price: 3700),
-    Room(id: "207", floor: "2", status: RoomStatus.vacant, price: 3700),
-    // Floor 3
-    Room(id: "301", floor: "3", status: RoomStatus.occupied, tenantName: "คุณเก่ง", phoneNumber: "090-000-XXXX", price: 4000),
-    Room(id: "302", floor: "3", status: RoomStatus.occupied, tenantName: "คุณแอม", phoneNumber: "091-111-XXXX", price: 4000),
-    Room(id: "303", floor: "3", status: RoomStatus.vacant, price: 4000),
-    Room(id: "304", floor: "3", status: RoomStatus.occupied, tenantName: "คุณเจ", phoneNumber: "092-222-XXXX", price: 4000),
-    Room(id: "305", floor: "3", status: RoomStatus.occupied, tenantName: "คุณฟ้า", phoneNumber: "089-XXX-XXXX", price: 4000),
-    Room(id: "306", floor: "3", status: RoomStatus.occupied, tenantName: "คุณปลา", phoneNumber: "093-333-XXXX", price: 4000),
-    Room(id: "307", floor: "3", status: RoomStatus.maintenance, price: 4000),
+    // Room(id: "101", floor: "1", status: RoomStatus.occupied, tenantName: "คุณตั้ม", phoneNumber: "081-111-XXXX", price: 3500),
+    // Room(id: "102", floor: "1", status: RoomStatus.vacant, price: 3500),
+    // Room(id: "103", floor: "1", status: RoomStatus.occupied, tenantName: "คุณนิดหน่อย", phoneNumber: "082-222-XXXX", price: 3500),
+    // Room(id: "104", floor: "1", status: RoomStatus.occupied, tenantName: "คุณจอย", phoneNumber: "083-333-XXXX", price: 3500),
+    // Room(id: "105", floor: "1", status: RoomStatus.maintenance, price: 3500),
+    // Room(id: "106", floor: "1", status: RoomStatus.occupied, tenantName: "คุณเอก", phoneNumber: "084-444-XXXX", price: 3500),
+    // // Floor 2
+    // Room(id: "201", floor: "2", status: RoomStatus.occupied, tenantName: "คุณบี", phoneNumber: "085-555-XXXX", price: 3700),
+    // Room(id: "202", floor: "2", status: RoomStatus.occupied, tenantName: "คุณแอน", phoneNumber: "086-666-XXXX", price: 3700),
+    // Room(id: "203", floor: "2", status: RoomStatus.vacant, price: 3700),
+    // Room(id: "204", floor: "2", status: RoomStatus.occupied, tenantName: "คุณกอล์ฟ", phoneNumber: "087-777-XXXX", price: 3700),
+    // Room(id: "205", floor: "2", status: RoomStatus.occupied, tenantName: "คุณหยก", phoneNumber: "088-888-XXXX", price: 3700),
+    // Room(id: "206", floor: "2", status: RoomStatus.occupied, tenantName: "คุณนิว", phoneNumber: "089-999-XXXX", price: 3700),
+    // Room(id: "207", floor: "2", status: RoomStatus.vacant, price: 3700),
+    // // Floor 3
+    // Room(id: "301", floor: "3", status: RoomStatus.occupied, tenantName: "คุณเก่ง", phoneNumber: "090-000-XXXX", price: 4000),
+    // Room(id: "302", floor: "3", status: RoomStatus.occupied, tenantName: "คุณแอม", phoneNumber: "091-111-XXXX", price: 4000),
+    // Room(id: "303", floor: "3", status: RoomStatus.vacant, price: 4000),
+    // Room(id: "304", floor: "3", status: RoomStatus.occupied, tenantName: "คุณเจ", phoneNumber: "092-222-XXXX", price: 4000),
+    // Room(id: "305", floor: "3", status: RoomStatus.occupied, tenantName: "คุณฟ้า", phoneNumber: "089-XXX-XXXX", price: 4000),
+    // Room(id: "306", floor: "3", status: RoomStatus.occupied, tenantName: "คุณปลา", phoneNumber: "093-333-XXXX", price: 4000),
+    // Room(id: "307", floor: "3", status: RoomStatus.maintenance, price: 4000),
   ];
 
   static List<Invoice> invoices = [
