@@ -192,7 +192,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
     }
 
     Room? selectedRoom = vacantRooms.first;
-    Tenant? selectedTenant = _availableTenants.first;
+    Tenant? selectedTenant;
+    final searchController = TextEditingController();
+    var filteredTenants = <Tenant>[];
     final messenger = ScaffoldMessenger.of(context);
 
     showDialog<void>(
@@ -202,90 +204,203 @@ class _RoomsScreenState extends State<RoomsScreen> {
           title: const Text('เพิ่มผู้พักอาศัยเข้ากับห้อง'),
           backgroundColor: AppColors.card,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<Room>(
-                initialValue: selectedRoom,
-                decoration: const InputDecoration(labelText: 'เลือกห้องว่าง'),
-                items: vacantRooms
-                    .map((room) => DropdownMenuItem<Room>(
-                          value: room,
-                          child: Text(room.id),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  setDialogState(() {
-                    selectedRoom = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<Tenant>(
-                initialValue: selectedTenant,
-                decoration: const InputDecoration(labelText: 'เลือก tenant profile'),
-                items: _availableTenants
-                    .map((tenant) => DropdownMenuItem<Tenant>(
-                          value: tenant,
-                          child: Text('${tenant.name} (${tenant.phoneNumber})'),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  setDialogState(() {
-                    selectedTenant = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 24),
-              PrimaryButton(
-                label: _isAssigningTenant ? 'กำลังบันทึก...' : 'บันทึก',
-                fullWidth: true,
-                onPressed: _isAssigningTenant || selectedRoom == null || selectedTenant == null
-                    ? null
-                    : () async {
-                        final navigator = Navigator.of(dialogContext);
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<Room>(
+                  initialValue: selectedRoom,
+                  decoration: const InputDecoration(labelText: 'เลือกห้องว่าง'),
+                  items: vacantRooms
+                      .map((room) => DropdownMenuItem<Room>(
+                            value: room,
+                            child: Text(room.id),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedRoom = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: searchController,
+                  style: const TextStyle(color: AppColors.primary),
+                  decoration: const InputDecoration(
+                    labelText: 'ค้นหา tenant profile ด้วยชื่อ',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      final keyword = value.trim().toLowerCase();
+                      if (keyword.isEmpty) {
+                        filteredTenants = [];
+                      } else {
+                        filteredTenants = _availableTenants.where((tenant) {
+                          return tenant.name.toLowerCase().contains(keyword);
+                        }).toList();
+                      }
 
-                        setDialogState(() {
-                          _isAssigningTenant = true;
-                        });
+                      if (selectedTenant != null &&
+                          !filteredTenants.any((tenant) => tenant.id == selectedTenant!.id)) {
+                        selectedTenant = null;
+                      }
+                    });
+                  },
+                ),
+                if (searchController.text.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  if (filteredTenants.isNotEmpty)
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: filteredTenants.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final tenant = filteredTenants[index];
+                          final isSelected = selectedTenant?.id == tenant.id;
 
-                        try {
-                          await _service.assignTenantToRoom(
-                            roomDbId: selectedRoom!.dbId,
-                            tenantId: selectedTenant!.id,
+                          return ListTile(
+                            dense: true,
+                            title: Text(tenant.name),
+                            trailing: isSelected
+                                ? const Icon(Icons.check_circle, color: AppColors.primary)
+                                : null,
+                            selected: isSelected,
+                            selectedTileColor: AppColors.muted,
+                            onTap: () {
+                              setDialogState(() {
+                                if (isSelected) {
+                                  selectedTenant = null;
+                                } else {
+                                  selectedTenant = tenant;
+                                }
+                              });
+                            },
                           );
+                        },
+                      ),
+                    ),
+                ],
+                if (selectedTenant != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'รายละเอียด tenant ที่เลือก',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.muted,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _TenantDetailRow(label: 'ชื่อ', value: selectedTenant!.name),
+                        _TenantDetailRow(label: 'เบอร์โทร', value: selectedTenant!.phoneNumber),
+                        _TenantDetailRow(label: 'อีเมล', value: selectedTenant!.email ?? '-'),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                PrimaryButton(
+                  label: _isAssigningTenant ? 'กำลังบันทึก...' : 'บันทึก',
+                  fullWidth: true,
+                  onPressed: _isAssigningTenant || selectedRoom == null || selectedTenant == null
+                      ? null
+                      : () async {
+                          final navigator = Navigator.of(dialogContext);
 
-                          if (!mounted) return;
+                          setDialogState(() {
+                            _isAssigningTenant = true;
+                          });
 
-                          navigator.pop();
-                          await _loadData();
+                          try {
+                            await _service.assignTenantToRoom(
+                              roomDbId: selectedRoom!.dbId,
+                              tenantId: selectedTenant!.id,
+                            );
 
-                          if (!mounted) return;
+                            if (!mounted) return;
 
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'เพิ่ม ${selectedTenant!.name} เข้ากับห้อง ${selectedRoom!.id} แล้ว',
+                            navigator.pop();
+                            await _loadData();
+
+                            if (!mounted) return;
+
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'เพิ่ม ${selectedTenant!.name} เข้าห้อง ${selectedRoom!.id} แล้ว',
+                                ),
                               ),
-                            ),
-                          );
-                        } catch (error) {
-                          if (!mounted) return;
+                            );
+                          } catch (error) {
+                            if (!mounted) return;
 
-                          messenger.showSnackBar(
-                            SnackBar(content: Text('บันทึกไม่สำเร็จ: $error')),
-                          );
-                        } finally {
-                          if (mounted) {
-                            setState(() {
-                              _isAssigningTenant = false;
-                            });
+                            messenger.showSnackBar(
+                              SnackBar(content: Text('บันทึกไม่สำเร็จ: $error')),
+                            );
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                _isAssigningTenant = false;
+                              });
+                            }
                           }
-                        }
-                      },
-              ),
-            ],
+                        },
+                ),
+              ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TenantDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _TenantDetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: RichText(
+        text: TextSpan(
+          style: Theme.of(context).textTheme.bodySmall,
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            TextSpan(
+              text: value,
+              style: const TextStyle(color: AppColors.mutedForeground),
+            ),
+          ],
         ),
       ),
     );

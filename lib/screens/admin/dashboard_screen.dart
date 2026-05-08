@@ -340,7 +340,7 @@ class _RoomTile extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               room.status == RoomStatus.occupied
-                  ? (room.tenantFirstName ?? room.tenantName ?? '')
+                  ? _shortTenantName(room.tenantName)
                   : (room.status == RoomStatus.vacant ? 'ว่าง' : 'ซ่อม'),
               style: TextStyle(color: textColor.withValues(alpha: 0.8), fontSize: 9),
               maxLines: 1,
@@ -350,6 +350,11 @@ class _RoomTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _shortTenantName(String? fullName) {
+    if (fullName == null || fullName.trim().isEmpty) return '';
+    return fullName.trim().split(RegExp(r'\s+')).first;
   }
 }
 
