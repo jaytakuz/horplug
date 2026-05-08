@@ -8,7 +8,6 @@ class Room {
   final String floor;
   final RoomStatus status;
   final String? currentTenantId;
-  final String? tenantFirstName;
   final String? tenantName;
   final String? phoneNumber;
   final double price;
@@ -19,7 +18,6 @@ class Room {
     required this.floor,
     required this.status,
     this.currentTenantId,
-    this.tenantFirstName,
     this.tenantName,
     this.phoneNumber,
     required this.price,
@@ -30,12 +28,14 @@ class Tenant {
   final String id;
   final String name;
   final String roomNumber;
+  final String? email;
   final String phoneNumber;
 
   Tenant({
     required this.id,
     required this.name,
     this.roomNumber = '',
+    this.email,
     required this.phoneNumber,
   });
 }
