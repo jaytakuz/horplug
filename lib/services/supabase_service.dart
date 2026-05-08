@@ -48,7 +48,6 @@ class SupabaseService {
         floor: row['floor'].toString(),
         status: _mapRoomStatus(row['status'] as String?),
         currentTenantId: tenantId,
-        tenantFirstName: firstName,
         tenantName: fullName.isEmpty ? null : fullName,
         phoneNumber: tenant?['phone'] as String?,
         price: (row['base_price'] as num).toDouble(),
@@ -69,7 +68,7 @@ class SupabaseService {
 
     final tenantsData = await client
         .from('tenant_profiles')
-        .select('id, first_name, last_name, phone')
+        .select('id, first_name, last_name, email, phone')
         .order('first_name', ascending: true);
 
     return (tenantsData as List)
@@ -85,6 +84,7 @@ class SupabaseService {
       return Tenant(
         id: row['id'] as String,
         name: fullName.isEmpty ? 'Unknown tenant' : fullName,
+        email: row['email'] as String?,
         phoneNumber: row['phone'] as String? ?? '-',
       );
     }).toList();
