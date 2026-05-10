@@ -23,7 +23,7 @@ class SupabaseService {
     if (tenantIds.isNotEmpty) {
       final tenantsData = await client
           .from('tenant_profiles')
-          .select('id, first_name, last_name, phone')
+          .select('id, first_name, last_name, email, phone')
           .inFilter('id', tenantIds);
 
       for (final tenant in (tenantsData as List).cast<Map<String, dynamic>>()) {
@@ -49,6 +49,7 @@ class SupabaseService {
         status: _mapRoomStatus(row['status'] as String?),
         currentTenantId: tenantId,
         tenantName: fullName.isEmpty ? null : fullName,
+        tenantEmail: tenant?['email'] as String?,
         phoneNumber: tenant?['phone'] as String?,
         price: (row['base_price'] as num).toDouble(),
       );
@@ -97,6 +98,15 @@ class SupabaseService {
     await client.from('rooms').update({
       'current_tenant_id': tenantId,
       'status': 'occupied',
+    }).eq('id', roomDbId);
+  }
+
+  Future<void> removeTenantFromRoom({
+    required int roomDbId,
+  }) async {
+    await client.from('rooms').update({
+      'current_tenant_id': null,
+      'status': 'vacant',
     }).eq('id', roomDbId);
   }
 

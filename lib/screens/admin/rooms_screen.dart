@@ -15,7 +15,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
   final SupabaseService _service = SupabaseService();
   String selectedFilter = 'ทั้งหมด';
   bool _isLoading = true;
-  bool _isAssigningTenant = false;
+  bool _isUpdatingTenant = false;
   String? _errorMessage;
   List<Room> _rooms = [];
   List<Tenant> _availableTenants = [];
@@ -109,19 +109,41 @@ class _RoomsScreenState extends State<RoomsScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'ห้องพักทั้งหมด (${_rooms.length})',
-                style: Theme.of(context).textTheme.titleMedium,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'ห้องพักทั้งหมด (${_rooms.length})',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ],
               ),
-              PrimaryButton(
-                label: 'เพิ่มผู้พักอาศัย',
-                icon: Icons.person_add_alt_1,
-                onPressed: _rooms.any((room) => room.status == RoomStatus.vacant)
-                    ? () => _showAssignTenantDialog(context)
-                    : null,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: PrimaryButton(
+                      label: 'เพิ่มผู้พักอาศัย',
+                      icon: Icons.person_add_alt_1,
+                      onPressed: _rooms.any((room) => room.status == RoomStatus.vacant)
+                          ? () => _showAssignTenantDialog(context)
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _rooms.any((room) => room.status == RoomStatus.occupied)
+                          ? () => _showRemoveTenantDialog(context)
+                          : null,
+                      icon: const Icon(Icons.person_remove_alt_1),
+                      label: const Text('ลบผู้พักอาศัย'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -320,15 +342,15 @@ class _RoomsScreenState extends State<RoomsScreen> {
                 ],
                 const SizedBox(height: 24),
                 PrimaryButton(
-                  label: _isAssigningTenant ? 'กำลังบันทึก...' : 'บันทึก',
+                  label: _isUpdatingTenant ? 'กำลังบันทึก...' : 'บันทึก',
                   fullWidth: true,
-                  onPressed: _isAssigningTenant || selectedRoom == null || selectedTenant == null
+                  onPressed: _isUpdatingTenant || selectedRoom == null || selectedTenant == null
                       ? null
                       : () async {
                           final navigator = Navigator.of(dialogContext);
 
                           setDialogState(() {
-                            _isAssigningTenant = true;
+                            _isUpdatingTenant = true;
                           });
 
                           try {
@@ -360,7 +382,132 @@ class _RoomsScreenState extends State<RoomsScreen> {
                           } finally {
                             if (mounted) {
                               setState(() {
-                                _isAssigningTenant = false;
+                                _isUpdatingTenant = false;
+                              });
+                            }
+                          }
+                        },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showRemoveTenantDialog(BuildContext context) {
+    final occupiedRooms = _rooms.where((room) => room.status == RoomStatus.occupied).toList();
+
+    if (occupiedRooms.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ไม่มีห้องที่มีผู้พักอาศัยให้ลบออก')),
+      );
+      return;
+    }
+
+    Room? selectedRoom = occupiedRooms.first;
+    final messenger = ScaffoldMessenger.of(context);
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('ลบผู้พักอาศัยออกจากห้อง'),
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<Room>(
+                  initialValue: selectedRoom,
+                  decoration: const InputDecoration(labelText: 'เลือกห้องที่มีผู้พักอาศัย'),
+                  items: occupiedRooms
+                      .map((room) => DropdownMenuItem<Room>(
+                            value: room,
+                            child: Text('ห้อง ${room.id}'),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedRoom = value;
+                    });
+                  },
+                ),
+                if (selectedRoom != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'รายละเอียดผู้พักอาศัยในห้อง',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.muted,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _TenantDetailRow(label: 'ห้อง', value: selectedRoom!.id),
+                        _TenantDetailRow(label: 'ชื่อ', value: selectedRoom!.tenantName ?? '-'),
+                        _TenantDetailRow(label: 'เบอร์โทร', value: selectedRoom!.phoneNumber ?? '-'),
+                        _TenantDetailRow(label: 'อีเมล', value: selectedRoom!.tenantEmail ?? '-'),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                PrimaryButton(
+                  label: _isUpdatingTenant ? 'กำลังลบ...' : 'ลบออกจากห้อง',
+                  fullWidth: true,
+                  onPressed: _isUpdatingTenant || selectedRoom == null
+                      ? null
+                      : () async {
+                          final navigator = Navigator.of(dialogContext);
+
+                          setDialogState(() {
+                            _isUpdatingTenant = true;
+                          });
+
+                          try {
+                            await _service.removeTenantFromRoom(
+                              roomDbId: selectedRoom!.dbId,
+                            );
+
+                            if (!mounted) return;
+
+                            navigator.pop();
+                            await _loadData();
+
+                            if (!mounted) return;
+
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'ลบผู้พักอาศัยออกจากห้อง ${selectedRoom!.id} แล้ว',
+                                ),
+                              ),
+                            );
+                          } catch (error) {
+                            if (!mounted) return;
+
+                            messenger.showSnackBar(
+                              SnackBar(content: Text('ลบไม่สำเร็จ: $error')),
+                            );
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                _isUpdatingTenant = false;
                               });
                             }
                           }
