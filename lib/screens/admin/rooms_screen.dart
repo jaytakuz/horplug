@@ -109,41 +109,17 @@ class _RoomsScreenState extends State<RoomsScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'ห้องพักทั้งหมด (${_rooms.length})',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ],
+              Text(
+                'ห้องพักทั้งหมด (${_rooms.length})',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: PrimaryButton(
-                      label: 'เพิ่มผู้พักอาศัย',
-                      icon: Icons.person_add_alt_1,
-                      onPressed: _rooms.any((room) => room.status == RoomStatus.vacant)
-                          ? () => _showAssignTenantDialog(context)
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _rooms.any((room) => room.status == RoomStatus.occupied)
-                          ? () => _showRemoveTenantDialog(context)
-                          : null,
-                      icon: const Icon(Icons.person_remove_alt_1),
-                      label: const Text('ลบผู้พักอาศัย'),
-                    ),
-                  ),
-                ],
+              PrimaryButton(
+                label: 'จัดการผู้พักอาศัย',
+                icon: Icons.people_alt_outlined,
+                onPressed: () => _showTenantManagementSheet(context),
               ),
             ],
           ),
@@ -194,6 +170,45 @@ class _RoomsScreenState extends State<RoomsScreen> {
     );
   }
 
+  void _showTenantManagementSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('จัดการผู้พัก', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.person_add_alt_1, color: AppColors.primary),
+                title: const Text('เพิ่มผู้พักอาศัย'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _showAssignTenantDialog(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_remove_alt_1, color: AppColors.destructive),
+                title: const Text('ลบผู้พักอาศัย'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _showRemoveTenantDialog(context);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showAssignTenantDialog(BuildContext context) {
     final vacantRooms = _rooms.where((room) => room.status == RoomStatus.vacant).toList();
 
@@ -206,9 +221,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
     if (_availableTenants.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('ไม่พบ tenant ที่ยังไม่ได้ผูกห้องใน tenant_profiles'),
-        ),
+        const SnackBar(content: Text('ไม่พบ tenant ที่ยังไม่ได้ผูกห้องใน tenant_profiles')),
       );
       return;
     }
@@ -223,7 +236,6 @@ class _RoomsScreenState extends State<RoomsScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('เพิ่มผู้พักอาศัยเข้ากับห้อง'),
           backgroundColor: AppColors.card,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           content: SizedBox(
@@ -232,6 +244,27 @@ class _RoomsScreenState extends State<RoomsScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'เพิ่มผู้พักอาศัยเข้ากับห้อง',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close, color: AppColors.primary),
+                      splashRadius: 20,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<Room>(
                   initialValue: selectedRoom,
                   decoration: const InputDecoration(labelText: 'เลือกห้องว่าง'),
@@ -273,44 +306,39 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     });
                   },
                 ),
-                if (searchController.text.isNotEmpty) ...[
+                if (searchController.text.isNotEmpty && filteredTenants.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  if (filteredTenants.isNotEmpty)
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 180),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.border),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: filteredTenants.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final tenant = filteredTenants[index];
-                          final isSelected = selectedTenant?.id == tenant.id;
-
-                          return ListTile(
-                            dense: true,
-                            title: Text(tenant.name),
-                            trailing: isSelected
-                                ? const Icon(Icons.check_circle, color: AppColors.primary)
-                                : null,
-                            selected: isSelected,
-                            selectedTileColor: AppColors.muted,
-                            onTap: () {
-                              setDialogState(() {
-                                if (isSelected) {
-                                  selectedTenant = null;
-                                } else {
-                                  selectedTenant = tenant;
-                                }
-                              });
-                            },
-                          );
-                        },
-                      ),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.border),
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: filteredTenants.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final tenant = filteredTenants[index];
+                        final isSelected = selectedTenant?.id == tenant.id;
+
+                        return ListTile(
+                          dense: true,
+                          title: Text(tenant.name),
+                          trailing: isSelected
+                              ? const Icon(Icons.check_circle, color: AppColors.primary)
+                              : null,
+                          selected: isSelected,
+                          selectedTileColor: AppColors.muted,
+                          onTap: () {
+                            setDialogState(() {
+                              selectedTenant = isSelected ? null : tenant;
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
                 ],
                 if (selectedTenant != null) ...[
                   const SizedBox(height: 16),
@@ -367,11 +395,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                             if (!mounted) return;
 
                             messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'เพิ่ม ${selectedTenant!.name} เข้าห้อง ${selectedRoom!.id} แล้ว',
-                                ),
-                              ),
+                              SnackBar(content: Text('เพิ่ม ${selectedTenant!.name} เข้าห้อง ${selectedRoom!.id} แล้ว')),
                             );
                           } catch (error) {
                             if (!mounted) return;
@@ -413,7 +437,6 @@ class _RoomsScreenState extends State<RoomsScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('ลบผู้พักอาศัยออกจากห้อง'),
           backgroundColor: AppColors.card,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           content: SizedBox(
@@ -422,13 +445,34 @@ class _RoomsScreenState extends State<RoomsScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'ลบผู้พักอาศัยออกจากห้อง',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close, color: AppColors.primary),
+                      splashRadius: 20,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<Room>(
                   initialValue: selectedRoom,
                   decoration: const InputDecoration(labelText: 'เลือกห้องที่มีผู้พักอาศัย'),
                   items: occupiedRooms
                       .map((room) => DropdownMenuItem<Room>(
                             value: room,
-                            child: Text('ห้อง ${room.id}'),
+                            child: Text(room.id),
                           ))
                       .toList(),
                   onChanged: (value) {
@@ -459,6 +503,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _TenantDetailRow(label: 'ห้อง', value: selectedRoom!.id),
+                        _TenantDetailRow(label: 'ชั้น', value: selectedRoom!.floor),
                         _TenantDetailRow(label: 'ชื่อ', value: selectedRoom!.tenantName ?? '-'),
                         _TenantDetailRow(label: 'เบอร์โทร', value: selectedRoom!.phoneNumber ?? '-'),
                         _TenantDetailRow(label: 'อีเมล', value: selectedRoom!.tenantEmail ?? '-'),
@@ -468,7 +513,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                 ],
                 const SizedBox(height: 24),
                 PrimaryButton(
-                  label: _isUpdatingTenant ? 'กำลังลบ...' : 'ลบออกจากห้อง',
+                  label: _isUpdatingTenant ? 'กำลังลบ...' : 'ยืนยันลบออกจากห้อง',
                   fullWidth: true,
                   onPressed: _isUpdatingTenant || selectedRoom == null
                       ? null
@@ -480,9 +525,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                           });
 
                           try {
-                            await _service.removeTenantFromRoom(
-                              roomDbId: selectedRoom!.dbId,
-                            );
+                            await _service.removeTenantFromRoom(roomDbId: selectedRoom!.dbId);
 
                             if (!mounted) return;
 
@@ -492,11 +535,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                             if (!mounted) return;
 
                             messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'ลบผู้พักอาศัยออกจากห้อง ${selectedRoom!.id} แล้ว',
-                                ),
-                              ),
+                              SnackBar(content: Text('ลบผู้พักอาศัยออกจากห้อง ${selectedRoom!.id} แล้ว')),
                             );
                           } catch (error) {
                             if (!mounted) return;
@@ -520,6 +559,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
       ),
     );
   }
+
 }
 
 class _TenantDetailRow extends StatelessWidget {

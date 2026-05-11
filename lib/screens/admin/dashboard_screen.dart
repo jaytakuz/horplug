@@ -436,7 +436,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        'เพิ่มผู้พักอาศัย',
+                        'เพิ่มผู้พักอาศัยเข้ากับห้อง',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
@@ -625,7 +625,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        'ลบผู้พักอาศัย',
+                        'ลบผู้พักอาศัยออกจากห้อง',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
