@@ -408,7 +408,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (_availableTenants.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่พบ tenant ที่ยังไม่ได้ผูกห้องใน tenant_profiles')),
+        const SnackBar(content: Text('ไม่พบผู้พักอาศัยที่ยังไม่ได้ผูกห้องใน tenant_profiles')),
       );
       return;
     }
@@ -422,7 +422,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          title: Text('เพิ่มผู้พักอาศัยเข้าห้อง ${room.id}'),
           backgroundColor: AppColors.card,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           content: SizedBox(
@@ -431,6 +430,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'เพิ่มผู้พักอาศัย',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close, color: AppColors.primary),
+                      splashRadius: 20,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 _TenantDetailRow(label: 'ห้อง', value: room.id),
                 _TenantDetailRow(label: 'ชั้น', value: room.floor),
                 const SizedBox(height: 16),
@@ -438,7 +458,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   controller: searchController,
                   style: const TextStyle(color: AppColors.primary),
                   decoration: const InputDecoration(
-                    labelText: 'ค้นหา tenant profile ด้วยชื่อ',
+                    labelText: 'เพิ่มผู้พักอาศัยด้วยชื่อ',
                     prefixIcon: Icon(Icons.search),
                   ),
                   onChanged: (value) {
@@ -591,7 +611,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          title: Text('ลบผู้พักอาศัยออกจากห้อง ${room.id}'),
           backgroundColor: AppColors.card,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           content: SizedBox(
@@ -600,8 +619,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _TenantDetailRow(label: 'ห้อง', value: room.id),
-                _TenantDetailRow(label: 'ชั้น', value: room.floor),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'ลบผู้พักอาศัย',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close, color: AppColors.primary),
+                      splashRadius: 20,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'รายละเอียดผู้พักอาศัยในห้อง',
@@ -622,6 +659,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _TenantDetailRow(label: 'ห้อง', value: room.id),
+                      _TenantDetailRow(label: 'ชั้น', value: room.floor),
                       _TenantDetailRow(label: 'ชื่อ', value: room.tenantName ?? '-'),
                       _TenantDetailRow(label: 'เบอร์โทร', value: room.phoneNumber ?? '-'),
                       _TenantDetailRow(label: 'อีเมล', value: room.tenantEmail ?? '-'),
@@ -630,7 +669,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 24),
                 PrimaryButton(
-                  label: _isUpdatingTenant ? 'กำลังลบ...' : 'ลบออกจากห้อง',
+                  label: _isUpdatingTenant ? 'กำลังลบ...' : 'ยืนยันลบออกจากห้อง',
                   fullWidth: true,
                   onPressed: _isUpdatingTenant
                       ? null
