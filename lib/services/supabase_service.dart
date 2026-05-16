@@ -110,6 +110,28 @@ class SupabaseService {
     }).eq('id', roomDbId);
   }
 
+  /// อัปเดตสถานะห้องพัก
+  Future<void> updateRoomStatus({
+    required int roomDbId,
+    required RoomStatus newStatus,
+  }) async {
+    final statusString = _mapRoomStatusToString(newStatus);
+    
+    await client.from('rooms').update({
+      'status': statusString,
+    }).eq('id', roomDbId);
+  }
+
+  /// อัปเดตราคาห้องพัก
+  Future<void> updateRoomPrice({
+    required int roomDbId,
+    required double newPrice,
+  }) async {
+    await client.from('rooms').update({
+      'base_price': newPrice,
+    }).eq('id', roomDbId);
+  }
+
   RoomStatus _mapRoomStatus(String? value) {
     switch (value) {
       case 'occupied':
@@ -119,6 +141,18 @@ class SupabaseService {
       case 'vacant':
       default:
         return RoomStatus.vacant;
+    }
+  }
+
+  /// แปลง RoomStatus enum เป็น string สำหรับ database
+  String _mapRoomStatusToString(RoomStatus status) {
+    switch (status) {
+      case RoomStatus.occupied:
+        return 'occupied';
+      case RoomStatus.vacant:
+        return 'vacant';
+      case RoomStatus.maintenance:
+        return 'maintenance';
     }
   }
 }

@@ -14,11 +14,13 @@ class RoomsScreen extends StatefulWidget {
 class _RoomsScreenState extends State<RoomsScreen> {
   final SupabaseService _service = SupabaseService();
   String selectedFilter = 'ทั้งหมด';
+  String selectedFloor = 'ทั้งหมด';
   bool _isLoading = true;
   bool _isUpdatingTenant = false;
   String? _errorMessage;
   List<Room> _rooms = [];
   List<Tenant> _availableTenants = [];
+  Set<String> _floors = {};
 
   @override
   void initState() {
@@ -35,12 +37,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
     try {
       final rooms = await _service.fetchRooms();
       final tenants = await _service.fetchAvailableTenants();
+      final floors = rooms.map((room) => room.floor).toSet();
 
       if (!mounted) return;
 
       setState(() {
         _rooms = rooms;
         _availableTenants = tenants;
+        _floors = floors;
         _isLoading = false;
       });
     } catch (error) {
@@ -53,23 +57,44 @@ class _RoomsScreenState extends State<RoomsScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final filteredRooms = _rooms.where((room) {
+  /// ฟิลเตอร์ห้องตามเงื่อนไข
+  List<Room> _getFilteredRooms() {
+    return _rooms.where((room) {
+      // ฟิลเตอร์ตามชั้น
+      if (selectedFloor != 'ทั้งหมด' && room.floor != selectedFloor) return false;
+      
+      // ฟิลเตอร์ตามสถานะ
       if (selectedFilter == 'ทั้งหมด') return true;
       if (selectedFilter == 'มีคนอยู่') return room.status == RoomStatus.occupied;
       if (selectedFilter == 'ว่าง') return room.status == RoomStatus.vacant;
       if (selectedFilter == 'ซ่อมบำรุง') return room.status == RoomStatus.maintenance;
       return true;
     }).toList();
+  }
+
+  /// คำนวณสถิติห้องพัก
+  Map<String, int> _calculateRoomStats() {
+    final filtered = _getFilteredRooms();
+    return {
+      'occupied': filtered.where((r) => r.status == RoomStatus.occupied).length,
+      'vacant': filtered.where((r) => r.status == RoomStatus.vacant).length,
+      'maintenance': filtered.where((r) => r.status == RoomStatus.maintenance).length,
+      'total': filtered.length,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredRooms = _getFilteredRooms();
+    final stats = _calculateRoomStats();
 
     return Scaffold(
       appBar: const MobileHeader(subtitle: 'ห้องพัก'),
-      body: _buildBody(context, filteredRooms),
+      body: _buildBody(context, filteredRooms, stats),
     );
   }
 
-  Widget _buildBody(BuildContext context, List<Room> filteredRooms) {
+  Widget _buildBody(BuildContext context, List<Room> filteredRooms, Map<String, int> stats) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -105,68 +130,228 @@ class _RoomsScreenState extends State<RoomsScreen> {
       );
     }
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
+    if (_rooms.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.home_work_outlined, color: AppColors.mutedForeground, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                'ยังไม่มีข้อมูลห้องพัก',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'เริ่มต้นโดยการเพิ่มห้องพักใหม่',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          children: [
+            // ส่วนสรุปสถิติห้องพัก
+            _buildRoomStatsSection(context, stats),
+            
+            // ส่วนฟิลเตอร์
+            _buildFilterSection(context),
+            
+            // ส่วนแสดงรายการห้องพัก
+            _buildRoomsListSection(context, filteredRooms),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// สร้างส่วนสถิติห้องพัก
+  Widget _buildRoomStatsSection(BuildContext context, Map<String, int> stats) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'ห้องพักทั้งหมด (${_rooms.length})',
+                'ห้องพักทั้งหมด (${stats['total']})',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               PrimaryButton(
-                label: 'จัดการผู้พักอาศัย',
+                label: 'จัดการผู้พัก',
                 icon: Icons.people_alt_outlined,
                 onPressed: () => _showTenantManagementSheet(context),
               ),
             ],
           ),
-        ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: ['ทั้งหมด', 'มีคนอยู่', 'ว่าง', 'ซ่อมบำรุง'].map((filter) {
-              final isActive = selectedFilter == filter;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilterChip(
-                  label: Text(filter),
-                  selected: isActive,
-                  onSelected: (val) => setState(() => selectedFilter = filter),
-                  backgroundColor: AppColors.card,
-                  selectedColor: AppColors.primary,
-                  labelStyle: TextStyle(
-                    color: isActive ? Colors.white : AppColors.primary,
-                    fontSize: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                    side: BorderSide(color: isActive ? AppColors.primary : AppColors.border),
-                  ),
-                  showCheckmark: false,
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _loadData,
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: filteredRooms.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final room = filteredRooms[index];
-                return _RoomCard(room: room);
-              },
+          const SizedBox(height: 16),
+          // Quick stats grid
+          SizedBox(
+            height: 100,
+            child: GridView.count(
+              crossAxisCount: 4,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              children: [
+                _buildStatTile(context, 'ทั้งหมด', stats['total'].toString(), AppColors.primary),
+                _buildStatTile(context, 'มีคนอยู่', stats['occupied'].toString(), AppColors.primary),
+                _buildStatTile(context, 'ว่าง', stats['vacant'].toString(), AppColors.success),
+                _buildStatTile(context, 'ซ่อมบำรุง', stats['maintenance'].toString(), AppColors.destructive),
+              ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// สร้าง Stat Tile เล็กๆ
+  Widget _buildStatTile(BuildContext context, String label, String value, Color color) {
+    return PaperCard(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              overflow: TextOverflow.ellipsis,
+              color: AppColors.mutedForeground,
+            ),
+            maxLines: 1,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// สร้างส่วนฟิลเตอร์
+  Widget _buildFilterSection(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('ฟิลเตอร์ตามชั้น', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: ['ทั้งหมด', ..._floors.toList()..sort()].map((floor) {
+                final isActive = selectedFloor == floor;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(floor),
+                    selected: isActive,
+                    onSelected: (val) => setState(() => selectedFloor = floor),
+                    backgroundColor: AppColors.card,
+                    selectedColor: AppColors.primary,
+                    labelStyle: TextStyle(
+                      color: isActive ? Colors.white : AppColors.primary,
+                      fontSize: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      side: BorderSide(color: isActive ? AppColors.primary : AppColors.border),
+                    ),
+                    showCheckmark: false,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text('ฟิลเตอร์ตามสถานะ', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: ['ทั้งหมด', 'มีคนอยู่', 'ว่าง', 'ซ่อมบำรุง'].map((filter) {
+                final isActive = selectedFilter == filter;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(filter),
+                    selected: isActive,
+                    onSelected: (val) => setState(() => selectedFilter = filter),
+                    backgroundColor: AppColors.card,
+                    selectedColor: AppColors.primary,
+                    labelStyle: TextStyle(
+                      color: isActive ? Colors.white : AppColors.primary,
+                      fontSize: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      side: BorderSide(color: isActive ? AppColors.primary : AppColors.border),
+                    ),
+                    showCheckmark: false,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  /// สร้างส่วนแสดงรายการห้องพัก
+  Widget _buildRoomsListSection(BuildContext context, List<Room> filteredRooms) {
+    if (filteredRooms.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Column(
+          children: [
+            const Icon(Icons.search_off, color: AppColors.mutedForeground, size: 40),
+            const SizedBox(height: 12),
+            Text(
+              'ไม่พบห้องพักตามเงื่อนไขที่เลือก',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.mutedForeground),
+            ),
+          ],
         ),
-      ],
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: filteredRooms.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final room = filteredRooms[index];
+          return _RoomCard(
+            room: room,
+            onStatusUpdate: () => _loadData(),
+          );
+        },
+      ),
     );
   }
 
@@ -200,6 +385,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _showRemoveTenantDialog(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.home_repair_service, color: AppColors.primary),
+                title: const Text('จัดการราคา'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _showRoomConfigDialog(context);
                 },
               ),
             ],
@@ -560,6 +753,95 @@ class _RoomsScreenState extends State<RoomsScreen> {
     );
   }
 
+  /// แสดง dialog สำหรับจัดการราคาและกำหนดค่าห้องพัก
+  void _showRoomConfigDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('จัดการราคาและกำหนดค่า'),
+            IconButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              icon: const Icon(Icons.close, color: AppColors.primary),
+              splashRadius: 20,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'ฟิลเตอร์ห้องที่จะแก้ไข',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.muted,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'จำนวนห้องพักทั้งหมด: ${_rooms.length}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'ราคาเฉลี่ย: ฿${(_rooms.isEmpty ? 0 : _rooms.fold<double>(0, (prev, room) => prev + room.price) / _rooms.length).toStringAsFixed(0)}/เดือน',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'ราคาสูงสุด: ฿${(_rooms.isEmpty ? 0 : _rooms.map((r) => r.price).reduce((a, b) => a > b ? a : b)).toStringAsFixed(0)}/เดือน',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'ราคาต่ำสุด: ฿${(_rooms.isEmpty ? 0 : _rooms.map((r) => r.price).reduce((a, b) => a < b ? a : b)).toStringAsFixed(0)}/เดือน',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '💡 เคล็ดลับ: คลิกที่ห้องเพื่อแก้ไขราคาของห้องนั้น',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppColors.warning,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                PrimaryButton(
+                  label: 'ปิด',
+                  fullWidth: true,
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
 }
 
 class _TenantDetailRow extends StatelessWidget {
@@ -596,8 +878,9 @@ class _TenantDetailRow extends StatelessWidget {
 
 class _RoomCard extends StatelessWidget {
   final Room room;
+  final VoidCallback? onStatusUpdate;
 
-  const _RoomCard({required this.room});
+  const _RoomCard({required this.room, this.onStatusUpdate});
 
   @override
   Widget build(BuildContext context) {
@@ -620,57 +903,503 @@ class _RoomCard extends StatelessWidget {
     }
 
     return PaperCard(
+      onTap: () => _showRoomDetailDialog(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header: Room ID and Status Badge
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('ห้อง ${room.id}', style: Theme.of(context).textTheme.titleMedium),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('ห้อง ${room.id}', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      'ชั้น ${room.floor}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.mutedForeground),
+                    ),
+                  ],
+                ),
+              ),
               StatusBadge(label: statusText, variant: variant),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+          
+          // Tenant Info or Maintenance Status
           if (room.status == RoomStatus.occupied) ...[
-            Row(
-              children: [
-                const Icon(Icons.person_outline, size: 16, color: AppColors.mutedForeground),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    room.tenantName ?? '-',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.muted,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.person_outline, size: 16, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          room.tenantName ?? '-',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
                   ),
-                
-              ],
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.phone_outlined, size: 16, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Text(room.phoneNumber ?? '-', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                  if (room.tenantEmail != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.email_outlined, size: 16, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            room.tenantEmail!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.phone_outlined, size: 16, color: AppColors.mutedForeground),
-                const SizedBox(width: 8),
-                Text(room.phoneNumber ?? '-', style: Theme.of(context).textTheme.bodySmall),
-              ],
-            ),
+            const SizedBox(height: 12),
           ] else if (room.status == RoomStatus.maintenance) ...[
-            const Row(
-              children: [
-                Icon(Icons.build_outlined, size: 16, color: AppColors.destructive),
-                SizedBox(width: 8),
-                Text('อยู่ระหว่างซ่อมบำรุง', style: TextStyle(color: AppColors.destructive, fontSize: 14)),
-              ],
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.destructiveBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.destructive.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.build_outlined, size: 16, color: AppColors.destructive),
+                  const SizedBox(width: 8),
+                  Text(
+                    'อยู่ระหว่างซ่อมบำรุง',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.destructive,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          
+          // Room Price and Actions
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              GestureDetector(
+                onTap: () => _showEditRoomPriceDialog(context),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ราคาห้องพัก',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.mutedForeground),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '฿${room.price.toStringAsFixed(0)}/เดือน',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.primary),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, color: AppColors.primary),
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    _showRoomDetailDialog(context);
+                  } else if (value == 'status') {
+                    _showRoomStatusDialog(context);
+                  } else if (value == 'price') {
+                    _showEditRoomPriceDialog(context);
+                  }
+                },
+                itemBuilder: (BuildContext context) => [
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
+                        SizedBox(width: 10),
+                        Text('ดูรายละเอียด'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'status',
+                    child: Row(
+                      children: [
+                        Icon(Icons.update, size: 18, color: AppColors.primary),
+                        SizedBox(width: 10),
+                        Text('เปลี่ยนสถานะ'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'price',
+                    child: Row(
+                      children: [
+                        Icon(Icons.attach_money, size: 18, color: AppColors.primary),
+                        SizedBox(width: 10),
+                        Text('แก้ไขราคา'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// แสดง dialog รายละเอียดห้องพัก
+  void _showRoomDetailDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('รายละเอียดห้อง ${room.id}'),
+            IconButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              icon: const Icon(Icons.close, color: AppColors.primary),
+              splashRadius: 20,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
           ],
-          Align(
-            alignment: Alignment.bottomRight,
-            child: Text(
-              '฿${room.price.toStringAsFixed(0)}/เดือน',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+        ),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _detailRow('ห้องเลขที่', room.id),
+                _detailRow('ชั้น', room.floor),
+                _detailRow('ราคา', '฿${room.price.toStringAsFixed(0)}/เดือน'),
+                _detailRow('สถานะ', _getStatusText(room.status)),
+                if (room.status == RoomStatus.occupied) ...[
+                  const SizedBox(height: 8),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Text(
+                    'ข้อมูลผู้พักอาศัย',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _detailRow('ชื่อ', room.tenantName ?? '-'),
+                  _detailRow('เบอร์โทร', room.phoneNumber ?? '-'),
+                  _detailRow('อีเมล', room.tenantEmail ?? '-'),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// แสดง dialog เปลี่ยนสถานะห้องพัก
+  void _showRoomStatusDialog(BuildContext context) {
+    bool isLoading = false;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('เปลี่ยนสถานะห้อง ${room.id}'),
+              IconButton(
+                onPressed: isLoading ? null : () => Navigator.of(dialogContext).pop(),
+                icon: const Icon(Icons.close, color: AppColors.primary),
+                splashRadius: 20,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 300,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'สถานะปัจจุบัน: ${_getStatusText(room.status)}',
+                  style: Theme.of(dialogContext).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryButton(
+                    label: isLoading ? 'กำลังบันทึก...' : 'เปลี่ยนเป็น มีคนอยู่',
+                    isLoading: isLoading && room.status != RoomStatus.occupied,
+                    onPressed: isLoading || room.status == RoomStatus.occupied 
+                      ? null 
+                      : () async {
+                          setDialogState(() => isLoading = true);
+                          await _updateRoomStatus(context, RoomStatus.occupied);
+                          if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                        },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryButton(
+                    label: isLoading ? 'กำลังบันทึก...' : 'เปลี่ยนเป็น ว่าง',
+                    isLoading: isLoading && room.status != RoomStatus.vacant,
+                    onPressed: isLoading || room.status == RoomStatus.vacant 
+                      ? null 
+                      : () async {
+                          setDialogState(() => isLoading = true);
+                          await _updateRoomStatus(context, RoomStatus.vacant);
+                          if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                        },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryButton(
+                    label: isLoading ? 'กำลังบันทึก...' : 'เปลี่ยนเป็น ซ่อมบำรุง',
+                    isLoading: isLoading && room.status != RoomStatus.maintenance,
+                    onPressed: isLoading || room.status == RoomStatus.maintenance 
+                      ? null 
+                      : () async {
+                          setDialogState(() => isLoading = true);
+                          await _updateRoomStatus(context, RoomStatus.maintenance);
+                          if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                        },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// อัปเดตสถานะห้องพัก (placeholder)
+  Future<void> _updateRoomStatus(BuildContext context, RoomStatus newStatus) async {
+    final messenger = ScaffoldMessenger.of(context);
+    
+    try {
+      // ใช้ Supabase service เพื่ออัปเดตสถานะ
+      final service = SupabaseService();
+      await service.updateRoomStatus(
+        roomDbId: room.dbId,
+        newStatus: newStatus,
+      );
+      
+      messenger.showSnackBar(
+        SnackBar(content: Text('เปลี่ยนสถานะห้อง ${room.id} เป็น ${_getStatusText(newStatus)} แล้ว')),
+      );
+      onStatusUpdate?.call();
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('เปลี่ยนสถานะไม่สำเร็จ: $error')),
+      );
+    }
+  }
+
+  /// Widget ช่วยแสดง detail row
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: AppColors.mutedForeground, fontSize: 13),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// ดึงข้อความสถานะในภาษาไทย
+  String _getStatusText(RoomStatus status) {
+    switch (status) {
+      case RoomStatus.occupied:
+        return 'มีคนอยู่';
+      case RoomStatus.vacant:
+        return 'ว่าง';
+      case RoomStatus.maintenance:
+        return 'ซ่อมบำรุง';
+    }
+  }
+
+  /// แสดง dialog แก้ไขราคาห้องพัก
+  void _showEditRoomPriceDialog(BuildContext context) {
+    double newPrice = room.price;
+    bool isLoading = false;
+    final priceController = TextEditingController(text: room.price.toStringAsFixed(0));
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('แก้ไขราคาห้อง ${room.id}'),
+              IconButton(
+                onPressed: isLoading ? null : () => Navigator.of(dialogContext).pop(),
+                icon: const Icon(Icons.close, color: AppColors.primary),
+                splashRadius: 20,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 300,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'ราคาปัจจุบัน: ฿${room.price.toStringAsFixed(0)}/เดือน',
+                  style: Theme.of(dialogContext).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: priceController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'ราคาใหม่ (บาท)',
+                    prefixIcon: Icon(Icons.attach_money),
+                    hintText: '0.00',
+                  ),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      newPrice = double.tryParse(value) ?? room.price;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.muted,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'ราคาใหม่:',
+                        style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '฿${newPrice.toStringAsFixed(0)}/เดือน',
+                        style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                PrimaryButton(
+                  label: isLoading ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง',
+                  fullWidth: true,
+                  isLoading: isLoading,
+                  onPressed: isLoading || newPrice == room.price
+                    ? null
+                    : () async {
+                      setDialogState(() => isLoading = true);
+                      final service = SupabaseService();
+                      final messenger = ScaffoldMessenger.of(context);
+                      
+                      try {
+                        // อัปเดตราคาผ่าน Supabase
+                        await service.updateRoomPrice(
+                          roomDbId: room.dbId,
+                          newPrice: newPrice,
+                        );
+                        
+                        if (dialogContext.mounted) {
+                          messenger.showSnackBar(
+                            SnackBar(content: Text('เปลี่ยนราคาห้อง ${room.id} เป็น ฿${newPrice.toStringAsFixed(0)}/เดือน แล้ว')),
+                          );
+                          Navigator.of(dialogContext).pop();
+                          onStatusUpdate?.call();
+                        }
+                      } catch (error) {
+                        if (dialogContext.mounted) {
+                          messenger.showSnackBar(
+                            SnackBar(content: Text('บันทึกไม่สำเร็จ: $error')),
+                          );
+                        }
+                      } finally {
+                        setDialogState(() => isLoading = false);
+                      }
+                    },
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

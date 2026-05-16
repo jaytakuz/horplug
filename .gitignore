@@ -48,3 +48,5 @@ pubspec.lock
 pubspec.lock
 .env
 pubspec.lock
+documents
+ios/Podfile.lock
