@@ -116,7 +116,7 @@ class SupabaseService {
     required RoomStatus newStatus,
   }) async {
     final statusString = _mapRoomStatusToString(newStatus);
-    
+
     await client.from('rooms').update({
       'status': statusString,
     }).eq('id', roomDbId);
@@ -129,6 +129,77 @@ class SupabaseService {
   }) async {
     await client.from('rooms').update({
       'base_price': newPrice,
+    }).eq('id', roomDbId);
+  }
+
+  /// เพิ่มห้องพักใหม่
+  Future<void> addRoom({
+    required String roomNumber,
+    required String floor,
+    required double basePrice,
+  }) async {
+    // ตรวจสอบว่าเลขห้องไม่ซ้ำกัน
+    final existingRoom = await client
+        .from('rooms')
+        .select('id')
+        .eq('room_number', roomNumber)
+        .maybeSingle();
+
+    if (existingRoom != null) {
+      throw Exception('Room number already exists');
+    }
+
+    // เพิ่มห้องพักใหม่ด้วยสถานะว่าง
+    await client.from('rooms').insert({
+      'room_number': roomNumber,
+      'floor': floor,
+      'base_price': basePrice,
+      'status': 'vacant',
+      'current_tenant_id': null,
+    });
+  }
+
+  /// ลบห้องพัก
+  Future<void> deleteRoom({required int roomDbId}) async {
+    // ดึงข้อมูลห้องเพื่อตรวจสอบสถานะ
+    final room = await client
+        .from('rooms')
+        .select('status, current_tenant_id')
+        .eq('id', roomDbId)
+        .single();
+
+    final status = room['status'] as String?;
+    final currentTenantId = room['current_tenant_id'] as String?;
+
+    // ตรวจสอบว่าห้องไม่มีผู้พักอาศัยและไม่อยู่ในสถานะอื่น
+    if (status != 'vacant' || currentTenantId != null) {
+      throw Exception(
+          'Cannot delete room: This room is currently occupied by an active tenant.');
+    }
+
+    // ลบห้องพัก
+    await client.from('rooms').delete().eq('id', roomDbId);
+  }
+
+  /// อัปเดตเลขห้อง
+  Future<void> updateRoomNumber({
+    required int roomDbId,
+    required String newRoomNumber,
+  }) async {
+    // ตรวจสอบว่าเลขห้องใหม่ไม่ซ้ำกัน
+    final existingRoom = await client
+        .from('rooms')
+        .select('id')
+        .eq('room_number', newRoomNumber)
+        .neq('id', roomDbId)
+        .maybeSingle();
+
+    if (existingRoom != null) {
+      throw Exception('Room number already in use');
+    }
+
+    await client.from('rooms').update({
+      'room_number': newRoomNumber,
     }).eq('id', roomDbId);
   }
 
