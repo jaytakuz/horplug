@@ -11,7 +11,8 @@ class MeterScreen extends StatefulWidget {
   State<MeterScreen> createState() => _MeterScreenState();
 }
 
-class _MeterScreenState extends State<MeterScreen> with SingleTickerProviderStateMixin {
+class _MeterScreenState extends State<MeterScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final List<MeterReading> electricityReadings = MockData.electricityReadings;
   final List<MeterReading> waterReadings = MockData.waterReadings;
@@ -24,51 +25,51 @@ class _MeterScreenState extends State<MeterScreen> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const MobileHeader(subtitle: 'บันทึกมิเตอร์'),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('บันทึกค่าน้ำ-ค่าไฟ', style: Theme.of(context).textTheme.titleMedium),
-                    PrimaryButton(label: 'บันทึก', icon: Icons.save, onPressed: () {}),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('ค่าน้ำ 18 บาท/หน่วย • ค่าไฟ 8 บาท/หน่วย', 
-                    style: TextStyle(color: AppColors.mutedForeground, fontSize: 12)),
-                ),
-              ],
-            ),
-          ),
-          TabBar(
-            controller: _tabController,
-            indicatorColor: AppColors.primary,
-            labelColor: AppColors.primary,
-            unselectedLabelColor: AppColors.mutedForeground,
-            tabs: const [
-              Tab(icon: Icon(Icons.bolt), text: 'ค่าไฟ'),
-              Tab(icon: Icon(Icons.water_drop), text: 'ค่าน้ำ'),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('บันทึกค่าน้ำ-ค่าไฟ',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  PrimaryButton(
+                      label: 'บันทึก', icon: Icons.save, onPressed: () {}),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('ค่าน้ำ 18 บาท/หน่วย • ค่าไฟ 8 บาท/หน่วย',
+                    style: TextStyle(
+                        color: AppColors.mutedForeground, fontSize: 12)),
+              ),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildMeterTable(electricityReadings, true),
-                _buildMeterTable(waterReadings, false),
-              ],
-            ),
+        ),
+        TabBar(
+          controller: _tabController,
+          indicatorColor: AppColors.primary,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.mutedForeground,
+          tabs: const [
+            Tab(icon: Icon(Icons.bolt), text: 'ค่าไฟ'),
+            Tab(icon: Icon(Icons.water_drop), text: 'ค่าน้ำ'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildMeterTable(electricityReadings, true),
+              _buildMeterTable(waterReadings, false),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -83,7 +84,8 @@ class _MeterScreenState extends State<MeterScreen> with SingleTickerProviderStat
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 columnSpacing: 20,
-                headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                headingTextStyle: const TextStyle(
+                    fontWeight: FontWeight.bold, color: AppColors.primary),
                 columns: const [
                   DataColumn(label: Text('ห้อง')),
                   DataColumn(label: Text('ชื่อ')),
@@ -94,7 +96,9 @@ class _MeterScreenState extends State<MeterScreen> with SingleTickerProviderStat
                   DataColumn(label: Text('')),
                 ],
                 rows: readings.map((reading) {
-                  final units = (reading.currentValue ?? reading.previousValue) - reading.previousValue;
+                  final units =
+                      (reading.currentValue ?? reading.previousValue) -
+                          reading.previousValue;
                   final cost = units * (isElectricity ? 8 : 18);
                   return DataRow(cells: [
                     DataCell(Text(reading.roomNumber)),
@@ -105,7 +109,10 @@ class _MeterScreenState extends State<MeterScreen> with SingleTickerProviderStat
                         width: 60,
                         child: TextField(
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 8)),
+                          decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding:
+                                  EdgeInsets.symmetric(vertical: 8)),
                           style: const TextStyle(fontSize: 14),
                           onChanged: (val) {
                             setState(() {
@@ -119,7 +126,8 @@ class _MeterScreenState extends State<MeterScreen> with SingleTickerProviderStat
                     DataCell(Text(cost.toStringAsFixed(0))),
                     DataCell(
                       IconButton(
-                        icon: const Icon(Icons.camera_alt, color: AppColors.primary, size: 20),
+                        icon: const Icon(Icons.camera_alt,
+                            color: AppColors.primary, size: 20),
                         onPressed: () => _mockOCR(reading),
                       ),
                     ),
@@ -133,9 +141,14 @@ class _MeterScreenState extends State<MeterScreen> with SingleTickerProviderStat
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  const Text('รวมทั้งหมด ', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text('฿${_calculateTotal(readings, isElectricity).toStringAsFixed(0)}', 
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 18)),
+                  const Text('รวมทั้งหมด ',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                      '฿${_calculateTotal(readings, isElectricity).toStringAsFixed(0)}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                          fontSize: 18)),
                 ],
               ),
             ),
@@ -164,7 +177,8 @@ class _MeterScreenState extends State<MeterScreen> with SingleTickerProviderStat
       if (mounted) {
         Navigator.pop(context);
         setState(() {
-          reading.currentValue = reading.previousValue + (10 + (DateTime.now().millisecond % 50));
+          reading.currentValue =
+              reading.previousValue + (10 + (DateTime.now().millisecond % 50));
         });
       }
     });

@@ -16,21 +16,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: MobileHeader(
-        subtitle: selectedChat == null ? 'แชท' : 'ห้อง ${selectedChat!.roomNumber}',
-        actions: selectedChat != null
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, color: AppColors.primary),
-                  onPressed: () => setState(() => selectedChat = null),
-                ),
-                const SizedBox(width: 8),
-              ]
-            : null,
-      ),
-      body: selectedChat == null ? _buildInboxView() : _buildConversationView(),
-    );
+    return selectedChat == null ? _buildInboxView() : _buildConversationView();
   }
 
   Widget _buildInboxView() {
@@ -54,7 +40,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             style: Theme.of(context).textTheme.labelLarge),
                         if (chat.hasPendingMaintenance) ...[
                           const SizedBox(width: 8),
-                          const StatusBadge(label: 'แจ้งซ่อม', variant: BadgeVariant.destructive),
+                          const StatusBadge(
+                              label: 'แจ้งซ่อม',
+                              variant: BadgeVariant.destructive),
                         ],
                       ],
                     ),
@@ -71,10 +59,14 @@ class _ChatScreenState extends State<ChatScreen> {
               if (chat.unreadCount > 0)
                 Container(
                   padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(color: AppColors.destructive, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(
+                      color: AppColors.destructive, shape: BoxShape.circle),
                   child: Text(
                     '${chat.unreadCount}',
-                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
             ],
@@ -96,7 +88,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 itemCount: MockData.conversation305.length,
                 itemBuilder: (context, index) {
                   // Reversing for display purpose in mock
-                  final message = MockData.conversation305.reversed.toList()[index];
+                  final message =
+                      MockData.conversation305.reversed.toList()[index];
                   return _buildChatBubble(message);
                 },
               ),
@@ -122,7 +115,8 @@ class _ChatScreenState extends State<ChatScreen> {
         margin: const EdgeInsets.symmetric(vertical: 4),
         constraints: const BoxConstraints(maxWidth: 280),
         child: Column(
-          crossAxisAlignment: isOwner ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment:
+              isOwner ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             Container(
               padding: const EdgeInsets.all(12),
@@ -140,7 +134,8 @@ class _ChatScreenState extends State<ChatScreen> {
             const SizedBox(height: 2),
             Text(
               '10:30 น.',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 8),
+              style:
+                  Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 8),
             ),
           ],
         ),
@@ -159,7 +154,9 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               const Icon(Icons.build, size: 16, color: AppColors.warning),
               const SizedBox(width: 8),
-              Text('แจ้งซ่อม', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+              Text('แจ้งซ่อม',
+                  style:
+                      TextStyle(color: textColor, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 4),
@@ -173,7 +170,8 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           const Icon(Icons.check_circle, size: 16, color: AppColors.success),
           const SizedBox(width: 8),
-          Expanded(child: Text(message.text, style: TextStyle(color: textColor))),
+          Expanded(
+              child: Text(message.text, style: TextStyle(color: textColor))),
         ],
       );
     }
@@ -212,14 +210,18 @@ class _ChatScreenState extends State<ChatScreen> {
                     hintText: 'พิมพ์ข้อความ...',
                     filled: true,
                     fillColor: AppColors.card,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Container(
-                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                    color: AppColors.primary, shape: BoxShape.circle),
                 child: IconButton(
                   icon: const Icon(Icons.send, color: Colors.white),
                   onPressed: () {},
@@ -240,7 +242,8 @@ class _ChatScreenState extends State<ChatScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
-      child: Text(label, style: const TextStyle(fontSize: 12, color: AppColors.primary)),
+      child: Text(label,
+          style: const TextStyle(fontSize: 12, color: AppColors.primary)),
     );
   }
 }

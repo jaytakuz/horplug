@@ -18,7 +18,10 @@ Future<void> main() async {
   final supabaseUrl = dotenv.env['SUPABASE_URL'];
   final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
 
-  if (supabaseUrl == null || supabaseUrl.isEmpty || supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
+  if (supabaseUrl == null ||
+      supabaseUrl.isEmpty ||
+      supabaseAnonKey == null ||
+      supabaseAnonKey.isEmpty) {
     throw Exception('Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env');
   }
 
@@ -36,12 +39,13 @@ final GoRouter _router = GoRouter(
     ShellRoute(
       builder: (context, state, child) {
         final dormSlug = state.pathParameters['dormSlug'] ?? 'sakplace';
-        return AdminShell(dormSlug: dormSlug, child: child);
+        return AdminShell(dormSlug: dormSlug);
       },
       routes: [
         GoRoute(
           path: '/:dormSlug/admin',
-          builder: (context, state) => DashboardScreen(dormSlug: state.pathParameters['dormSlug']!),
+          builder: (context, state) =>
+              DashboardScreen(dormSlug: state.pathParameters['dormSlug']!),
         ),
         GoRoute(
           path: '/:dormSlug/admin/rooms',

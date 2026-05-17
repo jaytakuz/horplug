@@ -57,30 +57,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final occupiedRooms = _rooms.where((room) => room.status == RoomStatus.occupied).toList();
+    final occupiedRooms =
+        _rooms.where((room) => room.status == RoomStatus.occupied).toList();
     final occupiedCount = occupiedRooms.length;
     final totalRooms = _rooms.length;
-    final occupancyRate = totalRooms == 0 ? 0 : ((occupiedCount / totalRooms) * 100).round();
+    final occupancyRate =
+        totalRooms == 0 ? 0 : ((occupiedCount / totalRooms) * 100).round();
     final estimatedMonthlyRevenue = occupiedRooms.fold<double>(
       0,
       (sum, room) => sum + room.price,
     );
-    final floorNumbers = _rooms
-        .map((room) => room.floor)
-        .toSet()
-        .toList()
+    final floorNumbers = _rooms.map((room) => room.floor).toSet().toList()
       ..sort((a, b) => int.parse(a).compareTo(int.parse(b)));
 
-    return Scaffold(
-      appBar: const MobileHeader(subtitle: 'หน้าหลัก'),
-      body: _buildBody(
-        context,
-        occupiedCount: occupiedCount,
-        totalRooms: totalRooms,
-        occupancyRate: occupancyRate,
-        estimatedMonthlyRevenue: estimatedMonthlyRevenue,
-        floorNumbers: floorNumbers,
-      ),
+    return _buildBody(
+      context,
+      occupiedCount: occupiedCount,
+      totalRooms: totalRooms,
+      occupancyRate: occupancyRate,
+      estimatedMonthlyRevenue: estimatedMonthlyRevenue,
+      floorNumbers: floorNumbers,
     );
   }
 
@@ -103,7 +99,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, color: AppColors.destructive, size: 32),
+              const Icon(Icons.error_outline,
+                  color: AppColors.destructive, size: 32),
               const SizedBox(height: 12),
               Text(
                 'โหลดข้อมูลแดชบอร์ดไม่สำเร็จ',
@@ -164,7 +161,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 StatCard(
                   title: 'ห้องว่าง',
-                  value: '${_rooms.where((room) => room.status == RoomStatus.vacant).length}',
+                  value:
+                      '${_rooms.where((room) => room.status == RoomStatus.vacant).length}',
                   icon: Icons.meeting_room_outlined,
                   variant: BadgeVariant.warning,
                 ),
@@ -174,10 +172,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('แผนผังห้องพัก', style: Theme.of(context).textTheme.titleMedium),
+                Text('แผนผังห้องพัก',
+                    style: Theme.of(context).textTheme.titleMedium),
                 TextButton(
-                  onPressed: () => context.go('/${widget.dormSlug}/admin/rooms'),
-                  child: const Text('จัดการห้อง →', style: TextStyle(color: AppColors.ring)),
+                  onPressed: () =>
+                      context.go('/${widget.dormSlug}/admin/rooms'),
+                  child: const Text('จัดการห้อง →',
+                      style: TextStyle(color: AppColors.ring)),
                 ),
               ],
             ),
@@ -205,12 +206,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ...floorNumbers.asMap().entries.map((entry) {
                       final index = entry.key;
                       final floor = entry.value;
-                      final roomsOnFloor = _rooms.where((room) => room.floor == floor).toList();
+                      final roomsOnFloor =
+                          _rooms.where((room) => room.floor == floor).toList();
 
                       return Column(
                         children: [
                           if (index > 0) const SizedBox(height: 16),
-                          _buildFloorSection(context, 'ชั้น $floor', roomsOnFloor),
+                          _buildFloorSection(
+                              context, 'ชั้น $floor', roomsOnFloor),
                         ],
                       );
                     }),
@@ -262,7 +265,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildFloorSection(BuildContext context, String floorTitle, List<Room> rooms) {
+  Widget _buildFloorSection(
+      BuildContext context, String floorTitle, List<Room> rooms) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -332,7 +336,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _TenantDetailRow(label: 'ห้อง', value: room.id),
               _TenantDetailRow(label: 'ชั้น', value: room.floor),
               _TenantDetailRow(label: 'สถานะ', value: statusText),
-              _TenantDetailRow(label: 'ราคา', value: '฿${room.price.toStringAsFixed(0)}/เดือน'),
+              _TenantDetailRow(
+                  label: 'ราคา',
+                  value: '฿${room.price.toStringAsFixed(0)}/เดือน'),
               if (room.status == RoomStatus.occupied) ...[
                 const SizedBox(height: 12),
                 Text(
@@ -354,9 +360,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _TenantDetailRow(label: 'ชื่อ', value: room.tenantName ?? '-'),
-                      _TenantDetailRow(label: 'เบอร์โทร', value: room.phoneNumber ?? '-'),
-                      _TenantDetailRow(label: 'อีเมล', value: room.tenantEmail ?? '-'),
+                      _TenantDetailRow(
+                          label: 'ชื่อ', value: room.tenantName ?? '-'),
+                      _TenantDetailRow(
+                          label: 'เบอร์โทร', value: room.phoneNumber ?? '-'),
+                      _TenantDetailRow(
+                          label: 'อีเมล', value: room.tenantEmail ?? '-'),
                     ],
                   ),
                 ),
@@ -368,7 +377,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: PrimaryButton(
                       label: 'เพิ่มผู้พักอาศัย',
                       icon: Icons.person_add_alt_1,
-                      onPressed: room.status == RoomStatus.vacant && _availableTenants.isNotEmpty
+                      onPressed: room.status == RoomStatus.vacant &&
+                              _availableTenants.isNotEmpty
                           ? () {
                               Navigator.of(dialogContext).pop();
                               _showAssignTenantDialog(context, room);
@@ -408,7 +418,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (_availableTenants.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่พบผู้พักอาศัยที่ยังไม่ได้ผูกห้องใน tenant_profiles')),
+        const SnackBar(
+            content:
+                Text('ไม่พบผู้พักอาศัยที่ยังไม่ได้ผูกห้องใน tenant_profiles')),
       );
       return;
     }
@@ -423,7 +435,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
           backgroundColor: AppColors.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           content: SizedBox(
             width: 420,
             child: Column(
@@ -473,13 +486,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       }
 
                       if (selectedTenant != null &&
-                          !filteredTenants.any((tenant) => tenant.id == selectedTenant!.id)) {
+                          !filteredTenants.any(
+                              (tenant) => tenant.id == selectedTenant!.id)) {
                         selectedTenant = null;
                       }
                     });
                   },
                 ),
-                if (searchController.text.isNotEmpty && filteredTenants.isNotEmpty) ...[
+                if (searchController.text.isNotEmpty &&
+                    filteredTenants.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Container(
                     constraints: const BoxConstraints(maxHeight: 180),
@@ -499,7 +514,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           dense: true,
                           title: Text(tenant.name),
                           trailing: isSelected
-                              ? const Icon(Icons.check_circle, color: AppColors.primary)
+                              ? const Icon(Icons.check_circle,
+                                  color: AppColors.primary)
                               : null,
                           selected: isSelected,
                           selectedTileColor: AppColors.muted,
@@ -538,9 +554,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _TenantDetailRow(label: 'ชื่อ', value: selectedTenant!.name),
-                        _TenantDetailRow(label: 'เบอร์โทร', value: selectedTenant!.phoneNumber),
-                        _TenantDetailRow(label: 'อีเมล', value: selectedTenant!.email ?? '-'),
+                        _TenantDetailRow(
+                            label: 'ชื่อ', value: selectedTenant!.name),
+                        _TenantDetailRow(
+                            label: 'เบอร์โทร',
+                            value: selectedTenant!.phoneNumber),
+                        _TenantDetailRow(
+                            label: 'อีเมล',
+                            value: selectedTenant!.email ?? '-'),
                       ],
                     ),
                   ),
@@ -572,13 +593,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             if (!mounted) return;
 
                             messenger.showSnackBar(
-                              SnackBar(content: Text('เพิ่ม ${selectedTenant!.name} เข้าห้อง ${room.id} แล้ว')),
+                              SnackBar(
+                                  content: Text(
+                                      'เพิ่ม ${selectedTenant!.name} เข้าห้อง ${room.id} แล้ว')),
                             );
                           } catch (error) {
                             if (!mounted) return;
 
                             messenger.showSnackBar(
-                              SnackBar(content: Text('บันทึกไม่สำเร็จ: $error')),
+                              SnackBar(
+                                  content: Text('บันทึกไม่สำเร็จ: $error')),
                             );
                           } finally {
                             if (mounted) {
@@ -612,7 +636,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
           backgroundColor: AppColors.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           content: SizedBox(
             width: 420,
             child: Column(
@@ -661,15 +686,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       _TenantDetailRow(label: 'ห้อง', value: room.id),
                       _TenantDetailRow(label: 'ชั้น', value: room.floor),
-                      _TenantDetailRow(label: 'ชื่อ', value: room.tenantName ?? '-'),
-                      _TenantDetailRow(label: 'เบอร์โทร', value: room.phoneNumber ?? '-'),
-                      _TenantDetailRow(label: 'อีเมล', value: room.tenantEmail ?? '-'),
+                      _TenantDetailRow(
+                          label: 'ชื่อ', value: room.tenantName ?? '-'),
+                      _TenantDetailRow(
+                          label: 'เบอร์โทร', value: room.phoneNumber ?? '-'),
+                      _TenantDetailRow(
+                          label: 'อีเมล', value: room.tenantEmail ?? '-'),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
                 PrimaryButton(
-                  label: _isUpdatingTenant ? 'กำลังลบ...' : 'ยืนยันลบออกจากห้อง',
+                  label:
+                      _isUpdatingTenant ? 'กำลังลบ...' : 'ยืนยันลบออกจากห้อง',
                   fullWidth: true,
                   onPressed: _isUpdatingTenant
                       ? null
@@ -681,7 +710,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           });
 
                           try {
-                            await _service.removeTenantFromRoom(roomDbId: room.dbId);
+                            await _service.removeTenantFromRoom(
+                                roomDbId: room.dbId);
 
                             if (!mounted) return;
 
@@ -691,7 +721,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             if (!mounted) return;
 
                             messenger.showSnackBar(
-                              SnackBar(content: Text('ลบผู้พักอาศัยออกจากห้อง ${room.id} แล้ว')),
+                              SnackBar(
+                                  content: Text(
+                                      'ลบผู้พักอาศัยออกจากห้อง ${room.id} แล้ว')),
                             );
                           } catch (error) {
                             if (!mounted) return;
@@ -727,7 +759,10 @@ class _LegendItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(width: 4),
         Text(label, style: Theme.of(context).textTheme.labelSmall),
       ],
@@ -812,13 +847,18 @@ class _RoomTile extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(room.id, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(room.id,
+                style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14)),
             const SizedBox(height: 2),
             Text(
               room.status == RoomStatus.occupied
                   ? _shortTenantName(room.tenantName)
                   : (room.status == RoomStatus.vacant ? 'ว่าง' : 'ซ่อม'),
-              style: TextStyle(color: textColor.withValues(alpha: 0.8), fontSize: 9),
+              style: TextStyle(
+                  color: textColor.withValues(alpha: 0.8), fontSize: 9),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -873,8 +913,13 @@ class _QuickActionItem extends StatelessWidget {
                   right: -4,
                   child: Container(
                     padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(color: AppColors.destructive, shape: BoxShape.circle),
-                    child: Text(badge!, style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                    decoration: const BoxDecoration(
+                        color: AppColors.destructive, shape: BoxShape.circle),
+                    child: Text(badge!,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold)),
                   ),
                 ),
             ],
@@ -882,7 +927,10 @@ class _QuickActionItem extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w500),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                fontSize: 10,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w500),
             textAlign: TextAlign.center,
           ),
         ],

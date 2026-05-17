@@ -92,22 +92,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
     final filteredRooms = _getFilteredRooms();
     final stats = _calculateRoomStats();
 
-    return Scaffold(
-      appBar: MobileHeader(
-        subtitle: 'ห้องพัก',
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: IconButton(
-              icon: const Icon(Icons.add_home_outlined),
-              onPressed: () => _showAddRoomDialog(context),
-              tooltip: 'เพิ่มห้องพักใหม่',
-            ),
-          ),
-        ],
-      ),
-      body: _buildBody(context, filteredRooms, stats),
-    );
+    return _buildBody(context, filteredRooms, stats);
   }
 
   Widget _buildBody(
