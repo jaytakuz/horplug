@@ -56,10 +56,35 @@ ThemeData buildAppTheme() {
         borderRadius: BorderRadius.circular(16),
       ),
     ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: AppColors.card,
+      labelStyle: const TextStyle(color: AppColors.primary),
+      hintStyle: const TextStyle(color: AppColors.mutedForeground),
+      helperStyle: const TextStyle(color: AppColors.mutedForeground),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+      ),
+    ),
+    textSelectionTheme: const TextSelectionThemeData(
+      cursorColor: AppColors.primary,
+      selectionColor: Color(0xFFB8D4F1),
+      selectionHandleColor: AppColors.primary,
+    ),
     textTheme: const TextTheme(
       titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary),
       titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.primary),
-      bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
+      bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.normal, color: AppColors.primary),
       bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
       bodySmall: TextStyle(fontSize: 12, color: AppColors.mutedForeground),
       labelSmall: TextStyle(fontSize: 10, color: AppColors.mutedForeground),

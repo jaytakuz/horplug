@@ -1189,7 +1189,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
   void _showAddRoomDialog(BuildContext context) {
     final roomNumberController = TextEditingController();
     final basePriceController = TextEditingController();
-    String selectedFloor = _floors.isNotEmpty ? _floors.first : 'ชั้น 1';
+    final floorOptions = {
+      ..._floors.map((floor) => floor.startsWith('ชั้น ') ? floor.replaceFirst('ชั้น ', '') : floor),
+      '1',
+      '2',
+      '3',
+    }..removeWhere((floor) => floor.isEmpty);
+    final sortedFloorOptions = floorOptions.toList()..sort();
+    String selectedFloor = sortedFloorOptions.isNotEmpty ? sortedFloorOptions.first : '1';
     bool isLoading = false;
     String? errorMessage;
 
@@ -1275,12 +1282,10 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       labelText: 'ชั้น *',
                       prefixIcon: Icon(Icons.layers_outlined),
                     ),
-                    items: [..._floors.toList()..sort(), 'ชั้น 1', 'ชั้น 2', 'ชั้น 3']
-                        .toSet()
-                        .toList()
+                    items: sortedFloorOptions
                         .map((floor) => DropdownMenuItem<String>(
                               value: floor,
-                              child: Text(floor),
+                              child: Text('ชั้น $floor'),
                             ))
                         .toList(),
                     onChanged: isLoading
