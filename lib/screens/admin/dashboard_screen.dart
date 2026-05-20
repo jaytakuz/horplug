@@ -49,10 +49,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) return;
 
       setState(() {
-        _errorMessage = error.toString();
+        _errorMessage = _formatErrorMessage(error);
         _isLoading = false;
       });
     }
+  }
+
+  String _formatErrorMessage(Object error) {
+    final message = error.toString().trim();
+    final normalized = message.startsWith('Exception: ')
+        ? message.substring('Exception: '.length).trim()
+        : message;
+    final lowerCaseMessage = normalized.toLowerCase();
+
+    if (lowerCaseMessage.contains('failed host lookup') ||
+        lowerCaseMessage.contains('socketexception') ||
+        lowerCaseMessage.contains('clientexception') ||
+        lowerCaseMessage.contains('connection refused') ||
+        lowerCaseMessage.contains('network is unreachable') ||
+        lowerCaseMessage.contains('connection timed out') ||
+        lowerCaseMessage.contains('timed out')) {
+      return 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
+    }
+
+    return normalized;
   }
 
   @override
@@ -418,9 +438,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (_availableTenants.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('ไม่พบผู้พักอาศัยที่ยังไม่ได้ผูกห้องใน tenant_profiles')),
+        const SnackBar(content: Text('ไม่พบผู้พักอาศัย')),
       );
       return;
     }
@@ -602,7 +620,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                             messenger.showSnackBar(
                               SnackBar(
-                                  content: Text('บันทึกไม่สำเร็จ: $error')),
+                                  content: Text(
+                                      'บันทึกไม่สำเร็จ: ${_formatErrorMessage(error)}')),
                             );
                           } finally {
                             if (mounted) {
@@ -729,7 +748,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             if (!mounted) return;
 
                             messenger.showSnackBar(
-                              SnackBar(content: Text('ลบไม่สำเร็จ: $error')),
+                              SnackBar(
+                                  content: Text(
+                                      'ลบไม่สำเร็จ: ${_formatErrorMessage(error)}')),
                             );
                           } finally {
                             if (mounted) {

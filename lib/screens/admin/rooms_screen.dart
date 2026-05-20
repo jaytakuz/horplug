@@ -6,6 +6,26 @@ import '../../services/supabase_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 
+String _formatRoomErrorMessage(Object error) {
+  final message = error.toString().trim();
+  final normalized = message.startsWith('Exception: ')
+      ? message.substring('Exception: '.length).trim()
+      : message;
+  final lowerCaseMessage = normalized.toLowerCase();
+
+  if (lowerCaseMessage.contains('failed host lookup') ||
+      lowerCaseMessage.contains('socketexception') ||
+      lowerCaseMessage.contains('clientexception') ||
+      lowerCaseMessage.contains('connection refused') ||
+      lowerCaseMessage.contains('network is unreachable') ||
+      lowerCaseMessage.contains('connection timed out') ||
+      lowerCaseMessage.contains('timed out')) {
+    return 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
+  }
+
+  return normalized;
+}
+
 class RoomsScreen extends StatefulWidget {
   const RoomsScreen({super.key});
 
@@ -60,7 +80,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
       if (!mounted) return;
 
       setState(() {
-        _errorMessage = error.toString();
+        _errorMessage = _formatRoomErrorMessage(error);
         _isLoading = false;
       });
     }
@@ -243,8 +263,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   crossAxisSpacing: 8,
                   childAspectRatio: 2.5,
                   children: [
-                    _buildStatTile(context, 'ทั้งหมด', stats['total'].toString(),
-                        AppColors.primary),
+                    _buildStatTile(context, 'ทั้งหมด',
+                        stats['total'].toString(), AppColors.primary),
                     _buildStatTile(context, 'มีคนอยู่',
                         stats['occupied'].toString(), AppColors.primary),
                     _buildStatTile(context, 'ว่าง', stats['vacant'].toString(),
@@ -327,7 +347,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   title: 'สถานะการชำระเงิน',
                   options: _paymentStatusFilters,
                   selectedValue: selectedPaymentStatus,
-                  onSelected: (value) => setState(() => selectedPaymentStatus = value),
+                  onSelected: (value) =>
+                      setState(() => selectedPaymentStatus = value),
                   note: selectedPaymentStatus != 'ทั้งหมด'
                       ? 'ข้อมูลการชำระเงินยังไม่เชื่อมต่อกับสถานะห้องในหน้านี้'
                       : null,
@@ -547,8 +568,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
     String? note,
   }) {
     final isFloorGroup = title == 'ชั้น';
-    final shouldUseDropdown =
-        isFloorGroup && options.length > 8 && MediaQuery.of(context).size.width < 600;
+    final shouldUseDropdown = isFloorGroup &&
+        options.length > 8 &&
+        MediaQuery.of(context).size.width < 600;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -559,7 +581,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
           DropdownButtonFormField<String>(
             value: selectedValue,
             decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -723,9 +746,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
     if (_availableTenants.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('ไม่พบ tenant ที่ยังไม่ได้ผูกห้องใน tenant_profiles')),
+        const SnackBar(content: Text('ไม่พบผู้พักอาศัย')),
       );
       return;
     }
@@ -919,7 +940,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
                             messenger.showSnackBar(
                               SnackBar(
-                                  content: Text('บันทึกไม่สำเร็จ: $error')),
+                                  content: Text(
+                                      'บันทึกไม่สำเร็จ: ${_formatRoomErrorMessage(error)}')),
                             );
                           } finally {
                             if (mounted) {
@@ -1074,7 +1096,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
                             if (!mounted) return;
 
                             messenger.showSnackBar(
-                              SnackBar(content: Text('ลบไม่สำเร็จ: $error')),
+                              SnackBar(
+                                  content: Text(
+                                      'ลบไม่สำเร็จ: ${_formatRoomErrorMessage(error)}')),
                             );
                           } finally {
                             if (mounted) {
@@ -1098,10 +1122,12 @@ class _RoomsScreenState extends State<RoomsScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        final dialogWidth = min(420.0, MediaQuery.of(dialogContext).size.width - 48);
+        final dialogWidth =
+            min(420.0, MediaQuery.of(dialogContext).size.width - 48);
         return AlertDialog(
           backgroundColor: AppColors.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1190,13 +1216,15 @@ class _RoomsScreenState extends State<RoomsScreen> {
     final roomNumberController = TextEditingController();
     final basePriceController = TextEditingController();
     final floorOptions = {
-      ..._floors.map((floor) => floor.startsWith('ชั้น ') ? floor.replaceFirst('ชั้น ', '') : floor),
+      ..._floors.map((floor) =>
+          floor.startsWith('ชั้น ') ? floor.replaceFirst('ชั้น ', '') : floor),
       '1',
       '2',
       '3',
     }..removeWhere((floor) => floor.isEmpty);
     final sortedFloorOptions = floorOptions.toList()..sort();
-    String selectedFloor = sortedFloorOptions.isNotEmpty ? sortedFloorOptions.first : '1';
+    String selectedFloor =
+        sortedFloorOptions.isNotEmpty ? sortedFloorOptions.first : '1';
     bool isLoading = false;
     String? errorMessage;
 
@@ -1204,7 +1232,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
-          final dialogWidth = min(420.0, MediaQuery.of(dialogContext).size.width - 48);
+          final dialogWidth =
+              min(420.0, MediaQuery.of(dialogContext).size.width - 48);
           return AlertDialog(
             backgroundColor: AppColors.card,
             shape:
@@ -1213,191 +1242,191 @@ class _RoomsScreenState extends State<RoomsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('เพิ่มห้องพักใหม่'),
-              IconButton(
-                onPressed:
-                    isLoading ? null : () => Navigator.of(dialogContext).pop(),
-                icon: const Icon(Icons.close, color: AppColors.primary),
-                splashRadius: 20,
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: dialogWidth,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Error message display
-                  if (errorMessage != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.destructiveBg,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: AppColors.destructive.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline,
-                              color: AppColors.destructive, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              errorMessage!,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: AppColors.destructive,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                IconButton(
+                  onPressed: isLoading
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close, color: AppColors.primary),
+                  splashRadius: 20,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: dialogWidth,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Error message display
+                    if (errorMessage != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.destructiveBg,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color:
+                                  AppColors.destructive.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline,
+                                color: AppColors.destructive, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                errorMessage!,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppColors.destructive,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(height: 16),
+                    ],
+                    // Room Number Field
+                    TextField(
+                      controller: roomNumberController,
+                      enabled: !isLoading,
+                      decoration: const InputDecoration(
+                        labelText: 'เลขห้อง *',
+                        hintText: 'เช่น 101, A1, R101',
+                        prefixIcon: Icon(Icons.door_front_door_outlined),
+                      ),
+                      onChanged: (_) =>
+                          setDialogState(() => errorMessage = null),
                     ),
                     const SizedBox(height: 16),
-                  ],
-                  // Room Number Field
-                  TextField(
-                    controller: roomNumberController,
-                    enabled: !isLoading,
-                    decoration: const InputDecoration(
-                      labelText: 'เลขห้อง *',
-                      hintText: 'เช่น 101, A1, R101',
-                      prefixIcon: Icon(Icons.door_front_door_outlined),
+                    // Floor Selection Dropdown
+                    DropdownButtonFormField<String>(
+                      value: selectedFloor,
+                      decoration: const InputDecoration(
+                        labelText: 'ชั้น *',
+                        prefixIcon: Icon(Icons.layers_outlined),
+                      ),
+                      items: sortedFloorOptions
+                          .map((floor) => DropdownMenuItem<String>(
+                                value: floor,
+                                child: Text('ชั้น $floor'),
+                              ))
+                          .toList(),
+                      onChanged: isLoading
+                          ? null
+                          : (value) {
+                              if (value != null) {
+                                setDialogState(() => selectedFloor = value);
+                              }
+                            },
                     ),
-                    onChanged: (_) => setDialogState(() => errorMessage = null),
-                  ),
-                  const SizedBox(height: 16),
-                  // Floor Selection Dropdown
-                  DropdownButtonFormField<String>(
-                    value: selectedFloor,
-                    decoration: const InputDecoration(
-                      labelText: 'ชั้น *',
-                      prefixIcon: Icon(Icons.layers_outlined),
+                    const SizedBox(height: 16),
+                    // Base Price Field
+                    TextField(
+                      controller: basePriceController,
+                      enabled: !isLoading,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'ราคาห้องพัก (บาท/เดือน) *',
+                        hintText: '0.00',
+                        prefixIcon: Icon(Icons.attach_money),
+                      ),
+                      onChanged: (_) =>
+                          setDialogState(() => errorMessage = null),
                     ),
-                    items: sortedFloorOptions
-                        .map((floor) => DropdownMenuItem<String>(
-                              value: floor,
-                              child: Text('ชั้น $floor'),
-                            ))
-                        .toList(),
-                    onChanged: isLoading
-                        ? null
-                        : (value) {
-                            if (value != null) {
-                              setDialogState(
-                                  () => selectedFloor = value);
-                            }
-                          },
-                  ),
-                  const SizedBox(height: 16),
-                  // Base Price Field
-                  TextField(
-                    controller: basePriceController,
-                    enabled: !isLoading,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'ราคาห้องพัก (บาท/เดือน) *',
-                      hintText: '0.00',
-                      prefixIcon: Icon(Icons.attach_money),
-                    ),
-                    onChanged: (_) => setDialogState(() => errorMessage = null),
-                  ),
-                  const SizedBox(height: 24),
-                  // Submit Button
-                  PrimaryButton(
-                    label: isLoading ? 'กำลังบันทึก...' : 'เพิ่มห้องพัก',
-                    fullWidth: true,
-                    isLoading: isLoading,
-                    onPressed: isLoading
-                        ? null
-                        : () async {
-                            setDialogState(() => errorMessage = null);
+                    const SizedBox(height: 24),
+                    // Submit Button
+                    PrimaryButton(
+                      label: isLoading ? 'กำลังบันทึก...' : 'เพิ่มห้องพัก',
+                      fullWidth: true,
+                      isLoading: isLoading,
+                      onPressed: isLoading
+                          ? null
+                          : () async {
+                              setDialogState(() => errorMessage = null);
 
-                            final roomNumber = roomNumberController.text.trim();
-                            final basePriceStr =
-                                basePriceController.text.trim();
+                              final roomNumber =
+                                  roomNumberController.text.trim();
+                              final basePriceStr =
+                                  basePriceController.text.trim();
 
-                            // Validation
-                            if (roomNumber.isEmpty ||
-                                basePriceStr.isEmpty) {
-                              setDialogState(() {
-                                errorMessage =
-                                    'กรุณากรอกข้อมูลที่จำเป็นทั้งหมด';
-                              });
-                              return;
-                            }
-
-                            final basePrice =
-                                double.tryParse(basePriceStr);
-                            if (basePrice == null || basePrice < 0) {
-                              setDialogState(() {
-                                errorMessage = 'ราคาไม่ถูกต้อง';
-                              });
-                              return;
-                            }
-
-                            setDialogState(() => isLoading = true);
-
-                            try {
-                              // Add room to database
-                              await _service.addRoom(
-                                roomNumber: roomNumber,
-                                floor: selectedFloor,
-                                basePrice: basePrice,
-                              );
-
-                              if (!mounted) return;
-
-                              Navigator.of(dialogContext).pop();
-                              await _loadData();
-
-                              if (!mounted) return;
-
-                              ScaffoldMessenger.of(context)
-                                  .showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                      'เพิ่มห้อง $roomNumber สำเร็จ'),
-                                ),
-                              );
-                            } catch (error) {
-                              final errorMsg = error.toString();
-                              if (errorMsg.contains('already exists')) {
+                              // Validation
+                              if (roomNumber.isEmpty || basePriceStr.isEmpty) {
                                 setDialogState(() {
                                   errorMessage =
-                                      'เลขห้องนี้มีอยู่แล้ว';
+                                      'กรุณากรอกข้อมูลที่จำเป็นทั้งหมด';
                                 });
-                              } else {
+                                return;
+                              }
+
+                              final basePrice = double.tryParse(basePriceStr);
+                              if (basePrice == null || basePrice < 0) {
                                 setDialogState(() {
-                                  errorMessage = 'การเพิ่มห้องไม่สำเร็จ: $error';
+                                  errorMessage = 'ราคาไม่ถูกต้อง';
                                 });
+                                return;
                               }
-                            } finally {
-                              if (mounted) {
-                                setDialogState(() => isLoading = false);
+
+                              setDialogState(() => isLoading = true);
+
+                              try {
+                                // Add room to database
+                                await _service.addRoom(
+                                  roomNumber: roomNumber,
+                                  floor: selectedFloor,
+                                  basePrice: basePrice,
+                                );
+
+                                if (!mounted) return;
+
+                                Navigator.of(dialogContext).pop();
+                                await _loadData();
+
+                                if (!mounted) return;
+
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content:
+                                        Text('เพิ่มห้อง $roomNumber สำเร็จ'),
+                                  ),
+                                );
+                              } catch (error) {
+                                final errorMsg = _formatRoomErrorMessage(error);
+                                if (errorMsg.contains('already exists')) {
+                                  setDialogState(() {
+                                    errorMessage = 'เลขห้องนี้มีอยู่แล้ว';
+                                  });
+                                } else {
+                                  setDialogState(() {
+                                    errorMessage =
+                                        'การเพิ่มห้องไม่สำเร็จ: $errorMsg';
+                                  });
+                                }
+                              } finally {
+                                if (mounted) {
+                                  setDialogState(() => isLoading = false);
+                                }
                               }
-                            }
-                          },
-                  ),
-                ],
+                            },
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
-    ),
-  );
+          );
+        },
+      ),
+    );
   }
-
 }
 
 class _TenantDetailRow extends StatelessWidget {
@@ -1467,199 +1496,200 @@ class _RoomCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          // Header: Room ID and Status Badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('ห้อง ${room.id}',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 2),
-                    Text(
-                      'ชั้น ${room.floor}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: AppColors.mutedForeground),
-                    ),
-                  ],
-                ),
-              ),
-              StatusBadge(label: statusText, variant: variant),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Tenant Info or Maintenance Status
-          if (room.status == RoomStatus.occupied) ...[
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.muted,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            // Header: Room ID and Status Badge
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.person_outline,
-                          size: 16, color: AppColors.primary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          room.tenantName ?? '-',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
+                      Text('ห้อง ${room.id}',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 2),
+                      Text(
+                        'ชั้น ${room.floor}',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: AppColors.mutedForeground),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.phone_outlined,
-                          size: 16, color: AppColors.primary),
-                      const SizedBox(width: 8),
-                      Text(room.phoneNumber ?? '-',
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                  ),
-                  if (room.tenantEmail != null) ...[
-                    const SizedBox(height: 6),
+                ),
+                StatusBadge(label: statusText, variant: variant),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Tenant Info or Maintenance Status
+            if (room.status == RoomStatus.occupied) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.muted,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Row(
                       children: [
-                        const Icon(Icons.email_outlined,
+                        const Icon(Icons.person_outline,
                             size: 16, color: AppColors.primary),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            room.tenantEmail!,
+                            room.tenantName ?? '-',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ] else if (room.status == RoomStatus.maintenance) ...[
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.destructiveBg,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: AppColors.destructive.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.build_outlined,
-                      size: 16, color: AppColors.destructive),
-                  const SizedBox(width: 8),
-                  Text(
-                    'อยู่ระหว่างซ่อมบำรุง',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.destructive,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // Room Price and Actions
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              GestureDetector(
-                onTap: () => _showEditRoomPriceDialog(context),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'ราคาห้องพัก',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: AppColors.mutedForeground),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.phone_outlined,
+                            size: 16, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Text(room.phoneNumber ?? '-',
+                            style: Theme.of(context).textTheme.bodySmall),
+                      ],
                     ),
-                    const SizedBox(height: 2),
+                    if (room.tenantEmail != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.email_outlined,
+                              size: 16, color: AppColors.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              room.tenantEmail!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ] else if (room.status == RoomStatus.maintenance) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.destructiveBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: AppColors.destructive.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.build_outlined,
+                        size: 16, color: AppColors.destructive),
+                    const SizedBox(width: 8),
                     Text(
-                      '฿${room.price.toStringAsFixed(0)}/เดือน',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(color: AppColors.primary),
+                      'อยู่ระหว่างซ่อมบำรุง',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.destructive,
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: AppColors.primary),
-                onSelected: (value) {
-                  if (value == 'edit') {
-                    _showRoomDetailDialog(context);
-                  } else if (value == 'status') {
-                    _showRoomStatusDialog(context);
-                  } else if (value == 'price') {
-                    _showEditRoomPriceDialog(context);
-                  }
-                },
-                itemBuilder: (BuildContext context) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit_outlined,
-                            size: 18, color: AppColors.primary),
-                        SizedBox(width: 10),
-                        Text('ดูรายละเอียด'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'status',
-                    child: Row(
-                      children: [
-                        Icon(Icons.update, size: 18, color: AppColors.primary),
-                        SizedBox(width: 10),
-                        Text('เปลี่ยนสถานะ'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'price',
-                    child: Row(
-                      children: [
-                        Icon(Icons.attach_money,
-                            size: 18, color: AppColors.primary),
-                        SizedBox(width: 10),
-                        Text('แก้ไขราคา'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              const SizedBox(height: 12),
             ],
-          ),
-        ],
+
+            // Room Price and Actions
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                GestureDetector(
+                  onTap: () => _showEditRoomPriceDialog(context),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ราคาห้องพัก',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: AppColors.mutedForeground),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '฿${room.price.toStringAsFixed(0)}/เดือน',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: AppColors.primary),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _showRoomDetailDialog(context);
+                    } else if (value == 'status') {
+                      _showRoomStatusDialog(context);
+                    } else if (value == 'price') {
+                      _showEditRoomPriceDialog(context);
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined,
+                              size: 18, color: AppColors.primary),
+                          SizedBox(width: 10),
+                          Text('ดูรายละเอียด'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'status',
+                      child: Row(
+                        children: [
+                          Icon(Icons.update,
+                              size: 18, color: AppColors.primary),
+                          SizedBox(width: 10),
+                          Text('เปลี่ยนสถานะ'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'price',
+                      child: Row(
+                        children: [
+                          Icon(Icons.attach_money,
+                              size: 18, color: AppColors.primary),
+                          SizedBox(width: 10),
+                          Text('แก้ไขราคา'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 
@@ -1668,10 +1698,12 @@ class _RoomCard extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        final dialogWidth = min(420.0, MediaQuery.of(dialogContext).size.width - 48);
+        final dialogWidth =
+            min(420.0, MediaQuery.of(dialogContext).size.width - 48);
         return AlertDialog(
           backgroundColor: AppColors.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1805,13 +1837,11 @@ class _RoomCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             errorMessage!,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: AppColors.destructive,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppColors.destructive,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                           ),
                         ),
                       ],
@@ -1873,11 +1903,13 @@ class _RoomCard extends StatelessWidget {
                               ),
                               actions: [
                                 TextButton(
-                                  onPressed: () => Navigator.of(confirmContext).pop(false),
+                                  onPressed: () =>
+                                      Navigator.of(confirmContext).pop(false),
                                   child: const Text('ยกเลิก'),
                                 ),
                                 TextButton(
-                                  onPressed: () => Navigator.of(confirmContext).pop(true),
+                                  onPressed: () =>
+                                      Navigator.of(confirmContext).pop(true),
                                   child: const Text('ยืนยัน'),
                                 ),
                               ],
@@ -1907,11 +1939,13 @@ class _RoomCard extends StatelessWidget {
                             );
                           } catch (error) {
                             setDialogState(() {
-                              final message = error.toString();
+                              final message = _formatRoomErrorMessage(error);
                               if (message.contains('กำลังถูกใช้งาน')) {
-                                errorMessage = 'หมายเลขห้องนี้ถูกใช้งานอยู่แล้ว';
+                                errorMessage =
+                                    'หมายเลขห้องนี้ถูกใช้งานอยู่แล้ว';
                               } else {
-                                errorMessage = 'เปลี่ยนเลขห้องไม่สำเร็จ: $error';
+                                errorMessage =
+                                    'เปลี่ยนเลขห้องไม่สำเร็จ: $message';
                               }
                             });
                           } finally {
@@ -1977,9 +2011,10 @@ class _RoomCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           'คุณต้องการลบห้องนี้ใช่หรือไม่? ข้อมูลประวัติการเงินและการเช่าในอดีตจะยังคงถูกเก็บไว้เพื่อการทำบัญชี แต่ห้องนี้จะไม่แสดงบนแผนผังอีกต่อไป',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppColors.destructive,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppColors.destructive,
+                                  ),
                         ),
                       ),
                     ],
@@ -2026,8 +2061,7 @@ class _RoomCard extends StatelessWidget {
 
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(
-                                      'ลบห้อง ${room.id} สำเร็จ'),
+                                  content: Text('ลบห้อง ${room.id} สำเร็จ'),
                                 ),
                               );
                             } catch (error) {
@@ -2035,8 +2069,7 @@ class _RoomCard extends StatelessWidget {
 
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(
-                                      'ลบห้องไม่สำเร็จ: $error'),
+                                  content: Text('ลบห้องไม่สำเร็จ: $error'),
                                 ),
                               );
                               Navigator.of(dialogContext).pop();
@@ -2046,8 +2079,7 @@ class _RoomCard extends StatelessWidget {
                       backgroundColor: AppColors.destructive,
                       foregroundColor: Colors.white,
                     ),
-                    child: Text(
-                        isLoading ? 'กำลังลบ...' : 'ยืนยันลบห้องพัก'),
+                    child: Text(isLoading ? 'กำลังลบ...' : 'ยืนยันลบห้องพัก'),
                   ),
                 ),
               ],
@@ -2337,7 +2369,8 @@ class _RoomCard extends StatelessWidget {
                             if (dialogContext.mounted) {
                               messenger.showSnackBar(
                                 SnackBar(
-                                    content: Text('บันทึกไม่สำเร็จ: $error')),
+                                    content: Text(
+                                        'บันทึกไม่สำเร็จ: ${_formatRoomErrorMessage(error)}')),
                               );
                             }
                           } finally {
