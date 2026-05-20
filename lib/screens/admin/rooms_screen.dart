@@ -294,125 +294,327 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
   /// สร้างส่วนฟิลเตอร์
   Widget _buildFilterSection(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 700) {
+          return _buildCompactFilterSection(context);
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: PaperCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildFilterHeader(context),
+                _buildFilterGroup(
+                  context,
+                  title: 'ชั้น',
+                  options: ['ทั้งหมด', ..._floors.toList()..sort()],
+                  selectedValue: selectedFloor,
+                  onSelected: (value) => setState(() => selectedFloor = value),
+                ),
+                _buildFilterGroup(
+                  context,
+                  title: 'สถานะห้อง',
+                  options: ['ทั้งหมด', 'มีคนอยู่', 'ว่าง', 'ซ่อมบำรุง'],
+                  selectedValue: selectedFilter,
+                  onSelected: (value) => setState(() => selectedFilter = value),
+                ),
+                _buildFilterGroup(
+                  context,
+                  title: 'สถานะการชำระเงิน',
+                  options: _paymentStatusFilters,
+                  selectedValue: selectedPaymentStatus,
+                  onSelected: (value) => setState(() => selectedPaymentStatus = value),
+                  note: selectedPaymentStatus != 'ทั้งหมด'
+                      ? 'ข้อมูลการชำระเงินยังไม่เชื่อมต่อกับสถานะห้องในหน้านี้'
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCompactFilterSection(BuildContext context) {
+    final activeFilterCount = [
+      selectedFloor != 'ทั้งหมด',
+      selectedFilter != 'ทั้งหมด',
+      selectedPaymentStatus != 'ทั้งหมด',
+    ].where((active) => active).length;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('ฟิลเตอร์ตามชั้น',
-              style: Theme.of(context).textTheme.labelSmall),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: ['ทั้งหมด', ..._floors.toList()..sort()].map((floor) {
-                final isActive = selectedFloor == floor;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(floor),
-                    selected: isActive,
-                    onSelected: (val) => setState(() => selectedFloor = floor),
-                    backgroundColor: AppColors.card,
-                    selectedColor: AppColors.primary,
-                    labelStyle: TextStyle(
-                      color: isActive ? Colors.white : AppColors.primary,
-                      fontSize: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      side: BorderSide(
-                          color:
-                              isActive ? AppColors.primary : AppColors.border),
-                    ),
-                    showCheckmark: false,
+      child: PaperCard(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'ตัวกรอง',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text('ฟิลเตอร์ตามสถานะ',
-              style: Theme.of(context).textTheme.labelSmall),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children:
-                  ['ทั้งหมด', 'มีคนอยู่', 'ว่าง', 'ซ่อมบำรุง'].map((filter) {
-                final isActive = selectedFilter == filter;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(filter),
-                    selected: isActive,
-                    onSelected: (val) =>
-                        setState(() => selectedFilter = filter),
-                    backgroundColor: AppColors.card,
-                    selectedColor: AppColors.primary,
-                    labelStyle: TextStyle(
-                      color: isActive ? Colors.white : AppColors.primary,
-                      fontSize: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      side: BorderSide(
-                          color:
-                              isActive ? AppColors.primary : AppColors.border),
-                    ),
-                    showCheckmark: false,
+                  const SizedBox(height: 4),
+                  Text(
+                    activeFilterCount > 0
+                        ? 'เปิดใช้งาน $activeFilterCount ตัวกรอง'
+                        : 'เลือกตัวกรองเพื่อจำกัดผลลัพธ์',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.mutedForeground),
                   ),
-                );
-              }).toList(),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text('ฟิลเตอร์ตามสถานะการชำระเงิน',
-              style: Theme.of(context).textTheme.labelSmall),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _paymentStatusFilters.map((filter) {
-                final isActive = selectedPaymentStatus == filter;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(filter),
-                    selected: isActive,
-                    onSelected: (val) => setState(
-                        () => selectedPaymentStatus = filter),
-                    backgroundColor: AppColors.card,
-                    selectedColor: AppColors.primary,
-                    labelStyle: TextStyle(
-                      color: isActive ? Colors.white : AppColors.primary,
-                      fontSize: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
-                      side: BorderSide(
-                          color:
-                              isActive ? AppColors.primary : AppColors.border),
-                    ),
-                    showCheckmark: false,
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          if (selectedPaymentStatus != 'ทั้งหมด') ...[
-            const SizedBox(height: 8),
-            Text(
-              'ระบบยังไม่รองรับการกรองสถานะการชำระเงินเต็มรูปแบบในหน้านี้',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: AppColors.mutedForeground),
+            const SizedBox(width: 12),
+            TextButton.icon(
+              onPressed: () => _showFilterSheet(context),
+              icon: const Icon(Icons.filter_list),
+              label: const Text('แก้ไข'),
             ),
           ],
-          const SizedBox(height: 16),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildFilterHeader(BuildContext context) {
+    final activeFilterCount = [
+      selectedFloor != 'ทั้งหมด',
+      selectedFilter != 'ทั้งหมด',
+      selectedPaymentStatus != 'ทั้งหมด',
+    ].where((active) => active).length;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Text(
+            'ตัวกรอง',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        if (activeFilterCount > 0) ...[
+          Text(
+            'เปิดใช้งาน $activeFilterCount ตัวกรอง',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: AppColors.mutedForeground),
+          ),
+          const SizedBox(width: 12),
+        ],
+        TextButton.icon(
+          onPressed: activeFilterCount > 0 ? _clearAllFilters : null,
+          icon: const Icon(Icons.filter_alt_off),
+          label: const Text('ล้างทั้งหมด'),
+          style: TextButton.styleFrom(
+            foregroundColor: activeFilterCount > 0
+                ? AppColors.primary
+                : AppColors.mutedForeground,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showFilterSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.45,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SingleChildScrollView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 48,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.mutedForeground,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'ตัวกรอง',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'ปรับผลลัพธ์ตามชั้น สถานะห้อง และสถานะการชำระเงิน',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: AppColors.mutedForeground),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildFilterGroup(
+                      context,
+                      title: 'ชั้น',
+                      options: ['ทั้งหมด', ..._floors.toList()..sort()],
+                      selectedValue: selectedFloor,
+                      onSelected: (value) {
+                        setState(() => selectedFloor = value);
+                      },
+                    ),
+                    _buildFilterGroup(
+                      context,
+                      title: 'สถานะห้อง',
+                      options: ['ทั้งหมด', 'มีคนอยู่', 'ว่าง', 'ซ่อมบำรุง'],
+                      selectedValue: selectedFilter,
+                      onSelected: (value) {
+                        setState(() => selectedFilter = value);
+                      },
+                    ),
+                    _buildFilterGroup(
+                      context,
+                      title: 'สถานะการชำระเงิน',
+                      options: _paymentStatusFilters,
+                      selectedValue: selectedPaymentStatus,
+                      onSelected: (value) {
+                        setState(() => selectedPaymentStatus = value);
+                      },
+                      note: selectedPaymentStatus != 'ทั้งหมด'
+                          ? 'ข้อมูลการชำระเงินยังไม่เชื่อมต่อกับสถานะห้องในหน้านี้'
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            _clearAllFilters();
+                            Navigator.of(context).pop();
+                          },
+                          child: const Text('ล้างทั้งหมด'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('เสร็จสิ้น'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      selectedFloor = 'ทั้งหมด';
+      selectedFilter = 'ทั้งหมด';
+      selectedPaymentStatus = 'ทั้งหมด';
+    });
+  }
+
+  Widget _buildFilterGroup(
+    BuildContext context, {
+    required String title,
+    required List<String> options,
+    required String selectedValue,
+    required ValueChanged<String> onSelected,
+    String? note,
+  }) {
+    final isFloorGroup = title == 'ชั้น';
+    final shouldUseDropdown =
+        isFloorGroup && options.length > 8 && MediaQuery.of(context).size.width < 600;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(height: 8),
+        if (shouldUseDropdown)
+          DropdownButtonFormField<String>(
+            value: selectedValue,
+            decoration: InputDecoration(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            items: options
+                .map((option) => DropdownMenuItem(
+                      value: option,
+                      child: Text(option),
+                    ))
+                .toList(),
+            onChanged: (value) {
+              if (value != null) onSelected(value);
+            },
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: options.map((filter) {
+              final isActive = selectedValue == filter;
+              return Tooltip(
+                message: filter,
+                child: FilterChip(
+                  label: Text(filter),
+                  selected: isActive,
+                  onSelected: (_) => onSelected(filter),
+                  backgroundColor: AppColors.card,
+                  selectedColor: AppColors.primary,
+                  labelStyle: TextStyle(
+                    color: isActive ? Colors.white : AppColors.primary,
+                    fontSize: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                    side: BorderSide(
+                      color: isActive ? AppColors.primary : AppColors.border,
+                    ),
+                  ),
+                  showCheckmark: false,
+                ),
+              );
+            }).toList(),
+          ),
+        if (note != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            note,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: AppColors.mutedForeground),
+          ),
+        ],
+        const SizedBox(height: 16),
+      ],
     );
   }
 
