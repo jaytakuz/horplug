@@ -146,7 +146,7 @@ class SupabaseService {
         .maybeSingle();
 
     if (existingRoom != null) {
-      throw Exception('Room number already exists');
+      throw Exception('หมายเลขห้องนี้มีอยู่ในระบบแล้ว');
     }
 
     // เพิ่มห้องพักใหม่ด้วยสถานะว่าง
@@ -174,10 +174,11 @@ class SupabaseService {
     // ตรวจสอบว่าห้องไม่มีผู้พักอาศัยและไม่อยู่ในสถานะอื่น
     if (status != 'vacant' || currentTenantId != null) {
       throw Exception(
-          'Cannot delete room: This room is currently occupied by an active tenant.');
+          'ไม่สามารถลบห้องได้: ห้องนี้กำลังถูกเช่าโดยผู้เช่าที่ยังใช้งานอยู่');
     }
 
-    // ลบห้องพัก
+    // TODO: เปลี่ยนให้เป็น soft delete โดยอัปเดตสถานะเป็น 'inactive' แทนการลบข้อมูลจริง
+    // NOTE: ยังไม่ตรวจสอบ pending invoices เนื่องจากยังไม่เชื่อมโยง billing data ในโมดูลนี้
     await client.from('rooms').delete().eq('id', roomDbId);
   }
 
@@ -195,7 +196,7 @@ class SupabaseService {
         .maybeSingle();
 
     if (existingRoom != null) {
-      throw Exception('Room number already in use');
+      throw Exception('หมายเลขห้องนี้ถูกใช้งานอยู่แล้ว');
     }
 
     await client.from('rooms').update({

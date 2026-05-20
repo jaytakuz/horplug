@@ -832,37 +832,42 @@ class _RoomTile extends StatelessWidget {
         break;
     }
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 60,
-        height: 60,
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: borderColor, width: 1.5),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(room.id,
+    return Tooltip(
+      message:
+          'ห้อง ${room.id}\nสถานะ: ${room.status == RoomStatus.occupied ? 'มีคนอยู่' : room.status == RoomStatus.vacant ? 'ว่าง' : 'ซ่อม'}\nราคา ฿${room.price.toStringAsFixed(0)}/เดือน',
+      waitDuration: const Duration(milliseconds: 350),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: borderColor, width: 1.5),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(room.id,
+                  style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14)),
+              const SizedBox(height: 2),
+              Text(
+                room.status == RoomStatus.occupied
+                    ? _shortTenantName(room.tenantName)
+                    : (room.status == RoomStatus.vacant ? 'ว่าง' : 'ซ่อม'),
                 style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14)),
-            const SizedBox(height: 2),
-            Text(
-              room.status == RoomStatus.occupied
-                  ? _shortTenantName(room.tenantName)
-                  : (room.status == RoomStatus.vacant ? 'ว่าง' : 'ซ่อม'),
-              style: TextStyle(
-                  color: textColor.withValues(alpha: 0.8), fontSize: 9),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+                    color: textColor.withValues(alpha: 0.8), fontSize: 9),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );

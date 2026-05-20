@@ -17,6 +17,13 @@ class _RoomsScreenState extends State<RoomsScreen> {
   final SupabaseService _service = SupabaseService();
   String selectedFilter = 'ทั้งหมด';
   String selectedFloor = 'ทั้งหมด';
+  String selectedPaymentStatus = 'ทั้งหมด';
+  final List<String> _paymentStatusFilters = [
+    'ทั้งหมด',
+    'ชำระแล้ว',
+    'รอดำเนินการ',
+    'ค้างชำระ',
+  ];
   bool _isLoading = true;
   bool _isUpdatingTenant = false;
   String? _errorMessage;
@@ -359,6 +366,50 @@ class _RoomsScreenState extends State<RoomsScreen> {
               }).toList(),
             ),
           ),
+          const SizedBox(height: 16),
+          Text('ฟิลเตอร์ตามสถานะการชำระเงิน',
+              style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _paymentStatusFilters.map((filter) {
+                final isActive = selectedPaymentStatus == filter;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(filter),
+                    selected: isActive,
+                    onSelected: (val) => setState(
+                        () => selectedPaymentStatus = filter),
+                    backgroundColor: AppColors.card,
+                    selectedColor: AppColors.primary,
+                    labelStyle: TextStyle(
+                      color: isActive ? Colors.white : AppColors.primary,
+                      fontSize: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      side: BorderSide(
+                          color:
+                              isActive ? AppColors.primary : AppColors.border),
+                    ),
+                    showCheckmark: false,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          if (selectedPaymentStatus != 'ทั้งหมด') ...[
+            const SizedBox(height: 8),
+            Text(
+              'ระบบยังไม่รองรับการกรองสถานะการชำระเงินเต็มรูปแบบในหน้านี้',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.mutedForeground),
+            ),
+          ],
           const SizedBox(height: 16),
         ],
       ),
@@ -1200,11 +1251,15 @@ class _RoomCard extends StatelessWidget {
         break;
     }
 
-    return PaperCard(
-      onTap: () => _showRoomDetailDialog(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Tooltip(
+      message:
+          'ห้อง ${room.id}\nชั้น ${room.floor}\n${_getStatusText(room.status)}\nราคา ฿${room.price.toStringAsFixed(0)}/เดือน',
+      waitDuration: const Duration(milliseconds: 350),
+      child: PaperCard(
+        onTap: () => _showRoomDetailDialog(context),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // Header: Room ID and Status Badge
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1397,6 +1452,7 @@ class _RoomCard extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -1431,6 +1487,17 @@ class _RoomCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _detailRow('ห้องเลขที่', room.id),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                        _showEditRoomNumberDialog(context);
+                      },
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('แก้ไขเลขห้อง'),
+                    ),
+                  ),
                   _detailRow('ชั้น', room.floor),
                   _detailRow('ราคา', '฿${room.price.toStringAsFixed(0)}/เดือน'),
                   _detailRow('สถานะ', _getStatusText(room.status)),
@@ -1477,6 +1544,181 @@ class _RoomCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  /// แสดง dialog แก้ไขเลขห้อง
+  void _showEditRoomNumberDialog(BuildContext context) {
+    final roomNumberController = TextEditingController(text: room.id);
+    bool isLoading = false;
+    String? errorMessage;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.card,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('แก้ไขเลขห้อง'),
+              IconButton(
+                onPressed:
+                    isLoading ? null : () => Navigator.of(dialogContext).pop(),
+                icon: const Icon(Icons.close, color: AppColors.primary),
+                splashRadius: 20,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 320,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (errorMessage != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.destructiveBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: AppColors.destructive.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline,
+                            color: AppColors.destructive, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            errorMessage!,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: AppColors.destructive,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                TextField(
+                  controller: roomNumberController,
+                  enabled: !isLoading,
+                  decoration: const InputDecoration(
+                    labelText: 'เลขห้องใหม่',
+                    prefixIcon: Icon(Icons.door_front_door_outlined),
+                  ),
+                  onChanged: (_) => setDialogState(() => errorMessage = null),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'การแก้ไขเลขห้องอาจส่งผลถึงประวัติการเช่าและใบแจ้งหนี้ย้อนหลัง โปรดยืนยันก่อนบันทึก',
+                  style: Theme.of(dialogContext)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: AppColors.warning),
+                ),
+                const SizedBox(height: 24),
+                PrimaryButton(
+                  label: isLoading ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง',
+                  fullWidth: true,
+                  isLoading: isLoading,
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          final newRoomNumber =
+                              roomNumberController.text.trim();
+
+                          if (newRoomNumber.isEmpty) {
+                            setDialogState(() {
+                              errorMessage = 'กรุณากรอกเลขห้องใหม่';
+                            });
+                            return;
+                          }
+
+                          if (newRoomNumber == room.id) {
+                            setDialogState(() {
+                              errorMessage = 'เลขห้องใหม่ต้องแตกต่างจากเดิม';
+                            });
+                            return;
+                          }
+
+                          final confirmed = await showDialog<bool>(
+                            context: dialogContext,
+                            builder: (confirmContext) => AlertDialog(
+                              backgroundColor: AppColors.card,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24)),
+                              title: const Text('ยืนยันการเปลี่ยนเลขห้อง'),
+                              content: const Text(
+                                'การเปลี่ยนเลขห้องอาจส่งผลต่อประวัติการเช่าและใบแจ้งหนี้ย้อนหลัง หากต้องการเปลี่ยนหมายเลขห้อง โปรดยืนยัน',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(confirmContext).pop(false),
+                                  child: const Text('ยกเลิก'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.of(confirmContext).pop(true),
+                                  child: const Text('ยืนยัน'),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirmed != true) return;
+
+                          setDialogState(() => isLoading = true);
+
+                          try {
+                            await SupabaseService().updateRoomNumber(
+                              roomDbId: room.dbId,
+                              newRoomNumber: newRoomNumber,
+                            );
+
+                            if (!dialogContext.mounted) return;
+
+                            Navigator.of(dialogContext).pop();
+                            onStatusUpdate?.call();
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    'เปลี่ยนเลขห้อง ${room.id} เป็น $newRoomNumber เรียบร้อยแล้ว'),
+                              ),
+                            );
+                          } catch (error) {
+                            setDialogState(() {
+                              final message = error.toString();
+                              if (message.contains('กำลังถูกใช้งาน')) {
+                                errorMessage = 'หมายเลขห้องนี้ถูกใช้งานอยู่แล้ว';
+                              } else {
+                                errorMessage = 'เปลี่ยนเลขห้องไม่สำเร็จ: $error';
+                              }
+                            });
+                          } finally {
+                            if (dialogContext.mounted) {
+                              setDialogState(() => isLoading = false);
+                            }
+                          }
+                        },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1527,7 +1769,7 @@ class _RoomCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'คุณแน่ใจหรือไม่ว่าต้องการลบห้องนี้? การกระทำนี้ไม่สามารถย้อนกลับได้',
+                          'คุณต้องการลบห้องนี้ใช่หรือไม่? ข้อมูลประวัติการเงินและการเช่าในอดีตจะยังคงถูกเก็บไว้เพื่อการทำบัญชี แต่ห้องนี้จะไม่แสดงบนแผนผังอีกต่อไป',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: AppColors.destructive,
                               ),
