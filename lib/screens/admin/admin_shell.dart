@@ -72,9 +72,13 @@ class AdminShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final pages = _buildPages(context);
     final location = GoRouterState.of(context).uri.path;
-    final activeIndex = _calculateSelectedIndex(location);
-    final bottomNavIndex = activeIndex <= 4 ? activeIndex : 0;
     final auth = AuthScope.of(context);
+    final hasDormitoryContext = auth.dormitoryId != null;
+    final desiredIndex = _calculateSelectedIndex(location);
+    final activeIndex = pages.isEmpty
+        ? 0
+        : desiredIndex.clamp(0, pages.length - 1);
+    final bottomNavIndex = activeIndex <= 4 ? activeIndex : 0;
 
     return Scaffold(
       appBar: MobileHeader(
@@ -93,55 +97,59 @@ class AdminShell extends StatelessWidget {
         index: activeIndex,
         children: pages,
       ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black12, blurRadius: 10, offset: Offset(0, -2)),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: bottomNavIndex,
-          onTap: (index) => _onItemTapped(context, index),
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: AppColors.card,
-          selectedItemColor: AppColors.primary,
-          unselectedItemColor: AppColors.mutedForeground,
-          selectedLabelStyle:
-              const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          unselectedLabelStyle:
-              const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-          items: [
-            const BottomNavigationBarItem(
-                icon: Icon(Icons.dashboard_outlined),
-                activeIcon: Icon(Icons.dashboard),
-                label: 'หน้าหลัก'),
-            const BottomNavigationBarItem(
-                icon: Icon(Icons.meeting_room_outlined),
-                activeIcon: Icon(Icons.meeting_room),
-                label: 'ห้องพัก'),
-            const BottomNavigationBarItem(
-                icon: Icon(Icons.speed_outlined),
-                activeIcon: Icon(Icons.speed),
-                label: 'มิเตอร์'),
-            const BottomNavigationBarItem(
-                icon: Icon(Icons.receipt_long_outlined),
-                activeIcon: Icon(Icons.receipt_long),
-                label: 'บิล'),
-            BottomNavigationBarItem(
-              icon: Badge(
-                label: const Text('2'),
-                child: const Icon(Icons.chat_bubble_outline),
+      bottomNavigationBar: hasDormitoryContext
+          ? Container(
+              decoration: const BoxDecoration(
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 10,
+                      offset: Offset(0, -2)),
+                ],
               ),
-              activeIcon: Badge(
-                label: const Text('2'),
-                child: const Icon(Icons.chat_bubble),
+              child: BottomNavigationBar(
+                currentIndex: bottomNavIndex,
+                onTap: (index) => _onItemTapped(context, index),
+                type: BottomNavigationBarType.fixed,
+                backgroundColor: AppColors.card,
+                selectedItemColor: AppColors.primary,
+                unselectedItemColor: AppColors.mutedForeground,
+                selectedLabelStyle:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                unselectedLabelStyle:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+                items: [
+                  const BottomNavigationBarItem(
+                      icon: Icon(Icons.dashboard_outlined),
+                      activeIcon: Icon(Icons.dashboard),
+                      label: 'หน้าหลัก'),
+                  const BottomNavigationBarItem(
+                      icon: Icon(Icons.meeting_room_outlined),
+                      activeIcon: Icon(Icons.meeting_room),
+                      label: 'ห้องพัก'),
+                  const BottomNavigationBarItem(
+                      icon: Icon(Icons.speed_outlined),
+                      activeIcon: Icon(Icons.speed),
+                      label: 'มิเตอร์'),
+                  const BottomNavigationBarItem(
+                      icon: Icon(Icons.receipt_long_outlined),
+                      activeIcon: Icon(Icons.receipt_long),
+                      label: 'บิล'),
+                  BottomNavigationBarItem(
+                    icon: Badge(
+                      label: const Text('2'),
+                      child: const Icon(Icons.chat_bubble_outline),
+                    ),
+                    activeIcon: Badge(
+                      label: const Text('2'),
+                      child: const Icon(Icons.chat_bubble),
+                    ),
+                    label: 'แชท',
+                  ),
+                ],
               ),
-              label: 'แชท',
-            ),
-          ],
-        ),
-      ),
+            )
+          : null,
     );
   }
 }
