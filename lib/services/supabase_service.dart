@@ -4,10 +4,16 @@ import '../models/models.dart';
 class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
 
-  Future<List<Room>> fetchRooms() async {
-    final data = await client
+  Future<List<Room>> fetchRooms({int? dormitoryId}) async {
+    final query = client
         .from('rooms')
-        .select('id, room_number, floor, base_price, status, current_tenant_id')
+        .select('id, room_number, floor, base_price, status, current_tenant_id');
+
+    if (dormitoryId != null) {
+      query.eq('dorm_id', dormitoryId);
+    }
+
+    final data = await query
         .order('floor', ascending: true)
         .order('room_number', ascending: true);
 
@@ -134,6 +140,7 @@ class SupabaseService {
 
   /// เพิ่มห้องพักใหม่
   Future<void> addRoom({
+    required int dormitoryId,
     required String roomNumber,
     required String floor,
     required double basePrice,
@@ -143,6 +150,7 @@ class SupabaseService {
         .from('rooms')
         .select('id')
         .eq('room_number', roomNumber)
+        .eq('dorm_id', dormitoryId)
         .maybeSingle();
 
     if (existingRoom != null) {
@@ -151,6 +159,7 @@ class SupabaseService {
 
     // เพิ่มห้องพักใหม่ด้วยสถานะว่าง
     await client.from('rooms').insert({
+      'dorm_id': dormitoryId,
       'room_number': roomNumber,
       'floor': floor,
       'base_price': basePrice,

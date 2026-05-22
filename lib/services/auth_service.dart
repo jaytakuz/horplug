@@ -1,0 +1,142 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../models/models.dart';
+
+class AuthService {
+  AuthService({SupabaseClient? client})
+      : _client = client ?? Supabase.instance.client;
+
+  final SupabaseClient _client;
+
+  User? get currentUser => _client.auth.currentUser;
+  Session? get currentSession => _client.auth.currentSession;
+
+  Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
+
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {
+    await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+  }
+
+  Future<void> signOut() async {
+    await _client.auth.signOut();
+  }
+
+  Future<void> signUpTenant({
+    required String email,
+    required String password,
+    required String firstName,
+    required String lastName,
+    required String phone,
+  }) async {
+    final response = await _client.auth.signUp(
+      email: email,
+      password: password,
+      data: {
+        'role': 'tenant',
+        'first_name': firstName.trim(),
+        'last_name': lastName.trim(),
+        'phone': phone.trim(),
+      },
+    );
+
+    final user = response.user;
+    if (user == null) {
+      throw Exception('ไม่สามารถสร้างบัญชีผู้เช่าได้');
+    }
+  }
+
+  Future<void> signUpLandlord({
+    required String email,
+    required String password,
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String dormitoryName,
+    required String location,
+    required int totalFloors,
+    required int roomsPerFloor,
+    required double baseWaterRate,
+    required double baseElectricityRate,
+  }) async {
+    final response = await _client.auth.signUp(
+      email: email,
+      password: password,
+      data: {
+        'role': 'landlord',
+        'first_name': firstName.trim(),
+        'last_name': lastName.trim(),
+        'phone': phone.trim(),
+        'dormitory_name': dormitoryName.trim(),
+        'location': location.trim(),
+        'total_floors': totalFloors,
+        'rooms_per_floor': roomsPerFloor,
+        'base_water_rate': baseWaterRate,
+        'base_electricity_rate': baseElectricityRate,
+      },
+    );
+
+    final user = response.user;
+    if (user == null) {
+      throw Exception('ไม่สามารถสร้างบัญชีผู้ดูแลหอพักได้');
+    }
+  }
+
+  Future<UserProfile?> fetchCurrentUserProfile() async {
+    final user = currentUser;
+    if (user == null) return null;
+
+    final landlordRows = await _client
+        .from('landlord_profiles')
+        .select(
+          'id, first_name, last_name, email, phone, dormitories(id, name, total_floors)',
+        )
+        .eq('id', user.id)
+        .limit(1);
+
+    final landlordList =
+        (landlordRows as List).cast<Map<String, dynamic>>();
+    if (landlordList.isNotEmpty) {
+      final row = landlordList.first;
+      final dormitoryRows =
+          (row['dormitories'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final dormitory = dormitoryRows.isEmpty ? null : dormitoryRows.first;
+
+      return UserProfile(
+        id: row['id'] as String,
+        role: AppRole.landlord,
+        firstName: row['first_name'] as String? ?? '',
+        lastName: row['last_name'] as String? ?? '',
+        email: row['email'] as String? ?? user.email ?? '',
+        phone: row['phone'] as String?,
+        dormitoryId: dormitory?['id'] as int?,
+        dormitoryName: dormitory?['name'] as String?,
+        dormitoryTotalFloors: dormitory?['total_floors'] as int?,
+      );
+    }
+
+    final tenantRow = await _client
+        .from('tenant_profiles')
+        .select('id, first_name, last_name, email, phone')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    if (tenantRow != null) {
+      return UserProfile(
+        id: tenantRow['id'] as String,
+        role: AppRole.tenant,
+        firstName: tenantRow['first_name'] as String? ?? '',
+        lastName: tenantRow['last_name'] as String? ?? '',
+        email: tenantRow['email'] as String? ?? user.email ?? '',
+        phone: tenantRow['phone'] as String?,
+      );
+    }
+
+    return null;
+  }
+}
