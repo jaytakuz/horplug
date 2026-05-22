@@ -6,9 +6,9 @@ import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 
 class DashboardScreen extends StatefulWidget {
-  final String dormSlug;
+  final int dormitoryId;
 
-  const DashboardScreen({super.key, required this.dormSlug});
+  const DashboardScreen({super.key, required this.dormitoryId});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -35,7 +35,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     try {
-      final rooms = await _service.fetchRooms();
+      final rooms = await _service.fetchRooms(
+        dormitoryId: widget.dormitoryId,
+      );
       final tenants = await _service.fetchAvailableTenants();
 
       if (!mounted) return;
@@ -196,7 +198,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: Theme.of(context).textTheme.titleMedium),
                 TextButton(
                   onPressed: () =>
-                      context.go('/${widget.dormSlug}/admin/rooms'),
+                      context.go('/landlord/rooms'),
                   child: const Text('จัดการห้อง →',
                       style: TextStyle(color: AppColors.ring)),
                 ),
@@ -254,27 +256,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   icon: Icons.speed,
                   label: 'บันทึกมิเตอร์',
                   color: AppColors.primary,
-                  onTap: () => context.go('/${widget.dormSlug}/admin/meter'),
+                  onTap: () => context.go('/landlord/meter'),
                 ),
                 _QuickActionItem(
                   icon: Icons.receipt_long,
                   label: 'สร้างบิล',
                   color: AppColors.success,
                   badge: '5',
-                  onTap: () => context.go('/${widget.dormSlug}/admin/billing'),
+                  onTap: () => context.go('/landlord/billing'),
                 ),
                 _QuickActionItem(
                   icon: Icons.description,
                   label: 'สัญญาเช่า',
                   color: AppColors.warning,
-                  onTap: () => context.go('/${widget.dormSlug}/admin/lease'),
+                  onTap: () => context.go('/landlord/lease'),
                 ),
                 _QuickActionItem(
                   icon: Icons.chat_bubble_outline,
                   label: 'แชท',
                   color: AppColors.ring,
                   badge: '2',
-                  onTap: () => context.go('/${widget.dormSlug}/admin/chat'),
+                  onTap: () => context.go('/landlord/chat'),
                 ),
               ],
             ),
@@ -653,118 +655,211 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          backgroundColor: AppColors.card,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'ลบผู้พักอาศัยออกจากห้อง',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      icon: const Icon(Icons.close, color: AppColors.primary),
-                      splashRadius: 20,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'รายละเอียดผู้พักอาศัยในห้อง',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.muted,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
+        builder: (dialogContext, setDialogState) {
+          void safeSetDialogState(VoidCallback fn) {
+            if (!dialogContext.mounted) return;
+            setDialogState(fn);
+          }
+
+          return AlertDialog(
+            backgroundColor: AppColors.card,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _TenantDetailRow(label: 'ห้อง', value: room.id),
-                      _TenantDetailRow(label: 'ชั้น', value: room.floor),
-                      _TenantDetailRow(
-                          label: 'ชื่อ', value: room.tenantName ?? '-'),
-                      _TenantDetailRow(
-                          label: 'เบอร์โทร', value: room.phoneNumber ?? '-'),
-                      _TenantDetailRow(
-                          label: 'อีเมล', value: room.tenantEmail ?? '-'),
+                      Expanded(
+                        child: Text(
+                          'ลบผู้พักอาศัยออกจากห้อง',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _isUpdatingTenant
+                            ? null
+                            : () => Navigator.of(dialogContext).pop(),
+                        icon: const Icon(Icons.close, color: AppColors.primary),
+                        splashRadius: 20,
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 24),
-                PrimaryButton(
-                  label:
-                      _isUpdatingTenant ? 'กำลังลบ...' : 'ยืนยันลบออกจากห้อง',
-                  fullWidth: true,
-                  onPressed: _isUpdatingTenant
-                      ? null
-                      : () async {
-                          final navigator = Navigator.of(dialogContext);
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.destructiveBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: AppColors.destructive.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2),
+                          child: Icon(
+                            Icons.warning_rounded,
+                            color: AppColors.destructive,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'คุณต้องการลบผู้พักอาศัยออกจากห้องนี้ใช่หรือไม่? ห้องนี้จะกลับเป็นห้องว่างและไม่ผูกกับผู้เช่าคนเดิมอีกต่อไป',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: AppColors.destructive,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'รายละเอียดผู้พักอาศัยในห้อง',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.muted,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _TenantDetailRow(label: 'ห้อง', value: room.id),
+                        _TenantDetailRow(label: 'ชั้น', value: room.floor),
+                        _TenantDetailRow(
+                            label: 'ชื่อ', value: room.tenantName ?? '-'),
+                        _TenantDetailRow(
+                            label: 'เบอร์โทร', value: room.phoneNumber ?? '-'),
+                        _TenantDetailRow(
+                            label: 'อีเมล', value: room.tenantEmail ?? '-'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: _isUpdatingTenant
+                          ? null
+                          : () => Navigator.of(dialogContext).pop(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.border),
+                        backgroundColor: AppColors.muted,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      child: const Text(
+                        'ยกเลิก',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isUpdatingTenant
+                          ? null
+                          : () async {
+                              final navigator = Navigator.of(dialogContext);
 
-                          setDialogState(() {
-                            _isUpdatingTenant = true;
-                          });
-
-                          try {
-                            await _service.removeTenantFromRoom(
-                                roomDbId: room.dbId);
-
-                            if (!mounted) return;
-
-                            navigator.pop();
-                            await _loadRooms();
-
-                            if (!mounted) return;
-
-                            messenger.showSnackBar(
-                              SnackBar(
-                                  content: Text(
-                                      'ลบผู้พักอาศัยออกจากห้อง ${room.id} แล้ว')),
-                            );
-                          } catch (error) {
-                            if (!mounted) return;
-
-                            messenger.showSnackBar(
-                              SnackBar(
-                                  content: Text(
-                                      'ลบไม่สำเร็จ: ${_formatErrorMessage(error)}')),
-                            );
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                _isUpdatingTenant = false;
+                              safeSetDialogState(() {
+                                _isUpdatingTenant = true;
                               });
-                            }
-                          }
-                        },
-                ),
-              ],
+
+                              try {
+                                await _service.removeTenantFromRoom(
+                                    roomDbId: room.dbId);
+
+                                if (!mounted) return;
+
+                                navigator.pop();
+                                await _loadRooms();
+
+                                if (!mounted) return;
+
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                      content: Text(
+                                          'ลบผู้พักอาศัยออกจากห้อง ${room.id} แล้ว')),
+                                );
+                              } catch (error) {
+                                if (!mounted) return;
+
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                      content: Text(
+                                          'ลบไม่สำเร็จ: ${_formatErrorMessage(error)}')),
+                                );
+                              } finally {
+                                if (mounted) {
+                                  safeSetDialogState(() {
+                                    _isUpdatingTenant = false;
+                                  });
+                                }
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.destructive,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor:
+                            AppColors.destructive.withValues(alpha: 0.5),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      child: _isUpdatingTenant
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'ยืนยันลบผู้พักอาศัย',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../../controllers/auth_controller.dart';
 import '../../models/models.dart';
 import '../../services/supabase_service.dart';
 import '../../theme/app_theme.dart';
@@ -27,7 +28,9 @@ String _formatRoomErrorMessage(Object error) {
 }
 
 class RoomsScreen extends StatefulWidget {
-  const RoomsScreen({super.key});
+  final int dormitoryId;
+
+  const RoomsScreen({super.key, required this.dormitoryId});
 
   @override
   State<RoomsScreen> createState() => _RoomsScreenState();
@@ -64,7 +67,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
     });
 
     try {
-      final rooms = await _service.fetchRooms();
+      final rooms = await _service.fetchRooms(
+        dormitoryId: widget.dormitoryId,
+      );
       final tenants = await _service.fetchAvailableTenants();
       final floors = rooms.map((room) => room.floor).toSet();
 
@@ -977,142 +982,245 @@ class _RoomsScreenState extends State<RoomsScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          backgroundColor: AppColors.card,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'ลบผู้พักอาศัยออกจากห้อง',
-                        style: Theme.of(context).textTheme.titleMedium,
+        builder: (dialogContext, setDialogState) {
+          void safeSetDialogState(VoidCallback fn) {
+            if (!dialogContext.mounted) return;
+            setDialogState(fn);
+          }
+
+          return AlertDialog(
+            backgroundColor: AppColors.card,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'ลบผู้พักอาศัยออกจากห้อง',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _isUpdatingTenant
+                            ? null
+                            : () => Navigator.of(dialogContext).pop(),
+                        icon: const Icon(Icons.close, color: AppColors.primary),
+                        splashRadius: 20,
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                
+                  if (selectedRoom != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.destructiveBg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.destructive.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2),
+                            child: Icon(
+                              Icons.warning_rounded,
+                              color: AppColors.destructive,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'คุณต้องการลบผู้พักอาศัยออกจากห้องนี้ใช่หรือไม่? ห้องนี้จะกลับเป็นห้องว่างและไม่ผูกกับผู้เช่าคนเดิมอีกต่อไป',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: AppColors.destructive,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      icon: const Icon(Icons.close, color: AppColors.primary),
-                      splashRadius: 20,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<Room>(
+                    initialValue: selectedRoom,
+                    decoration: const InputDecoration(
+                      labelText: 'เลือกห้องที่มีผู้พักอาศัย',
+                    ),
+                    items: occupiedRooms
+                        .map((room) => DropdownMenuItem<Room>(
+                              value: room,
+                              child: Text(room.id),
+                            ))
+                        .toList(),
+                    onChanged: _isUpdatingTenant
+                        ? null
+                        : (value) {
+                            safeSetDialogState(() {
+                              selectedRoom = value;
+                            });
+                          },
+                  ),
+
+                    const SizedBox(height: 16),
+                    Text(
+                      'รายละเอียดผู้พักอาศัยในห้อง',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.muted,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _TenantDetailRow(
+                              label: 'ห้อง', value: selectedRoom!.id),
+                          _TenantDetailRow(
+                              label: 'ชั้น', value: selectedRoom!.floor),
+                          _TenantDetailRow(
+                              label: 'ชื่อ',
+                              value: selectedRoom!.tenantName ?? '-'),
+                          _TenantDetailRow(
+                              label: 'เบอร์โทร',
+                              value: selectedRoom!.phoneNumber ?? '-'),
+                          _TenantDetailRow(
+                              label: 'อีเมล',
+                              value: selectedRoom!.tenantEmail ?? '-'),
+                        ],
+                      ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<Room>(
-                  initialValue: selectedRoom,
-                  decoration: const InputDecoration(
-                      labelText: 'เลือกห้องที่มีผู้พักอาศัย'),
-                  items: occupiedRooms
-                      .map((room) => DropdownMenuItem<Room>(
-                            value: room,
-                            child: Text(room.id),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    setDialogState(() {
-                      selectedRoom = value;
-                    });
-                  },
-                ),
-                if (selectedRoom != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'รายละเอียดผู้พักอาศัยในห้อง',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
+                  const SizedBox(height: 24),
+                  SizedBox(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.muted,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
+                    child: OutlinedButton(
+                      onPressed: _isUpdatingTenant
+                          ? null
+                          : () => Navigator.of(dialogContext).pop(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.border),
+                        backgroundColor: AppColors.muted,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      child: const Text(
+                        'ยกเลิก',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _TenantDetailRow(
-                            label: 'ห้อง', value: selectedRoom!.id),
-                        _TenantDetailRow(
-                            label: 'ชั้น', value: selectedRoom!.floor),
-                        _TenantDetailRow(
-                            label: 'ชื่อ',
-                            value: selectedRoom!.tenantName ?? '-'),
-                        _TenantDetailRow(
-                            label: 'เบอร์โทร',
-                            value: selectedRoom!.phoneNumber ?? '-'),
-                        _TenantDetailRow(
-                            label: 'อีเมล',
-                            value: selectedRoom!.tenantEmail ?? '-'),
-                      ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isUpdatingTenant || selectedRoom == null
+                          ? null
+                          : () async {
+                              final navigator = Navigator.of(dialogContext);
+
+                              safeSetDialogState(() {
+                                _isUpdatingTenant = true;
+                              });
+
+                              try {
+                                await _service.removeTenantFromRoom(
+                                  roomDbId: selectedRoom!.dbId,
+                                );
+
+                                if (!mounted) return;
+
+                                navigator.pop();
+                                await _loadData();
+
+                                if (!mounted) return;
+
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'ลบผู้พักอาศัยออกจากห้อง ${selectedRoom!.id} แล้ว',
+                                    ),
+                                  ),
+                                );
+                              } catch (error) {
+                                if (!mounted) return;
+
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'ลบไม่สำเร็จ: ${_formatRoomErrorMessage(error)}',
+                                    ),
+                                  ),
+                                );
+                              } finally {
+                                if (mounted) {
+                                  safeSetDialogState(() {
+                                    _isUpdatingTenant = false;
+                                  });
+                                }
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.destructive,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor:
+                            AppColors.destructive.withValues(alpha: 0.5),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                      child: _isUpdatingTenant
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'ยืนยันลบผู้พักอาศัย',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
                     ),
                   ),
                 ],
-                const SizedBox(height: 24),
-                PrimaryButton(
-                  label:
-                      _isUpdatingTenant ? 'กำลังลบ...' : 'ยืนยันลบออกจากห้อง',
-                  fullWidth: true,
-                  onPressed: _isUpdatingTenant || selectedRoom == null
-                      ? null
-                      : () async {
-                          final navigator = Navigator.of(dialogContext);
-
-                          setDialogState(() {
-                            _isUpdatingTenant = true;
-                          });
-
-                          try {
-                            await _service.removeTenantFromRoom(
-                                roomDbId: selectedRoom!.dbId);
-
-                            if (!mounted) return;
-
-                            navigator.pop();
-                            await _loadData();
-
-                            if (!mounted) return;
-
-                            messenger.showSnackBar(
-                              SnackBar(
-                                  content: Text(
-                                      'ลบผู้พักอาศัยออกจากห้อง ${selectedRoom!.id} แล้ว')),
-                            );
-                          } catch (error) {
-                            if (!mounted) return;
-
-                            messenger.showSnackBar(
-                              SnackBar(
-                                  content: Text(
-                                      'ลบไม่สำเร็จ: ${_formatRoomErrorMessage(error)}')),
-                            );
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                _isUpdatingTenant = false;
-                              });
-                            }
-                          }
-                        },
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -1215,12 +1323,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
   void _showAddRoomDialog(BuildContext context) {
     final roomNumberController = TextEditingController();
     final basePriceController = TextEditingController();
+    final totalFloors = AuthScope.of(context).dormitoryTotalFloors;
+    final configuredFloorOptions = totalFloors == null || totalFloors <= 0
+        ? <String>{}
+        : List.generate(totalFloors, (index) => '${index + 1}').toSet();
     final floorOptions = {
       ..._floors.map((floor) =>
           floor.startsWith('ชั้น ') ? floor.replaceFirst('ชั้น ', '') : floor),
-      '1',
-      '2',
-      '3',
+      ...configuredFloorOptions,
     }..removeWhere((floor) => floor.isEmpty);
     final sortedFloorOptions = floorOptions.toList()..sort();
     String selectedFloor =
@@ -1232,6 +1342,11 @@ class _RoomsScreenState extends State<RoomsScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
+          void safeSetDialogState(VoidCallback fn) {
+            if (!dialogContext.mounted) return;
+            setDialogState(fn);
+          }
+
           final dialogWidth =
               min(420.0, MediaQuery.of(dialogContext).size.width - 48);
           return AlertDialog(
@@ -1304,7 +1419,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                         prefixIcon: Icon(Icons.door_front_door_outlined),
                       ),
                       onChanged: (_) =>
-                          setDialogState(() => errorMessage = null),
+                          safeSetDialogState(() => errorMessage = null),
                     ),
                     const SizedBox(height: 16),
                     // Floor Selection Dropdown
@@ -1324,7 +1439,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                           ? null
                           : (value) {
                               if (value != null) {
-                                setDialogState(() => selectedFloor = value);
+                                safeSetDialogState(() => selectedFloor = value);
                               }
                             },
                     ),
@@ -1341,7 +1456,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                         prefixIcon: Icon(Icons.attach_money),
                       ),
                       onChanged: (_) =>
-                          setDialogState(() => errorMessage = null),
+                          safeSetDialogState(() => errorMessage = null),
                     ),
                     const SizedBox(height: 24),
                     // Submit Button
@@ -1352,7 +1467,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       onPressed: isLoading
                           ? null
                           : () async {
-                              setDialogState(() => errorMessage = null);
+                              safeSetDialogState(() => errorMessage = null);
 
                               final roomNumber =
                                   roomNumberController.text.trim();
@@ -1361,7 +1476,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
                               // Validation
                               if (roomNumber.isEmpty || basePriceStr.isEmpty) {
-                                setDialogState(() {
+                                safeSetDialogState(() {
                                   errorMessage =
                                       'กรุณากรอกข้อมูลที่จำเป็นทั้งหมด';
                                 });
@@ -1370,17 +1485,18 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
                               final basePrice = double.tryParse(basePriceStr);
                               if (basePrice == null || basePrice < 0) {
-                                setDialogState(() {
+                                safeSetDialogState(() {
                                   errorMessage = 'ราคาไม่ถูกต้อง';
                                 });
                                 return;
                               }
 
-                              setDialogState(() => isLoading = true);
+                              safeSetDialogState(() => isLoading = true);
 
                               try {
                                 // Add room to database
                                 await _service.addRoom(
+                                  dormitoryId: widget.dormitoryId,
                                   roomNumber: roomNumber,
                                   floor: selectedFloor,
                                   basePrice: basePrice,
@@ -1402,19 +1518,17 @@ class _RoomsScreenState extends State<RoomsScreen> {
                               } catch (error) {
                                 final errorMsg = _formatRoomErrorMessage(error);
                                 if (errorMsg.contains('already exists')) {
-                                  setDialogState(() {
+                                  safeSetDialogState(() {
                                     errorMessage = 'เลขห้องนี้มีอยู่แล้ว';
                                   });
                                 } else {
-                                  setDialogState(() {
+                                  safeSetDialogState(() {
                                     errorMessage =
                                         'การเพิ่มห้องไม่สำเร็จ: $errorMsg';
                                   });
                                 }
                               } finally {
-                                if (mounted) {
-                                  setDialogState(() => isLoading = false);
-                                }
+                                safeSetDialogState(() => isLoading = false);
                               }
                             },
                     ),
