@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../controllers/auth_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 import 'dashboard_screen.dart';
@@ -9,36 +10,19 @@ import 'billing_screen.dart';
 import 'chat_screen.dart';
 import 'lease_screen.dart';
 
-class AdminShell extends StatefulWidget {
-  final String dormSlug;
+class AdminShell extends StatelessWidget {
+  const AdminShell({super.key});
 
-  const AdminShell({super.key, required this.dormSlug});
-
-  @override
-  State<AdminShell> createState() => _AdminShellState();
-}
-
-class _AdminShellState extends State<AdminShell> {
-  late final List<Widget> _pages;
-
-  @override
-  void initState() {
-    super.initState();
-    _buildPages();
-  }
-
-  @override
-  void didUpdateWidget(covariant AdminShell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.dormSlug != widget.dormSlug) {
-      _buildPages();
+  List<Widget> _buildPages(BuildContext context) {
+    final auth = AuthScope.of(context);
+    final dormitoryId = auth.dormitoryId;
+    if (dormitoryId == null) {
+      return [const SizedBox.shrink()];
     }
-  }
 
-  void _buildPages() {
-    _pages = [
-      DashboardScreen(dormSlug: widget.dormSlug),
-      const RoomsScreen(),
+    return [
+      DashboardScreen(dormitoryId: dormitoryId),
+      RoomsScreen(dormitoryId: dormitoryId),
       const MeterScreen(),
       const BillingScreen(),
       const ChatScreen(),
@@ -55,22 +39,22 @@ class _AdminShellState extends State<AdminShell> {
     return 0;
   }
 
-  void _onItemTapped(int index) {
+  void _onItemTapped(BuildContext context, int index) {
     switch (index) {
       case 0:
-        context.go('/${widget.dormSlug}/admin');
+        context.go('/landlord');
         break;
       case 1:
-        context.go('/${widget.dormSlug}/admin/rooms');
+        context.go('/landlord/rooms');
         break;
       case 2:
-        context.go('/${widget.dormSlug}/admin/meter');
+        context.go('/landlord/meter');
         break;
       case 3:
-        context.go('/${widget.dormSlug}/admin/billing');
+        context.go('/landlord/billing');
         break;
       case 4:
-        context.go('/${widget.dormSlug}/admin/chat');
+        context.go('/landlord/chat');
         break;
     }
   }
@@ -86,15 +70,28 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
+    final pages = _buildPages(context);
     final location = GoRouterState.of(context).uri.path;
     final activeIndex = _calculateSelectedIndex(location);
     final bottomNavIndex = activeIndex <= 4 ? activeIndex : 0;
+    final auth = AuthScope.of(context);
 
     return Scaffold(
-      appBar: MobileHeader(subtitle: _getHeaderSubtitle(location)),
+      appBar: MobileHeader(
+        subtitle: auth.dormitoryName ?? _getHeaderSubtitle(location),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: AppColors.primary),
+            onPressed: () async {
+              await auth.signOut();
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: IndexedStack(
         index: activeIndex,
-        children: _pages,
+        children: pages,
       ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -105,7 +102,7 @@ class _AdminShellState extends State<AdminShell> {
         ),
         child: BottomNavigationBar(
           currentIndex: bottomNavIndex,
-          onTap: _onItemTapped,
+          onTap: (index) => _onItemTapped(context, index),
           type: BottomNavigationBarType.fixed,
           backgroundColor: AppColors.card,
           selectedItemColor: AppColors.primary,
