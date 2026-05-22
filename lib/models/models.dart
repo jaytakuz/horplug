@@ -1,6 +1,33 @@
 enum RoomStatus { occupied, vacant, maintenance }
 enum InvoiceStatus { unpaid, pending, paid }
 enum MessageType { text, maintenanceRequest, parcelNotification, maintenanceUpdate }
+enum AppRole { landlord, tenant }
+
+class UserProfile {
+  final String id;
+  final AppRole role;
+  final String firstName;
+  final String lastName;
+  final String email;
+  final String? phone;
+  final int? dormitoryId;
+  final String? dormitoryName;
+  final int? dormitoryTotalFloors;
+
+  const UserProfile({
+    required this.id,
+    required this.role,
+    required this.firstName,
+    required this.lastName,
+    required this.email,
+    this.phone,
+    this.dormitoryId,
+    this.dormitoryName,
+    this.dormitoryTotalFloors,
+  });
+
+  String get fullName => '$firstName $lastName'.trim();
+}
 
 class Room {
   final int dbId;
