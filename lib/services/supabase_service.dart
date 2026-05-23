@@ -101,19 +101,45 @@ class SupabaseService {
     required int roomDbId,
     required String tenantId,
   }) async {
+    final room = await client
+        .from('rooms')
+        .select('id, dorm_id')
+        .eq('id', roomDbId)
+        .single();
+
     await client.from('rooms').update({
       'current_tenant_id': tenantId,
       'status': 'occupied',
     }).eq('id', roomDbId);
+
+    await client.from('tenant_profiles').update({
+      'dorm_id': room['dorm_id'] as int,
+      'room_id': room['id'] as int,
+    }).eq('id', tenantId);
   }
 
   Future<void> removeTenantFromRoom({
     required int roomDbId,
   }) async {
+    final room = await client
+        .from('rooms')
+        .select('current_tenant_id')
+        .eq('id', roomDbId)
+        .single();
+
+    final tenantId = room['current_tenant_id'] as String?;
+
     await client.from('rooms').update({
       'current_tenant_id': null,
       'status': 'vacant',
     }).eq('id', roomDbId);
+
+    if (tenantId != null) {
+      await client.from('tenant_profiles').update({
+        'dorm_id': null,
+        'room_id': null,
+      }).eq('id', tenantId);
+    }
   }
 
   /// อัปเดตสถานะห้องพัก

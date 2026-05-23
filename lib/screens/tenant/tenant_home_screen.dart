@@ -55,7 +55,16 @@ class TenantHomeScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 _InfoRow(label: 'ชื่อ', value: profile?.fullName ?? '-'),
                 _InfoRow(label: 'อีเมล', value: profile?.email ?? '-'),
-                _InfoRow(label: 'เบอร์โทร', value: profile?.phone ?? '-'),              ],
+                _InfoRow(label: 'เบอร์โทร', value: profile?.phone ?? '-'),
+                _InfoRow(
+                  label: 'Dormitory',
+                  value: profile?.dormitoryName ?? '-',
+                ),
+                _InfoRow(
+                  label: 'Room',
+                  value: profile?.roomNumber ?? '-',
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),

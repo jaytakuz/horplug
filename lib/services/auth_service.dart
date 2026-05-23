@@ -139,4 +139,51 @@ class AuthService {
 
     return null;
   }
+
+  Future<UserProfile> enrichTenantProfile(UserProfile profile) async {
+    if (profile.role != AppRole.tenant) return profile;
+
+    final tenantExtendedRow = await _client
+        .from('tenant_profiles')
+        // .select('tenant_code, dorm_id, room_id')
+           .select('dorm_id, room_id')
+        .eq('id', profile.id)
+        .maybeSingle();
+
+    if (tenantExtendedRow == null) {
+      return profile;
+    }
+
+    final dormitoryId = tenantExtendedRow['dorm_id'] as int?;
+    final roomId = tenantExtendedRow['room_id'] as int?;
+    // final tenantCode = tenantExtendedRow['tenant_code'] as String?;
+
+    String? dormitoryName;
+    if (dormitoryId != null) {
+      final dormitoryRow = await _client
+          .from('dormitories')
+          .select('name')
+          .eq('id', dormitoryId)
+          .maybeSingle();
+      dormitoryName = dormitoryRow?['name'] as String?;
+    }
+
+    String? roomNumber;
+    if (roomId != null) {
+      final roomRow = await _client
+          .from('rooms')
+          .select('room_number')
+          .eq('id', roomId)
+          .maybeSingle();
+      roomNumber = roomRow?['room_number'] as String?;
+    }
+
+    return profile.copyWith(
+      dormitoryId: dormitoryId,
+      dormitoryName: dormitoryName,
+      roomId: roomId,
+      roomNumber: roomNumber,
+      // tenantCode: tenantCode,
+    );
+  }
 }

@@ -51,6 +51,12 @@ class AuthController extends ChangeNotifier {
       _status = profile == null
           ? AuthStatus.unauthenticated
           : AuthStatus.authenticated;
+      notifyListeners();
+
+      if (profile?.role == AppRole.tenant) {
+        _loadTenantOptionalFields(profile!);
+      }
+      return;
     } catch (_) {
       _profile = null;
       _status = _authService.currentSession == null
@@ -59,6 +65,20 @@ class AuthController extends ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  Future<void> _loadTenantOptionalFields(UserProfile profile) async {
+    try {
+      final enrichedProfile = await _authService.enrichTenantProfile(profile);
+      if (_profile?.id != enrichedProfile.id || _profile?.role != AppRole.tenant) {
+        return;
+      }
+
+      _profile = enrichedProfile;
+      notifyListeners();
+    } catch (_) {
+      // Optional tenant fields should not affect authenticated state.
+    }
   }
 
   Future<void> signIn({

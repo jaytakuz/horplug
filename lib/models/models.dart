@@ -13,6 +13,9 @@ class UserProfile {
   final int? dormitoryId;
   final String? dormitoryName;
   final int? dormitoryTotalFloors;
+  final int? roomId;
+  final String? roomNumber;
+  final String? tenantCode;
 
   const UserProfile({
     required this.id,
@@ -24,9 +27,52 @@ class UserProfile {
     this.dormitoryId,
     this.dormitoryName,
     this.dormitoryTotalFloors,
+    this.roomId,
+    this.roomNumber,
+    this.tenantCode,
   });
 
   String get fullName => '$firstName $lastName'.trim();
+
+  UserProfile copyWith({
+    String? id,
+    AppRole? role,
+    String? firstName,
+    String? lastName,
+    String? email,
+    String? phone,
+    int? dormitoryId,
+    String? dormitoryName,
+    int? dormitoryTotalFloors,
+    int? roomId,
+    String? roomNumber,
+    String? tenantCode,
+    bool clearDormitoryId = false,
+    bool clearDormitoryName = false,
+    bool clearDormitoryTotalFloors = false,
+    bool clearRoomId = false,
+    bool clearRoomNumber = false,
+    bool clearTenantCode = false,
+  }) {
+    return UserProfile(
+      id: id ?? this.id,
+      role: role ?? this.role,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      dormitoryId:
+          clearDormitoryId ? null : (dormitoryId ?? this.dormitoryId),
+      dormitoryName:
+          clearDormitoryName ? null : (dormitoryName ?? this.dormitoryName),
+      dormitoryTotalFloors: clearDormitoryTotalFloors
+          ? null
+          : (dormitoryTotalFloors ?? this.dormitoryTotalFloors),
+      roomId: clearRoomId ? null : (roomId ?? this.roomId),
+      roomNumber: clearRoomNumber ? null : (roomNumber ?? this.roomNumber),
+      tenantCode: clearTenantCode ? null : (tenantCode ?? this.tenantCode),
+    );
+  }
 }
 
 class Room {
