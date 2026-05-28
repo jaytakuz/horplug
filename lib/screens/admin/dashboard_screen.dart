@@ -553,39 +553,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 ],
-                if (selectedTenant != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'รายละเอียด tenant ที่เลือก',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.muted,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _TenantDetailRow(
-                            label: 'ชื่อ', value: selectedTenant!.name),
-                        _TenantDetailRow(
-                            label: 'เบอร์โทร',
-                            value: selectedTenant!.phoneNumber),
-                        _TenantDetailRow(
-                            label: 'อีเมล',
-                            value: selectedTenant!.email ?? '-'),
-                      ],
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 24),
                 PrimaryButton(
                   label: _isUpdatingTenant ? 'กำลังบันทึก...' : 'บันทึก',

@@ -75,11 +75,19 @@ class SupabaseService {
 
     final tenantsData = await client
         .from('tenant_profiles')
-        .select('id, first_name, last_name, email, phone')
+        .select('id, first_name, last_name, email, phone, dorm_id, room_id')
         .order('first_name', ascending: true);
 
     return (tenantsData as List)
-        .where((row) => !assignedTenantIds.contains(row['id']))
+        .where((row) {
+      final tenantId = row['id'];
+      final dormitoryId = row['dorm_id'];
+      final roomId = row['room_id'];
+
+      return !assignedTenantIds.contains(tenantId) &&
+          dormitoryId == null &&
+          roomId == null;
+    })
         .map((row) {
       final firstName = row['first_name'] as String? ?? '';
       final lastName = row['last_name'] as String? ?? '';
