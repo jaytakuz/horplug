@@ -15,7 +15,6 @@ class UserProfile {
   final int? dormitoryTotalFloors;
   final int? roomId;
   final String? roomNumber;
-  final String? tenantCode;
 
   const UserProfile({
     required this.id,
@@ -29,7 +28,6 @@ class UserProfile {
     this.dormitoryTotalFloors,
     this.roomId,
     this.roomNumber,
-    this.tenantCode,
   });
 
   String get fullName => '$firstName $lastName'.trim();
@@ -46,13 +44,11 @@ class UserProfile {
     int? dormitoryTotalFloors,
     int? roomId,
     String? roomNumber,
-    String? tenantCode,
     bool clearDormitoryId = false,
     bool clearDormitoryName = false,
     bool clearDormitoryTotalFloors = false,
     bool clearRoomId = false,
     bool clearRoomNumber = false,
-    bool clearTenantCode = false,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -70,7 +66,6 @@ class UserProfile {
           : (dormitoryTotalFloors ?? this.dormitoryTotalFloors),
       roomId: clearRoomId ? null : (roomId ?? this.roomId),
       roomNumber: clearRoomNumber ? null : (roomNumber ?? this.roomNumber),
-      tenantCode: clearTenantCode ? null : (tenantCode ?? this.tenantCode),
     );
   }
 }

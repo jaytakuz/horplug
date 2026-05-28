@@ -145,8 +145,7 @@ class AuthService {
 
     final tenantExtendedRow = await _client
         .from('tenant_profiles')
-        // .select('tenant_code, dorm_id, room_id')
-           .select('dorm_id, room_id')
+        .select('dorm_id, room_id')
         .eq('id', profile.id)
         .maybeSingle();
 
@@ -156,7 +155,6 @@ class AuthService {
 
     final dormitoryId = tenantExtendedRow['dorm_id'] as int?;
     final roomId = tenantExtendedRow['room_id'] as int?;
-    // final tenantCode = tenantExtendedRow['tenant_code'] as String?;
 
     String? dormitoryName;
     if (dormitoryId != null) {
@@ -183,7 +181,6 @@ class AuthService {
       dormitoryName: dormitoryName,
       roomId: roomId,
       roomNumber: roomNumber,
-      // tenantCode: tenantCode,
     );
   }
 }

@@ -38,9 +38,11 @@ class RoomsScreen extends StatefulWidget {
 
 class _RoomsScreenState extends State<RoomsScreen> {
   final SupabaseService _service = SupabaseService();
+  final TextEditingController _searchController = TextEditingController();
   String selectedFilter = 'ทั้งหมด';
   String selectedFloor = 'ทั้งหมด';
   String selectedPaymentStatus = 'ทั้งหมด';
+  String searchQuery = '';
   final List<String> _paymentStatusFilters = [
     'ทั้งหมด',
     'ชำระแล้ว',
@@ -58,6 +60,12 @@ class _RoomsScreenState extends State<RoomsScreen> {
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -94,6 +102,20 @@ class _RoomsScreenState extends State<RoomsScreen> {
   /// ฟิลเตอร์ห้องตามเงื่อนไข
   List<Room> _getFilteredRooms() {
     return _rooms.where((room) {
+      final normalizedQuery = searchQuery.trim().toLowerCase();
+      if (normalizedQuery.isNotEmpty) {
+        final roomNumber = room.id.toLowerCase();
+        final tenantName = (room.tenantName ?? '').toLowerCase();
+        final tenantPhone = (room.phoneNumber ?? '').toLowerCase();
+        final tenantEmail = (room.tenantEmail ?? '').toLowerCase();
+        final matchesSearch = roomNumber.contains(normalizedQuery) ||
+            tenantName.contains(normalizedQuery) ||
+            tenantPhone.contains(normalizedQuery) ||
+            tenantEmail.contains(normalizedQuery);
+
+        if (!matchesSearch) return false;
+      }
+
       // ฟิลเตอร์ตามชั้น
       if (selectedFloor != 'ทั้งหมด' && room.floor != selectedFloor)
         return false;
@@ -221,7 +243,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
   /// สร้างส่วนสถิติห้องพัก
   Widget _buildRoomStatsSection(BuildContext context, Map<String, int> stats) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -326,7 +348,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
         }
 
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: PaperCard(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -376,35 +398,17 @@ class _RoomsScreenState extends State<RoomsScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: PaperCard(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 0),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'ตัวกรอง',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    activeFilterCount > 0
-                        ? 'เปิดใช้งาน $activeFilterCount ตัวกรอง'
-                        : 'เลือกตัวกรองเพื่อจำกัดผลลัพธ์',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: AppColors.mutedForeground),
-                  ),
-                ],
+              child: _buildSearchSection(context),
               ),
-            ),
-            const SizedBox(width: 12),
             TextButton.icon(
               onPressed: () => _showFilterSheet(context),
               icon: const Icon(Icons.filter_list),
-              label: const Text('แก้ไข'),
+              label: const Text('ตัวกรอง'),
             ),
           ],
         ),
@@ -563,6 +567,44 @@ class _RoomsScreenState extends State<RoomsScreen> {
       selectedPaymentStatus = 'ทั้งหมด';
     });
   }
+
+  Widget _buildSearchSection(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+      child: PaperCard(
+        padding: const EdgeInsets.all(0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                labelText: 'ค้นหาห้อง',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: searchQuery.trim().isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            searchQuery = '';
+                          });
+                        },
+                      )
+                    : null,
+              ),
+              onChanged: (value) {
+                setState(() {
+                  searchQuery = value;
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
 
   Widget _buildFilterGroup(
     BuildContext context, {
