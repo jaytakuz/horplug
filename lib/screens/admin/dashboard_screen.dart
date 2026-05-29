@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../controllers/auth_controller.dart';
 import '../../models/models.dart';
 import '../../services/supabase_service.dart';
 import '../../theme/app_theme.dart';
@@ -491,7 +492,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   controller: searchController,
                   style: const TextStyle(color: AppColors.primary),
                   decoration: const InputDecoration(
-                    labelText: 'เพิ่มผู้พักอาศัยด้วยชื่อ',
+                    labelText: 'ค้นหาผู้พักอาศัยด้วยชื่อ',
                     prefixIcon: Icon(Icons.search),
                   ),
                   onChanged: (value) {
@@ -555,7 +556,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
                 const SizedBox(height: 24),
                 PrimaryButton(
-                  label: _isUpdatingTenant ? 'กำลังบันทึก...' : 'บันทึก',
+                  label: _isUpdatingTenant ? 'กำลังส่งคำขอ...' : 'ส่งคำขอ',
                   fullWidth: true,
                   onPressed: _isUpdatingTenant || selectedTenant == null
                       ? null
@@ -567,7 +568,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           });
 
                           try {
-                            await _service.assignTenantToRoom(
+                            final landlordId = AuthScope.of(context).profile?.id;
+                            if (landlordId == null) {
+                              throw Exception('ไม่พบข้อมูลเจ้าของหอพัก');
+                            }
+
+                            await _service.createTenantJoinRequest(
+                              landlordId: landlordId,
+                              dormitoryId: widget.dormitoryId,
                               roomDbId: room.dbId,
                               tenantId: selectedTenant!.id,
                             );
@@ -582,7 +590,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             messenger.showSnackBar(
                               SnackBar(
                                   content: Text(
-                                      'เพิ่ม ${selectedTenant!.name} เข้าห้อง ${room.id} แล้ว')),
+                                      'ส่งคำขอถึง ${selectedTenant!.name} สำหรับห้อง ${room.id} แล้ว')),
                             );
                           } catch (error) {
                             if (!mounted) return;

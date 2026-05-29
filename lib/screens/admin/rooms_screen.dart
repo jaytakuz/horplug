@@ -389,12 +389,6 @@ class _RoomsScreenState extends State<RoomsScreen> {
   }
 
   Widget _buildCompactFilterSection(BuildContext context) {
-    final activeFilterCount = [
-      selectedFloor != 'ทั้งหมด',
-      selectedFilter != 'ทั้งหมด',
-      selectedPaymentStatus != 'ทั้งหมด',
-    ].where((active) => active).length;
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: PaperCard(
@@ -749,7 +743,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
               ListTile(
                 leading: const Icon(Icons.person_add_alt_1,
                     color: AppColors.primary),
-                title: const Text('เพิ่มผู้พักอาศัย'),
+                title: const Text('ส่งคำขอถึงผู้พักอาศัย'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _showAssignTenantDialog(context);
@@ -786,14 +780,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
     if (vacantRooms.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่มีห้องว่างสำหรับเพิ่มผู้พักอาศัย')),
+        const SnackBar(content: Text('ไม่มีห้องว่างสำหรับส่งคำขอ')),
       );
       return;
     }
 
     if (_availableTenants.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่พบผู้พักอาศัย')),
+        const SnackBar(content: Text('ไม่พบผู้พักอาศัยที')),
       );
       return;
     }
@@ -823,7 +817,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        'เพิ่มผู้พักอาศัยเข้ากับห้อง',
+                        'ส่งคำขอเข้าห้อง',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
@@ -858,7 +852,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   controller: searchController,
                   style: const TextStyle(color: AppColors.primary),
                   decoration: const InputDecoration(
-                    labelText: 'ค้นหา tenant profile ด้วยชื่อ',
+                    labelText: 'ค้นหาผู้พักอาศัยด้วยชื่อ',
                     prefixIcon: Icon(Icons.search),
                   ),
                   onChanged: (value) {
@@ -918,7 +912,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                 ],
                 const SizedBox(height: 24),
                 PrimaryButton(
-                  label: _isUpdatingTenant ? 'กำลังบันทึก...' : 'บันทึก',
+                  label: _isUpdatingTenant ? 'กำลังส่งคำขอ...' : 'ส่งคำขอ',
                   fullWidth: true,
                   onPressed: _isUpdatingTenant ||
                           selectedRoom == null ||
@@ -932,7 +926,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
                           });
 
                           try {
-                            await _service.assignTenantToRoom(
+                            final landlordId = AuthScope.of(context).profile?.id;
+                            if (landlordId == null) {
+                              throw Exception('ไม่พบข้อมูลเจ้าของหอพัก');
+                            }
+
+                            await _service.createTenantJoinRequest(
+                              landlordId: landlordId,
+                              dormitoryId: widget.dormitoryId,
                               roomDbId: selectedRoom!.dbId,
                               tenantId: selectedTenant!.id,
                             );
@@ -947,7 +948,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                             messenger.showSnackBar(
                               SnackBar(
                                   content: Text(
-                                      'เพิ่ม ${selectedTenant!.name} เข้าห้อง ${selectedRoom!.id} แล้ว')),
+                                      'ส่งคำขอถึง ${selectedTenant!.name} สำหรับห้อง ${selectedRoom!.id} แล้ว')),
                             );
                           } catch (error) {
                             if (!mounted) return;

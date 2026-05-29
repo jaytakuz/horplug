@@ -2,6 +2,7 @@ enum RoomStatus { occupied, vacant, maintenance }
 enum InvoiceStatus { unpaid, pending, paid }
 enum MessageType { text, maintenanceRequest, parcelNotification, maintenanceUpdate }
 enum AppRole { landlord, tenant }
+enum JoinRequestStatus { pending, accepted, rejected, cancelled }
 
 class UserProfile {
   final String id;
@@ -183,5 +184,31 @@ class ChatPreview {
     required this.lastMessage,
     required this.unreadCount,
     this.hasPendingMaintenance = false,
+  });
+}
+
+class TenantJoinRequest {
+  final int id;
+  final String tenantId;
+  final String landlordId;
+  final int dormitoryId;
+  final int? requestedRoomId;
+  final String dormitoryName;
+  final String landlordName;
+  final String? roomNumber;
+  final JoinRequestStatus status;
+  final DateTime createdAt;
+
+  const TenantJoinRequest({
+    required this.id,
+    required this.tenantId,
+    required this.landlordId,
+    required this.dormitoryId,
+    this.requestedRoomId,
+    required this.dormitoryName,
+    required this.landlordName,
+    this.roomNumber,
+    required this.status,
+    required this.createdAt,
   });
 }

@@ -150,6 +150,53 @@ class SupabaseService {
     }
   }
 
+  Future<void> createTenantJoinRequest({
+    required String landlordId,
+    required int dormitoryId,
+    required int roomDbId,
+    required String tenantId,
+  }) async {
+    await client.rpc('create_tenant_join_request', params: {
+      'p_landlord_id': landlordId,
+      'p_dorm_id': dormitoryId,
+      'p_room_id': roomDbId,
+      'p_tenant_id': tenantId,
+    });
+  }
+
+  Future<List<TenantJoinRequest>> fetchPendingJoinRequestsForTenant() async {
+    final requestRows = await client.rpc('fetch_pending_tenant_join_requests');
+
+    return (requestRows as List)
+        .cast<Map<String, dynamic>>()
+        .map((row) => TenantJoinRequest(
+              id: row['id'] as int,
+              tenantId: row['tenant_id'] as String,
+              landlordId: row['landlord_id'] as String,
+              dormitoryId: row['dorm_id'] as int,
+              requestedRoomId: row['requested_room_id'] as int?,
+              dormitoryName:
+                  row['dormitory_name'] as String? ?? 'Unknown dormitory',
+              landlordName:
+                  row['landlord_name'] as String? ?? 'Unknown landlord',
+              roomNumber: row['room_number'] as String?,
+              status: _mapJoinRequestStatus(row['status'] as String?),
+              createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ??
+                  DateTime.now(),
+            ))
+        .toList();
+  }
+
+  Future<void> respondToTenantJoinRequest({
+    required int requestId,
+    required bool accept,
+  }) async {
+    await client.rpc('respond_to_tenant_join_request', params: {
+      'p_request_id': requestId,
+      'p_accept': accept,
+    });
+  }
+
   /// อัปเดตสถานะห้องพัก
   Future<void> updateRoomStatus({
     required int roomDbId,
@@ -268,6 +315,20 @@ class SupabaseService {
         return 'vacant';
       case RoomStatus.maintenance:
         return 'maintenance';
+    }
+  }
+
+  JoinRequestStatus _mapJoinRequestStatus(String? value) {
+    switch (value) {
+      case 'accepted':
+        return JoinRequestStatus.accepted;
+      case 'rejected':
+        return JoinRequestStatus.rejected;
+      case 'cancelled':
+        return JoinRequestStatus.cancelled;
+      case 'pending':
+      default:
+        return JoinRequestStatus.pending;
     }
   }
 }
