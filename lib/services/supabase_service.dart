@@ -4,13 +4,13 @@ import '../models/models.dart';
 class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
 
+  /// ดึงข้อมูลห้องพักทั้งหมด
   Future<List<Room>> fetchRooms({int? dormitoryId}) async {
-    final query = client
-        .from('rooms')
-        .select('id, room_number, floor, base_price, status, current_tenant_id');
+    var query = client.from('rooms').select(
+        'id, room_number, floor, base_price, status, current_tenant_id');
 
-    if (dormitoryId != null) {
-      query.eq('dorm_id', dormitoryId);
+    if (dormitoryId != null && dormitoryId != 0) {
+      query = query.eq('dorm_id', dormitoryId);
     }
 
     final data = await query
@@ -18,9 +18,13 @@ class SupabaseService {
         .order('room_number', ascending: true);
 
     final roomsData = (data as List).cast<Map<String, dynamic>>();
+    
+    if (roomsData.isEmpty) return [];
+
     final tenantIds = roomsData
         .map((row) => row['current_tenant_id'] as String?)
-        .whereType<String>()
+        .where((id) => id != null && id.isNotEmpty)
+        .cast<String>()
         .toSet()
         .toList();
 
@@ -43,8 +47,7 @@ class SupabaseService {
       final firstName = tenant?['first_name'] as String?;
       final lastName = tenant?['last_name'] as String?;
       final fullName = [firstName, lastName]
-          .whereType<String>()
-          .where((value) => value.trim().isNotEmpty)
+          .where((value) => value != null && value.trim().isNotEmpty)
           .join(' ')
           .trim();
 
@@ -62,273 +65,239 @@ class SupabaseService {
     }).toList();
   }
 
-  Future<List<Tenant>> fetchAvailableTenants() async {
-    final roomsData = await client
-        .from('rooms')
-        .select('current_tenant_id')
-        .not('current_tenant_id', 'is', null);
+  // --- ระบบไฟฟ้า (ตาราง electricity_record) ---
 
-    final assignedTenantIds = (roomsData as List)
-        .map((row) => row['current_tenant_id'] as String?)
-        .whereType<String>()
-        .toSet();
+  Future<List<ElectricityRecord>> fetchElectricityRecords({
+    int? dormitoryId,
+    required int month,
+    required int year,
+  }) async {
+    final rooms = await fetchRooms(dormitoryId: dormitoryId);
+    if (rooms.isEmpty) return [];
 
-    final tenantsData = await client
-        .from('tenant_profiles')
-        .select('id, first_name, last_name, email, phone, dorm_id, room_id')
-        .order('first_name', ascending: true);
+    final roomIds = rooms.map((room) => room.dbId).toList();
 
-    return (tenantsData as List)
-        .where((row) {
-      final tenantId = row['id'];
-      final dormitoryId = row['dorm_id'];
-      final roomId = row['room_id'];
+    // ดึงอัตราค่าไฟพื้นฐาน
+    Map<String, dynamic>? dormSettings;
+    if (dormitoryId != null && dormitoryId != 0) {
+      dormSettings = await client.from('dormitories').select('base_electricity_rate').eq('id', dormitoryId).maybeSingle();
+    }
+    final defaultRate = _parseDouble(dormSettings?['base_electricity_rate'], fallback: 8.0);
 
-      return !assignedTenantIds.contains(tenantId) &&
-          dormitoryId == null &&
-          roomId == null;
-    })
-        .map((row) {
-      final firstName = row['first_name'] as String? ?? '';
-      final lastName = row['last_name'] as String? ?? '';
-      final fullName = [firstName, lastName]
-          .where((value) => value.trim().isNotEmpty)
-          .join(' ')
-          .trim();
+    // ดึงประวัติมิเตอร์ไฟทั้งหมด
+    final allHistory = await client
+        .from('electricity_record')
+        .select()
+        .inFilter('room_id', roomIds)
+        .order('billing_year', ascending: false)
+        .order('billing_month', ascending: false);
+    
+    final historyData = (allHistory as List).cast<Map<String, dynamic>>();
 
-      return Tenant(
-        id: row['id'] as String,
-        name: fullName.isEmpty ? 'Unknown tenant' : fullName,
-        email: row['email'] as String?,
-        phoneNumber: row['phone'] as String? ?? '-',
+    final results = <ElectricityRecord>[];
+    for (final room in rooms) {
+      final currentPeriod = historyData.firstWhere(
+        (r) => r['room_id'] == room.dbId && r['billing_month'] == month && r['billing_year'] == year,
+        orElse: () => {},
+      );
+
+      // ค้นหาเลขล่าสุดก่อนงวดนี้ (เพื่อเป็น Previous Value)
+      final lastKnown = historyData.firstWhere(
+        (r) {
+          final rYear = r['billing_year'] as int;
+          final rMonth = r['billing_month'] as int;
+          return r['room_id'] == room.dbId && ((rYear < year) || (rYear == year && rMonth < month));
+        },
+        orElse: () => historyData.firstWhere((r) => r['room_id'] == room.dbId, orElse: () => {}),
+      );
+
+      double prevVal = 0.0;
+      if (currentPeriod.isNotEmpty) {
+        prevVal = _parseDouble(currentPeriod['previous_reading']);
+      } else if (lastKnown.isNotEmpty) {
+        prevVal = _parseDouble(lastKnown['current_reading']);
+      }
+
+      results.add(ElectricityRecord(
+        id: currentPeriod['id']?.toString(),
+        roomDbId: room.dbId,
+        roomNumber: room.id,
+        tenantName: room.tenantName ?? (room.status == RoomStatus.vacant ? 'ห้องว่าง' : '-'),
+        billingMonth: month,
+        billingYear: year,
+        previousReading: prevVal,
+        currentReading: currentPeriod.isNotEmpty ? _parseDouble(currentPeriod['current_reading']) : null,
+        unitRate: currentPeriod.isNotEmpty ? _parseDouble(currentPeriod['unit_rate']) : defaultRate,
+      ));
+    }
+    return results;
+  }
+
+  Future<void> saveElectricityRecords(List<ElectricityRecord> records) async {
+    final rows = records.where((r) => r.currentReading != null).map((r) => r.toJson()).toList();
+    if (rows.isEmpty) return;
+    await client.from('electricity_record').upsert(rows, onConflict: 'room_id,billing_month,billing_year');
+  }
+
+  // --- ระบบน้ำ (ตาราง water_meter) ---
+
+  Future<List<WaterRecord>> fetchWaterRecords({
+    int? dormitoryId,
+    required int month,
+    required int year,
+  }) async {
+    final rooms = await fetchRooms(dormitoryId: dormitoryId);
+    if (rooms.isEmpty) return [];
+
+    final roomIds = rooms.map((room) => room.dbId).toList();
+
+    Map<String, dynamic>? dormSettings;
+    if (dormitoryId != null && dormitoryId != 0) {
+      dormSettings = await client.from('dormitories').select('base_water_rate').eq('id', dormitoryId).maybeSingle();
+    }
+    final defaultAmount = _parseDouble(dormSettings?['base_water_rate'], fallback: 100.0);
+
+    final data = await client
+        .from('water_meter')
+        .select()
+        .inFilter('room_id', roomIds)
+        .eq('billing_month', month)
+        .eq('billing_year', year);
+    
+    final recordsData = (data as List).cast<Map<String, dynamic>>();
+
+    return rooms.map((room) {
+      final existing = recordsData.firstWhere((r) => r['room_id'] == room.dbId, orElse: () => {});
+      return WaterRecord(
+        id: existing['id']?.toString(),
+        roomDbId: room.dbId,
+        roomNumber: room.id,
+        tenantName: room.tenantName ?? (room.status == RoomStatus.vacant ? 'ห้องว่าง' : '-'),
+        billingMonth: month,
+        billingYear: year,
+        amount: existing.isNotEmpty ? _parseDouble(existing['amount']) : defaultAmount,
       );
     }).toList();
   }
 
-  Future<void> assignTenantToRoom({
-    required int roomDbId,
-    required String tenantId,
-  }) async {
-    final room = await client
-        .from('rooms')
-        .select('id, dorm_id')
-        .eq('id', roomDbId)
-        .single();
-
-    await client.from('rooms').update({
-      'current_tenant_id': tenantId,
-      'status': 'occupied',
-    }).eq('id', roomDbId);
-
-    await client.from('tenant_profiles').update({
-      'dorm_id': room['dorm_id'] as int,
-      'room_id': room['id'] as int,
-    }).eq('id', tenantId);
+  Future<void> saveWaterRecords(List<WaterRecord> records) async {
+    final rows = records.map((r) => r.toJson()).toList();
+    if (rows.isEmpty) return;
+    await client.from('water_meter').upsert(rows, onConflict: 'room_id,billing_month,billing_year');
   }
 
-  Future<void> removeTenantFromRoom({
-    required int roomDbId,
+  // --- ระบบ Billing ---
+
+  Future<List<Invoice>> fetchInvoices({
+    int? dormitoryId,
+    required int month,
+    required int year,
   }) async {
-    final room = await client
-        .from('rooms')
-        .select('current_tenant_id')
-        .eq('id', roomDbId)
-        .single();
+    final rooms = await fetchRooms(dormitoryId: dormitoryId);
+    final roomIds = rooms.map((room) => room.dbId).toList();
+    if (roomIds.isEmpty) return [];
 
-    final tenantId = room['current_tenant_id'] as String?;
+    final elecs = await client.from('electricity_record').select().inFilter('room_id', roomIds).eq('billing_month', month).eq('billing_year', year);
+    final waters = await client.from('water_meter').select().inFilter('room_id', roomIds).eq('billing_month', month).eq('billing_year', year);
 
-    await client.from('rooms').update({
-      'current_tenant_id': null,
-      'status': 'vacant',
-    }).eq('id', roomDbId);
+    final elecData = (elecs as List).cast<Map<String, dynamic>>();
+    final waterData = (waters as List).cast<Map<String, dynamic>>();
 
-    if (tenantId != null) {
-      await client.from('tenant_profiles').update({
-        'dorm_id': null,
-        'room_id': null,
-      }).eq('id', tenantId);
+    final invoices = <Invoice>[];
+    for (final room in rooms) {
+      if (room.status != RoomStatus.occupied) continue;
+
+      final e = elecData.firstWhere((r) => r['room_id'] == room.dbId, orElse: () => {});
+      final w = waterData.firstWhere((r) => r['room_id'] == room.dbId, orElse: () => {});
+
+      if (e.isEmpty && w.isEmpty) continue;
+
+      final elecUnits = e.isNotEmpty ? (_parseDouble(e['current_reading']) - _parseDouble(e['previous_reading'])) : 0.0;
+      final elecCost = e.isNotEmpty ? _parseDouble(e['amount']) : 0.0;
+      final waterCost = w.isNotEmpty ? _parseDouble(w['amount']) : 0.0;
+
+      invoices.add(Invoice(
+        id: 'INV-${room.dbId}-$month-$year',
+        roomNumber: room.id,
+        tenantName: room.tenantName ?? '-',
+        waterUnits: w.isNotEmpty ? 1.0 : 0.0,
+        electricityUnits: elecUnits,
+        roomPrice: room.price,
+        waterCost: waterCost,
+        electricityCost: elecCost,
+        status: InvoiceStatus.unpaid,
+        date: DateTime(year, month, 1),
+      ));
     }
+    return invoices;
   }
 
-  Future<void> createTenantJoinRequest({
-    required String landlordId,
-    required int dormitoryId,
-    required int roomDbId,
-    required String tenantId,
-  }) async {
-    await client.rpc('create_tenant_join_request', params: {
-      'p_landlord_id': landlordId,
-      'p_dorm_id': dormitoryId,
-      'p_room_id': roomDbId,
-      'p_tenant_id': tenantId,
-    });
-  }
+  // --- Helpers & Others ---
 
-  Future<List<TenantJoinRequest>> fetchPendingJoinRequestsForTenant() async {
-    final requestRows = await client.rpc('fetch_pending_tenant_join_requests');
-
-    return (requestRows as List)
-        .cast<Map<String, dynamic>>()
-        .map((row) => TenantJoinRequest(
-              id: row['id'] as int,
-              tenantId: row['tenant_id'] as String,
-              landlordId: row['landlord_id'] as String,
-              dormitoryId: row['dorm_id'] as int,
-              requestedRoomId: row['requested_room_id'] as int?,
-              dormitoryName:
-                  row['dormitory_name'] as String? ?? 'Unknown dormitory',
-              landlordName:
-                  row['landlord_name'] as String? ?? 'Unknown landlord',
-              roomNumber: row['room_number'] as String?,
-              status: _mapJoinRequestStatus(row['status'] as String?),
-              createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ??
-                  DateTime.now(),
-            ))
-        .toList();
-  }
-
-  Future<void> respondToTenantJoinRequest({
-    required int requestId,
-    required bool accept,
-  }) async {
-    await client.rpc('respond_to_tenant_join_request', params: {
-      'p_request_id': requestId,
-      'p_accept': accept,
-    });
-  }
-
-  /// อัปเดตสถานะห้องพัก
-  Future<void> updateRoomStatus({
-    required int roomDbId,
-    required RoomStatus newStatus,
-  }) async {
-    final statusString = _mapRoomStatusToString(newStatus);
-
-    await client.from('rooms').update({
-      'status': statusString,
-    }).eq('id', roomDbId);
-  }
-
-  /// อัปเดตราคาห้องพัก
-  Future<void> updateRoomPrice({
-    required int roomDbId,
-    required double newPrice,
-  }) async {
-    await client.from('rooms').update({
-      'base_price': newPrice,
-    }).eq('id', roomDbId);
-  }
-
-  /// เพิ่มห้องพักใหม่
-  Future<void> addRoom({
-    required int dormitoryId,
-    required String roomNumber,
-    required String floor,
-    required double basePrice,
-  }) async {
-    // ตรวจสอบว่าเลขห้องไม่ซ้ำกัน
-    final existingRoom = await client
-        .from('rooms')
-        .select('id')
-        .eq('room_number', roomNumber)
-        .eq('dorm_id', dormitoryId)
-        .maybeSingle();
-
-    if (existingRoom != null) {
-      throw Exception('หมายเลขห้องนี้มีอยู่ในระบบแล้ว');
-    }
-
-    // เพิ่มห้องพักใหม่ด้วยสถานะว่าง
-    await client.from('rooms').insert({
-      'dorm_id': dormitoryId,
-      'room_number': roomNumber,
-      'floor': floor,
-      'base_price': basePrice,
-      'status': 'vacant',
-      'current_tenant_id': null,
-    });
-  }
-
-  /// ลบห้องพัก
-  Future<void> deleteRoom({required int roomDbId}) async {
-    // ดึงข้อมูลห้องเพื่อตรวจสอบสถานะ
-    final room = await client
-        .from('rooms')
-        .select('status, current_tenant_id')
-        .eq('id', roomDbId)
-        .single();
-
-    final status = room['status'] as String?;
-    final currentTenantId = room['current_tenant_id'] as String?;
-
-    // ตรวจสอบว่าห้องไม่มีผู้พักอาศัยและไม่อยู่ในสถานะอื่น
-    if (status != 'vacant' || currentTenantId != null) {
-      throw Exception(
-          'ไม่สามารถลบห้องได้: ห้องนี้กำลังถูกเช่าโดยผู้เช่าที่ยังใช้งานอยู่');
-    }
-
-    // TODO: เปลี่ยนให้เป็น soft delete โดยอัปเดตสถานะเป็น 'inactive' แทนการลบข้อมูลจริง
-    // NOTE: ยังไม่ตรวจสอบ pending invoices เนื่องจากยังไม่เชื่อมโยง billing data ในโมดูลนี้
-    await client.from('rooms').delete().eq('id', roomDbId);
-  }
-
-  /// อัปเดตเลขห้อง
-  Future<void> updateRoomNumber({
-    required int roomDbId,
-    required String newRoomNumber,
-  }) async {
-    // ตรวจสอบว่าเลขห้องใหม่ไม่ซ้ำกัน
-    final existingRoom = await client
-        .from('rooms')
-        .select('id')
-        .eq('room_number', newRoomNumber)
-        .neq('id', roomDbId)
-        .maybeSingle();
-
-    if (existingRoom != null) {
-      throw Exception('หมายเลขห้องนี้ถูกใช้งานอยู่แล้ว');
-    }
-
-    await client.from('rooms').update({
-      'room_number': newRoomNumber,
-    }).eq('id', roomDbId);
+  double _parseDouble(dynamic value, {double fallback = 0}) {
+    if (value == null) return fallback;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? fallback;
+    return fallback;
   }
 
   RoomStatus _mapRoomStatus(String? value) {
     switch (value) {
-      case 'occupied':
-        return RoomStatus.occupied;
-      case 'maintenance':
-        return RoomStatus.maintenance;
-      case 'vacant':
-      default:
-        return RoomStatus.vacant;
+      case 'occupied': return RoomStatus.occupied;
+      case 'maintenance': return RoomStatus.maintenance;
+      default: return RoomStatus.vacant;
     }
   }
 
-  /// แปลง RoomStatus enum เป็น string สำหรับ database
-  String _mapRoomStatusToString(RoomStatus status) {
-    switch (status) {
-      case RoomStatus.occupied:
-        return 'occupied';
-      case RoomStatus.vacant:
-        return 'vacant';
-      case RoomStatus.maintenance:
-        return 'maintenance';
+  Future<void> updateRoomStatus({required int roomDbId, required RoomStatus newStatus}) async {
+    await client.from('rooms').update({'status': newStatus.name}).eq('id', roomDbId);
+  }
+
+  Future<void> updateRoomPrice({required int roomDbId, required double newPrice}) async {
+    await client.from('rooms').update({'base_price': newPrice}).eq('id', roomDbId);
+  }
+
+  Future<void> addRoom({required int dormitoryId, required String roomNumber, required String floor, required double basePrice}) async {
+    await client.from('rooms').insert({'dorm_id': dormitoryId, 'room_number': roomNumber, 'floor': floor, 'base_price': basePrice, 'status': 'vacant'});
+  }
+
+  Future<void> deleteRoom({required int roomDbId}) async {
+    await client.from('rooms').delete().eq('id', roomDbId);
+  }
+
+  Future<void> updateRoomNumber({required int roomDbId, required String newRoomNumber}) async {
+    await client.from('rooms').update({'room_number': newRoomNumber}).eq('id', roomDbId);
+  }
+
+  Future<List<Tenant>> fetchAvailableTenants() async {
+    final tenantsData = await client.from('tenant_profiles').select('id, first_name, last_name, email, phone').filter('room_id', 'is', null);
+    return (tenantsData as List).map((row) => Tenant(id: row['id'] as String, name: '${row['first_name']} ${row['last_name']}', email: row['email'] as String?, phoneNumber: row['phone'] as String? ?? '-',)).toList();
+  }
+
+  Future<void> assignTenantToRoom({required int roomDbId, required String tenantId}) async {
+    final room = await client.from('rooms').select('dorm_id').eq('id', roomDbId).single();
+    await client.from('rooms').update({'current_tenant_id': tenantId, 'status': 'occupied'}).eq('id', roomDbId);
+    await client.from('tenant_profiles').update({'dorm_id': room['dorm_id'], 'room_id': roomDbId}).eq('id', tenantId);
+  }
+
+  Future<void> removeTenantFromRoom({required int roomDbId}) async {
+    final room = await client.from('rooms').select('current_tenant_id').eq('id', roomDbId).single();
+    await client.from('rooms').update({'current_tenant_id': null, 'status': 'vacant'}).eq('id', roomDbId);
+    if (room['current_tenant_id'] != null) {
+      await client.from('tenant_profiles').update({'dorm_id': null, 'room_id': null}).eq('id', room['current_tenant_id']);
     }
   }
 
-  JoinRequestStatus _mapJoinRequestStatus(String? value) {
-    switch (value) {
-      case 'accepted':
-        return JoinRequestStatus.accepted;
-      case 'rejected':
-        return JoinRequestStatus.rejected;
-      case 'cancelled':
-        return JoinRequestStatus.cancelled;
-      case 'pending':
-      default:
-        return JoinRequestStatus.pending;
-    }
+  Future<void> createTenantJoinRequest({required String landlordId, required int dormitoryId, required int roomDbId, required String tenantId}) async {
+    await client.rpc('create_tenant_join_request', params: {'p_landlord_id': landlordId, 'p_dorm_id': dormitoryId, 'p_room_id': roomDbId, 'p_tenant_id': tenantId});
+  }
+
+  Future<List<TenantJoinRequest>> fetchPendingJoinRequestsForTenant() async {
+    final requestRows = await client.rpc('fetch_pending_tenant_join_requests');
+    return (requestRows as List).cast<Map<String, dynamic>>().map((row) => TenantJoinRequest(id: row['id'] as int, tenantId: row['tenant_id'] as String, landlordId: row['landlord_id'] as String, dormitoryId: row['dorm_id'] as int, requestedRoomId: row['requested_room_id'] as int?, dormitoryName: row['dormitory_name'] as String? ?? 'Unknown dormitory', landlordName: row['landlord_name'] as String? ?? 'Unknown landlord', roomNumber: row['room_number'] as String?, status: JoinRequestStatus.pending, createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ?? DateTime.now(),)).toList();
+  }
+
+  Future<void> respondToTenantJoinRequest({required int requestId, required bool accept}) async {
+    await client.rpc('respond_to_tenant_join_request', params: {'p_request_id': requestId, 'p_accept': accept});
   }
 }

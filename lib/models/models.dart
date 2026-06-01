@@ -1,7 +1,16 @@
 enum RoomStatus { occupied, vacant, maintenance }
+
 enum InvoiceStatus { unpaid, pending, paid }
-enum MessageType { text, maintenanceRequest, parcelNotification, maintenanceUpdate }
+
+enum MessageType {
+  text,
+  maintenanceRequest,
+  parcelNotification,
+  maintenanceUpdate
+}
+
 enum AppRole { landlord, tenant }
+
 enum JoinRequestStatus { pending, accepted, rejected, cancelled }
 
 class UserProfile {
@@ -58,8 +67,7 @@ class UserProfile {
       lastName: lastName ?? this.lastName,
       email: email ?? this.email,
       phone: phone ?? this.phone,
-      dormitoryId:
-          clearDormitoryId ? null : (dormitoryId ?? this.dormitoryId),
+      dormitoryId: clearDormitoryId ? null : (dormitoryId ?? this.dormitoryId),
       dormitoryName:
           clearDormitoryName ? null : (dormitoryName ?? this.dormitoryName),
       dormitoryTotalFloors: clearDormitoryTotalFloors
@@ -118,6 +126,8 @@ class Invoice {
   final double waterUnits;
   final double electricityUnits;
   final double roomPrice;
+  final double waterCost;
+  final double electricityCost;
   final InvoiceStatus status;
   final DateTime date;
   final bool hasSlip;
@@ -129,28 +139,94 @@ class Invoice {
     required this.waterUnits,
     required this.electricityUnits,
     required this.roomPrice,
+    required this.waterCost,
+    required this.electricityCost,
     required this.status,
     required this.date,
     this.hasSlip = false,
   });
 
-  double get waterCost => waterUnits * 18;
-  double get electricityCost => electricityUnits * 8;
   double get total => roomPrice + waterCost + electricityCost;
 }
 
-class MeterReading {
-  final String roomNumber;
-  final String tenantName;
-  final double previousValue;
-  double? currentValue;
+enum UtilityType { electricity, water }
 
-  MeterReading({
+class ElectricityRecord {
+  final String? id;
+  final int roomDbId;
+  final String roomNumber;
+  final String? tenantName;
+  final int billingMonth;
+  final int billingYear;
+  final double previousReading;
+  double? currentReading;
+  final double unitRate;
+  
+   ElectricityRecord({
+    this.id,
+    required this.roomDbId,
     required this.roomNumber,
-    required this.tenantName,
-    required this.previousValue,
-    this.currentValue,
+    this.tenantName,
+    required this.billingMonth,
+    required this.billingYear,
+    required this.previousReading,
+    this.currentReading,
+    required this.unitRate,
   });
+
+  double get unitsUsed => (currentReading ?? previousReading) - previousReading;
+  double get amount => unitsUsed * unitRate;
+
+  Map<String, dynamic> toJson() {
+    final data = {
+      'room_id': roomDbId,
+      'billing_month': billingMonth,
+      'billing_year': billingYear,
+      'previous_reading': previousReading,
+      'current_reading': currentReading,
+      'unit_rate': unitRate,
+      'amount': amount,
+    };
+    if (id != null) {
+      final parsedId = int.tryParse(id!);
+      if (parsedId != null) data['id'] = parsedId;
+    }
+    return data;
+  }
+}
+
+class WaterRecord {
+  final String? id;
+  final int roomDbId;
+  final String roomNumber;
+  final String? tenantName;
+  final int billingMonth;
+  final int billingYear;
+  double amount;
+
+  WaterRecord({
+    this.id,
+    required this.roomDbId,
+    required this.roomNumber,
+    this.tenantName,
+    required this.billingMonth,
+    required this.billingYear,
+    required this.amount,
+  });
+
+  Map<String, dynamic> toJson() {
+    final data = {
+      'room_id': roomDbId,
+      'billing_month': billingMonth,
+      'billing_year': billingYear,
+      'amount': amount,
+    };
+    if (id != null) {
+      final parsedId = int.tryParse(id!);
+      if (parsedId != null) data['id'] = parsedId;
+    }
+    return data;
+  }
 }
 
 class ChatMessage {

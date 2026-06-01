@@ -13,18 +13,16 @@ import 'lease_screen.dart';
 class AdminShell extends StatelessWidget {
   const AdminShell({super.key});
 
-  List<Widget> _buildPages(BuildContext context) {
-    final auth = AuthScope.of(context);
-    final dormitoryId = auth.dormitoryId;
-    if (dormitoryId == null) {
-      return [const SizedBox.shrink()];
-    }
-
+  List<Widget> _buildPages(BuildContext context, int? dormitoryId) {
+    // Return all pages always with the dormitoryId (even if it's 0)
+    // This ensures IndexedStack always has consistent indices
+    final id = dormitoryId ?? 0;
+    
     return [
-      DashboardScreen(dormitoryId: dormitoryId),
-      RoomsScreen(dormitoryId: dormitoryId),
-      const MeterScreen(),
-      const BillingScreen(),
+      DashboardScreen(dormitoryId: id),
+      RoomsScreen(dormitoryId: id),
+      MeterScreen(dormitoryId: id),
+      BillingScreen(dormitoryId: id),
       const ChatScreen(),
       const LeaseScreen(),
     ];
@@ -70,14 +68,12 @@ class AdminShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pages = _buildPages(context);
-    final location = GoRouterState.of(context).uri.path;
     final auth = AuthScope.of(context);
-    final hasDormitoryContext = auth.dormitoryId != null;
+    final dormitoryId = auth.dormitoryId;
+    final pages = _buildPages(context, dormitoryId);
+    final location = GoRouterState.of(context).uri.path;
     final desiredIndex = _calculateSelectedIndex(location);
-    final activeIndex = pages.isEmpty
-        ? 0
-        : desiredIndex.clamp(0, pages.length - 1);
+    final activeIndex = desiredIndex.clamp(0, pages.length - 1);
     final bottomNavIndex = activeIndex <= 4 ? activeIndex : 0;
 
     return Scaffold(
@@ -93,11 +89,13 @@ class AdminShell extends StatelessWidget {
           const SizedBox(width: 8),
         ],
       ),
-      body: IndexedStack(
-        index: activeIndex,
-        children: pages,
-      ),
-      bottomNavigationBar: hasDormitoryContext
+      body: dormitoryId == null && activeIndex == 0 
+          ? _buildNoDormitoryView(context)
+          : IndexedStack(
+              index: activeIndex,
+              children: pages,
+            ),
+      bottomNavigationBar: dormitoryId != null
           ? Container(
               decoration: const BoxDecoration(
                 boxShadow: [
@@ -150,6 +148,24 @@ class AdminShell extends StatelessWidget {
               ),
             )
           : null,
+    );
+  }
+
+  Widget _buildNoDormitoryView(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.domain_disabled, size: 64, color: AppColors.mutedForeground),
+            const SizedBox(height: 16),
+            Text('ไม่พบข้อมูลหอพัก', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            const Text('บัญชีของคุณยังไม่ได้ผูกกับหอพักใดๆ กรุณาติดต่อผู้ดูแลระบบ', textAlign: TextAlign.center),
+          ],
+        ),
+      ),
     );
   }
 }
