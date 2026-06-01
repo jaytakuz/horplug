@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/models.dart';
@@ -27,6 +27,26 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
     _loadPendingRequests();
   }
 
+  String _formatErrorMessage(Object error) {
+    final message = error.toString().trim();
+    final normalized = message.startsWith('Exception: ')
+        ? message.substring('Exception: '.length).trim()
+        : message;
+    final lowerCaseMessage = normalized.toLowerCase();
+
+    if (lowerCaseMessage.contains('failed host lookup') ||
+        lowerCaseMessage.contains('socketexception') ||
+        lowerCaseMessage.contains('clientexception') ||
+        lowerCaseMessage.contains('connection refused') ||
+        lowerCaseMessage.contains('network is unreachable') ||
+        lowerCaseMessage.contains('connection timed out') ||
+        lowerCaseMessage.contains('timed out')) {
+      return 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
+    }
+
+    return normalized;
+  }
+
   Future<void> _loadPendingRequests() async {
     setState(() {
       _isLoadingRequests = true;
@@ -45,7 +65,7 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
       if (!mounted) return;
 
       setState(() {
-        _requestErrorMessage = error.toString();
+        _requestErrorMessage = _formatErrorMessage(error);
         _isLoadingRequests = false;
       });
     }
@@ -76,8 +96,8 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
         SnackBar(
           content: Text(
             accept
-                ? 'ตอบรับคำขอเข้าหอ ${request.dormitoryName} แล้ว'
-                : 'ปฏิเสธคำขอเข้าหอ ${request.dormitoryName} แล้ว',
+                ? 'เข้าหอ ${request.dormitoryName} แล้ว'
+                : 'ปฏิเสธเข้าหอ ${request.dormitoryName} แล้ว',
           ),
         ),
       );
@@ -86,7 +106,7 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('ดำเนินการไม่สำเร็จ: $error'),
+          content: Text('ตอบรับคำขอไม่สำเร็จ: ${_formatErrorMessage(error)}'),
         ),
       );
     } finally {
@@ -372,3 +392,5 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
+
+

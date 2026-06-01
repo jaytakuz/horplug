@@ -398,7 +398,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Expanded(
                     child: PrimaryButton(
-                      label: 'เพิ่มผู้พักอาศัย',
+                      label: 'ส่งคำขอถึงผู้พักอาศัย',
                       icon: Icons.person_add_alt_1,
                       onPressed: room.status == RoomStatus.vacant &&
                               _availableTenants.isNotEmpty
@@ -434,7 +434,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showAssignTenantDialog(BuildContext context, Room room) {
     if (room.status != RoomStatus.vacant) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ห้องนี้ไม่ใช่ห้องว่าง')),
+        const SnackBar(content: Text('ไม่มีห้องว่างสำหรับเพิ่มผู้พักอาศัย')),
       );
       return;
     }
@@ -470,7 +470,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        'เพิ่มผู้พักอาศัยเข้ากับห้อง',
+                        'ส่งคำขอเข้าห้อง',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
@@ -598,7 +598,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             messenger.showSnackBar(
                               SnackBar(
                                   content: Text(
-                                      'บันทึกไม่สำเร็จ: ${_formatErrorMessage(error)}')),
+                                      'ส่งคำขอไม่สำเร็จ: ${_formatErrorMessage(error)}')),
                             );
                           } finally {
                             if (mounted) {
@@ -620,7 +620,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showRemoveTenantDialog(BuildContext context, Room room) {
     if (room.status != RoomStatus.occupied) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ห้องนี้ยังไม่มีผู้พักอาศัย')),
+        const SnackBar(content: Text('ไม่มีห้องที่มีผู้พักอาศัยให้ลบออก')),
       );
       return;
     }

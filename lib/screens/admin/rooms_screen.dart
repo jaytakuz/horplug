@@ -780,14 +780,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
     if (vacantRooms.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่มีห้องว่างสำหรับส่งคำขอ')),
+        const SnackBar(content: Text('ไม่มีห้องว่างสำหรับเพิ่มผู้พักอาศัย')),
       );
       return;
     }
 
     if (_availableTenants.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่พบผู้พักอาศัยที')),
+        const SnackBar(content: Text('ไม่พบผู้พักอาศัย')),
       );
       return;
     }
@@ -956,7 +956,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                             messenger.showSnackBar(
                               SnackBar(
                                   content: Text(
-                                      'บันทึกไม่สำเร็จ: ${_formatRoomErrorMessage(error)}')),
+                                      'ส่งคำขอไม่สำเร็จ: ${_formatRoomErrorMessage(error)}')),
                             );
                           } finally {
                             if (mounted) {
