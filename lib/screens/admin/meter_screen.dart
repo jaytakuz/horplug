@@ -131,13 +131,17 @@ class _MeterScreenState extends State<MeterScreen>
           children: [
             Icon(Icons.check_circle, color: AppColors.success),
             SizedBox(width: 8),
-            Text('บันทึกสำเร็จ'),
+            Text('บันทึกสำเร็จ', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text('บันทึกข้อมูลมิเตอร์เรียบร้อยแล้ว คุณต้องการไปตรวจสอบความถูกต้องที่หน้าจัดการบิลหรือไม่?'),
+        content: const Text(
+          'บันทึกข้อมูลมิเตอร์เรียบร้อยแล้ว คุณต้องการไปตรวจสอบความถูกต้องที่หน้าจัดการบิลหรือไม่?',
+          style: TextStyle(color: AppColors.mutedForeground),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(foregroundColor: AppColors.mutedForeground),
             child: const Text('อยู่หน้านี้ต่อ'),
           ),
           ElevatedButton(
@@ -145,7 +149,10 @@ class _MeterScreenState extends State<MeterScreen>
               Navigator.pop(context);
               context.go('/landlord/billing');
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('ไปหน้าจัดการบิล'),
           ),
         ],
@@ -263,23 +270,63 @@ class _MeterScreenState extends State<MeterScreen>
     final isExpanded = _expandedRooms.contains(key);
     final units = record.unitsUsed;
     final cost = record.amount;
+    final currentText = record.currentReading != null ? record.currentReading!.toStringAsFixed(0) : '-';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Column(
         children: [
-          ListTile(
+          InkWell(
             onTap: () => setState(() => isExpanded ? _expandedRooms.remove(key) : _expandedRooms.add(key)),
-            leading: CircleAvatar(backgroundColor: AppColors.primary.withOpacity(0.1), child: Text(record.roomNumber, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-            title: Text(record.tenantName ?? '-', style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text('เลขเดิม: ${record.previousReading.toStringAsFixed(0)} | ใช้ไป: ${units.toStringAsFixed(1)} หน่วย', style: const TextStyle(fontSize: 11)),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('฿${cost.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-                const SizedBox(width: 8),
-                Icon(isExpanded ? Icons.expand_less : Icons.expand_more, size: 20),
-              ],
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                    child: Text(record.roomNumber, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 12),
+                  // Column 1: ชื่อผู้เช่า + เลขมิเตอร์
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          record.tenantName ?? '-',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'เดิม: ${record.previousReading.toStringAsFixed(0)}  →  ปัจจุบัน: $currentText',
+                          style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Column 2: หน่วย + ยอดเงิน
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${units.toStringAsFixed(1)} หน่วย',
+                        style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '฿${cost.toStringAsFixed(0)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(isExpanded ? Icons.expand_less : Icons.expand_more, size: 20, color: AppColors.mutedForeground),
+                ],
+              ),
             ),
           ),
           if (isExpanded)
@@ -291,13 +338,17 @@ class _MeterScreenState extends State<MeterScreen>
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(child: _buildInfoBox('ราคาต่อหน่วย', '${record.unitRate.toStringAsFixed(1)} บาท')),
+                      Expanded(child: _buildInfoBox('มิเตอร์เดิม', record.previousReading.toStringAsFixed(0))),
                       const SizedBox(width: 16),
                       Expanded(
                         child: TextField(
                           controller: controller,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'เลขปัจจุบัน', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                          decoration: const InputDecoration(
+                            labelText: 'มิเตอร์ปัจจุบัน',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
                           onChanged: (val) => setState(() => record.currentReading = double.tryParse(val)),
                         ),
                       ),
@@ -323,9 +374,12 @@ class _MeterScreenState extends State<MeterScreen>
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
-        leading: CircleAvatar(backgroundColor: Colors.blue.withOpacity(0.1), child: const Icon(Icons.water_drop, color: Colors.blue, size: 20)),
-        title: Text('ห้อง ${record.roomNumber} (${record.tenantName})'),
-        subtitle: const Text('ยอดเหมาจ่ายรายเดือน', style: TextStyle(fontSize: 11)),
+        leading: CircleAvatar(
+          backgroundColor: Colors.blue.withValues(alpha: 0.1),
+          child: const Icon(Icons.water_drop, color: Colors.blue, size: 20),
+        ),
+        title: Text('ห้อง ${record.roomNumber}', style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(record.tenantName ?? '-', style: const TextStyle(fontSize: 11)),
         trailing: SizedBox(
           width: 100,
           child: TextField(
@@ -348,7 +402,7 @@ class _MeterScreenState extends State<MeterScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary)),
         ],
       ),
     );
