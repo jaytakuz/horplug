@@ -355,7 +355,28 @@ class _MeterScreenState extends State<MeterScreen>
   }
 
   Widget _buildEmptyState(String msg) {
-    return Center(child: Text(msg, style: const TextStyle(color: AppColors.mutedForeground)));
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.inbox_outlined, size: 48, color: AppColors.mutedForeground),
+          const SizedBox(height: 12),
+          Text(msg, style: const TextStyle(color: AppColors.mutedForeground)),
+          const SizedBox(height: 4),
+          const Text(
+            'ตรวจสอบว่ามีข้อมูลห้องพักใน Supabase และ RLS Policy ถูกต้อง',
+            style: TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: _loadAllRecords,
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('โหลดใหม่'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildErrorBanner() {

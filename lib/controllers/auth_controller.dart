@@ -57,11 +57,10 @@ class AuthController extends ChangeNotifier {
         _loadTenantOptionalFields(profile!);
       }
       return;
-    } catch (_) {
+    } catch (e) {
       _profile = null;
-      _status = _authService.currentSession == null
-          ? AuthStatus.unauthenticated
-          : AuthStatus.unauthenticated;
+      _status = AuthStatus.unauthenticated;
+      debugPrint('[AuthController] refreshProfile error: $e');
     }
 
     notifyListeners();
