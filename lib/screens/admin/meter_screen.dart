@@ -286,7 +286,7 @@ class _MeterScreenState extends State<MeterScreen>
                   CircleAvatar(
                     radius: 20,
                     backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                    child: Text(record.roomNumber, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    child: Text(record.roomNumber, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
                   ),
                   const SizedBox(width: 12),
                   // Column 1: ชื่อผู้เช่า + เลขมิเตอร์
@@ -296,7 +296,7 @@ class _MeterScreenState extends State<MeterScreen>
                       children: [
                         Text(
                           record.tenantName ?? '-',
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.primary),
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),

@@ -229,8 +229,8 @@ class _InvoiceCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('ห้อง ${invoice.roomNumber}  ${invoice.tenantName}', 
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
+              Text('ห้อง ${invoice.roomNumber}  ${invoice.tenantName}',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
               StatusBadge(label: statusText, variant: variant),
             ],
           ),
@@ -272,7 +272,7 @@ class _InvoiceCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontSize: 13, color: AppColors.mutedForeground)),
-          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary)),
         ],
       ),
     );
