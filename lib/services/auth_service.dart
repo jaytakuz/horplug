@@ -103,9 +103,16 @@ class AuthService {
         (landlordRows as List).cast<Map<String, dynamic>>();
     if (landlordList.isNotEmpty) {
       final row = landlordList.first;
-      final dormitoryRows =
-          (row['dormitories'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final dormitory = dormitoryRows.isEmpty ? null : dormitoryRows.first;
+      // PostgREST returns a List for one-to-many (dormitories.landlord_id → landlord_profiles.id)
+      // or a Map for many-to-one. Handle both defensively.
+      final dormitoriesRaw = row['dormitories'];
+      Map<String, dynamic>? dormitory;
+      if (dormitoriesRaw is List) {
+        final list = dormitoriesRaw.cast<Map<String, dynamic>>();
+        dormitory = list.isEmpty ? null : list.first;
+      } else if (dormitoriesRaw is Map) {
+        dormitory = Map<String, dynamic>.from(dormitoriesRaw as Map);
+      }
 
       return UserProfile(
         id: row['id'] as String,

@@ -138,11 +138,17 @@ GoRouter _buildRouter(AuthController authController) {
           ),
           GoRoute(
             path: '/landlord/meter',
-            builder: (context, state) => const MeterScreen(),
+            builder: (context, state) {
+              final dormitoryId = AuthScope.of(context).dormitoryId;
+              return MeterScreen(dormitoryId: dormitoryId ?? 0);
+            },
           ),
           GoRoute(
             path: '/landlord/billing',
-            builder: (context, state) => const BillingScreen(),
+            builder: (context, state) {
+              final dormitoryId = AuthScope.of(context).dormitoryId;
+              return BillingScreen(dormitoryId: dormitoryId ?? 0);
+            },
           ),
           GoRoute(
             path: '/landlord/chat',
