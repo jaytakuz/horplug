@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../models/models.dart';
@@ -87,7 +90,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = error.toString().replaceFirst('AuthException: ', '');
+        _errorMessage = _mapError(error);
       });
     } finally {
       if (mounted) {
@@ -96,6 +99,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
         });
       }
     }
+  }
+
+  String _mapError(Object error) {
+    final lower = error.toString().toLowerCase();
+    if (error is SocketException ||
+        lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('no route to host') ||
+        lower.contains('network is unreachable')) {
+      return 'สมัครไม่สำเร็จ: กรุณาตรวจสอบอินเตอร์เน็ต';
+    }
+    if (lower.contains('already registered') ||
+        lower.contains('email_exists') ||
+        lower.contains('email already')) {
+      return 'สมัครไม่สำเร็จ: อีเมลถูกใช้ไปแล้ว';
+    }
+    if (lower.contains('dormitory_name_exists')) {
+      return 'สมัครไม่สำเร็จ: ชื่อหอพักถูกใช้ไปแล้ว';
+    }
+    if (lower.contains('database error saving new user') ||
+        (error is PostgrestException && error.code == '23505')) {
+      return 'สมัครไม่สำเร็จ: ชื่อถูกใช้ไปแล้ว';
+    }
+    return 'สมัครไม่สำเร็จ: ${error.toString().replaceFirst('AuthException: ', '').replaceFirst('Exception: ', '')}';
   }
 
   String? _requiredValidator(String? value, String fieldName) {
@@ -248,9 +275,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         TextFormField(
                           controller: _locationController,
                           decoration:
-                              const InputDecoration(labelText: 'ที่ตั้ง'),
+                              const InputDecoration(labelText: 'ที่อยู่'),
                           validator: (value) =>
-                              _requiredValidator(value, 'ที่ตั้ง'),
+                              _requiredValidator(value, 'ที่อยู่'),
                         ),
                         const SizedBox(height: 16),
                         Row(

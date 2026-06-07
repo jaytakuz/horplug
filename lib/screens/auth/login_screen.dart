@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -43,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = error.toString().replaceFirst('AuthException: ', '');
+        _errorMessage = _mapError(error);
       });
     } finally {
       if (mounted) {
@@ -52,6 +54,18 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     }
+  }
+
+  String _mapError(Object error) {
+    final lower = error.toString().toLowerCase();
+    if (error is SocketException ||
+        lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('no route to host') ||
+        lower.contains('network is unreachable')) {
+      return 'เข้าสู่ระบบไม่สำเร็จ: กรุณาตรวจสอบอินเตอร์เน็ต';
+    }
+    return 'เข้าสู่ระบบไม่สำเร็จ: อีเมลหรือรหัสผ่านไม่ถูกต้อง';
   }
 
   @override

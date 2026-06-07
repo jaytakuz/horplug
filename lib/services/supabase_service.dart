@@ -5,15 +5,13 @@ class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
 
   Future<List<Room>> fetchRooms({int? dormitoryId}) async {
-    final query = client
+    final baseQuery = client
         .from('rooms')
         .select('id, room_number, floor, base_price, status, current_tenant_id');
 
-    if (dormitoryId != null) {
-      query.eq('dorm_id', dormitoryId);
-    }
-
-    final data = await query
+    final data = await (dormitoryId != null
+            ? baseQuery.eq('dorm_id', dormitoryId)
+            : baseQuery)
         .order('floor', ascending: true)
         .order('room_number', ascending: true);
 
