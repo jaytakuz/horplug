@@ -76,9 +76,13 @@ class AdminShell extends StatelessWidget {
     final activeIndex = desiredIndex.clamp(0, pages.length - 1);
     final bottomNavIndex = activeIndex <= 4 ? activeIndex : 0;
 
+    final dormName = auth.dormitoryName;
+    final sectionTitle = _getHeaderSubtitle(location);
+    final headerSubtitle = dormName != null ? '$dormName • $sectionTitle' : sectionTitle;
+
     return Scaffold(
       appBar: MobileHeader(
-        subtitle: auth.dormitoryName ?? _getHeaderSubtitle(location),
+        subtitle: headerSubtitle,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.primary),

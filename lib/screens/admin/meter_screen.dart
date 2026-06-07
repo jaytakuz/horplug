@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
@@ -24,6 +25,8 @@ class _MeterScreenState extends State<MeterScreen>
   int _selectedMonth = DateTime.now().month;
   int _selectedYear = DateTime.now().year;
   final Set<String> _expandedRooms = {};
+  final Set<int> _modifiedWaterRoomIds = {};
+  final Map<String, FocusNode> _focusNodes = {};
 
   List<ElectricityRecord> _electricityRecords = [];
   List<WaterRecord> _waterRecords = [];
@@ -39,6 +42,9 @@ class _MeterScreenState extends State<MeterScreen>
   void dispose() {
     for (final controller in _controllers.values) {
       controller.dispose();
+    }
+    for (final node in _focusNodes.values) {
+      node.dispose();
     }
     _tabController.dispose();
     super.dispose();
@@ -63,11 +69,16 @@ class _MeterScreenState extends State<MeterScreen>
         year: _selectedYear,
       );
 
-      // Clean up old controllers
+      // Clean up old controllers and focus nodes
       for (final controller in _controllers.values) {
         controller.dispose();
       }
       _controllers.clear();
+      for (final node in _focusNodes.values) {
+        node.dispose();
+      }
+      _focusNodes.clear();
+      _modifiedWaterRoomIds.clear();
 
       if (!mounted) return;
       setState(() {
@@ -91,26 +102,54 @@ class _MeterScreenState extends State<MeterScreen>
     );
   }
 
+  FocusNode _getFocusNode(String key) {
+    return _focusNodes.putIfAbsent(key, () => FocusNode());
+  }
+
+  void _focusNextElec(int currentIndex) {
+    if (currentIndex >= _electricityRecords.length - 1) return;
+    final nextRecord = _electricityRecords[currentIndex + 1];
+    final nextKey = 'elec-${nextRecord.roomDbId}';
+    setState(() => _expandedRooms.add(nextKey));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _getFocusNode(nextKey).requestFocus();
+    });
+  }
+
+  void _focusNextWater(int currentIndex) {
+    if (currentIndex >= _waterRecords.length - 1) return;
+    final nextRecord = _waterRecords[currentIndex + 1];
+    final nextKey = 'water-${nextRecord.roomDbId}';
+    _getFocusNode(nextKey).requestFocus();
+  }
+
   bool get _canSave {
     if (_isLoading || _isSaving) return false;
-    
-    // Check for at least one valid change
-    final hasValidElec = _electricityRecords.any((r) => 
-      r.currentReading != null && r.currentReading! >= r.previousReading
-    );
-    final hasWater = _waterRecords.isNotEmpty;
 
-    return hasValidElec || hasWater;
+    final hasValidElec = _electricityRecords.any(
+      (r) => r.currentReading != null && r.currentReading! >= r.previousReading,
+    );
+    // Only enable save for water if the user explicitly changed an amount
+    // or if there are new water records (id == null) that haven't been saved yet
+    final hasNewOrModifiedWater = _modifiedWaterRoomIds.isNotEmpty ||
+        _waterRecords.any((r) => r.id == null);
+
+    return hasValidElec || hasNewOrModifiedWater;
   }
 
   Future<void> _saveAll() async {
     if (!_canSave) return;
-    
+
     setState(() => _isSaving = true);
     try {
       await _service.saveElectricityRecords(_electricityRecords);
-      await _service.saveWaterRecords(_waterRecords);
-      
+
+      // Only save water records that are new (no id) or explicitly modified
+      final waterToSave = _waterRecords
+          .where((r) => r.id == null || _modifiedWaterRoomIds.contains(r.roomDbId))
+          .toList();
+      await _service.saveWaterRecords(waterToSave);
+
       if (mounted) {
         _showSuccessDialog();
         await _loadAllRecords();
@@ -197,8 +236,21 @@ class _MeterScreenState extends State<MeterScreen>
       padding: const EdgeInsets.all(16.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('บันทึกมิเตอร์', style: Theme.of(context).textTheme.titleLarge),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('บันทึกมิเตอร์', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 2),
+              Text(
+                'งวด ${_getMonthName(_selectedMonth)} $_selectedYear',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.mutedForeground,
+                    ),
+              ),
+            ],
+          ),
           PrimaryButton(
             label: _isSaving ? 'กำลังบันทึก...' : 'บันทึกทั้งหมด',
             icon: Icons.save,
@@ -248,29 +300,94 @@ class _MeterScreenState extends State<MeterScreen>
 
   Widget _buildElectricityList() {
     if (_electricityRecords.isEmpty) return _buildEmptyState('ไม่พบรายการห้องพัก');
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _electricityRecords.length,
-      itemBuilder: (context, index) => _buildElecCard(_electricityRecords[index]),
+
+    final recorded = _electricityRecords
+        .where((r) => r.currentReading != null && r.currentReading! >= r.previousReading)
+        .length;
+    final total = _electricityRecords.length;
+
+    return Column(
+      children: [
+        _buildProgressHeader(recorded, total),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _electricityRecords.length,
+            itemBuilder: (context, index) => _buildElecCard(_electricityRecords[index], index),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildWaterList() {
     if (_waterRecords.isEmpty) return _buildEmptyState('ไม่พบรายการห้องพัก');
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _waterRecords.length,
-      itemBuilder: (context, index) => _buildWaterCard(_waterRecords[index]),
+
+    final saved = _waterRecords.where((r) => r.id != null).length;
+    final total = _waterRecords.length;
+
+    return Column(
+      children: [
+        _buildProgressHeader(saved, total),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: _waterRecords.length,
+            itemBuilder: (context, index) => _buildWaterCard(_waterRecords[index], index),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildElecCard(ElectricityRecord record) {
+  Widget _buildProgressHeader(int done, int total) {
+    final allDone = done == total;
+    final color = allDone ? AppColors.success : AppColors.warning;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        children: [
+          Icon(
+            allDone ? Icons.check_circle : Icons.pending_outlined,
+            size: 15,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'บันทึกแล้ว $done/$total ห้อง',
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildElecCard(ElectricityRecord record, int index) {
     final key = 'elec-${record.roomDbId}';
     final controller = _getController(key, record.currentReading?.toStringAsFixed(0) ?? '');
+    final focusNode = _getFocusNode(key);
     final isExpanded = _expandedRooms.contains(key);
     final units = record.unitsUsed;
     final cost = record.amount;
     final currentText = record.currentReading != null ? record.currentReading!.toStringAsFixed(0) : '-';
+
+    final isRecorded = record.currentReading != null && record.currentReading! >= record.previousReading;
+    final isInvalid = record.currentReading != null && record.currentReading! < record.previousReading;
+
+    final avatarBg = isRecorded
+        ? AppColors.success.withValues(alpha: 0.12)
+        : isInvalid
+            ? AppColors.destructive.withValues(alpha: 0.12)
+            : AppColors.primary.withValues(alpha: 0.1);
+    final avatarTextColor = isRecorded
+        ? AppColors.success
+        : isInvalid
+            ? AppColors.destructive
+            : AppColors.primary;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -285,8 +402,8 @@ class _MeterScreenState extends State<MeterScreen>
                 children: [
                   CircleAvatar(
                     radius: 20,
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                    child: Text(record.roomNumber, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    backgroundColor: avatarBg,
+                    child: Text(record.roomNumber, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: avatarTextColor)),
                   ),
                   const SizedBox(width: 12),
                   // Column 1: ชื่อผู้เช่า + เลขมิเตอร์
@@ -308,19 +425,28 @@ class _MeterScreenState extends State<MeterScreen>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Column 2: หน่วย + ยอดเงิน
+                  // Column 2: หน่วย + ยอดเงิน / สถานะ
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        '${units.toStringAsFixed(1)} หน่วย',
-                        style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '฿${cost.toStringAsFixed(0)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primary),
-                      ),
+                      if (isRecorded) ...[
+                        Text(
+                          '${units.toStringAsFixed(1)} หน่วย',
+                          style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '฿${cost.toStringAsFixed(0)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.success),
+                        ),
+                      ] else if (isInvalid) ...[
+                        const Text('ข้อมูลผิดพลาด', style: TextStyle(fontSize: 12, color: AppColors.destructive, fontWeight: FontWeight.w500)),
+                      ] else ...[
+                        Text(
+                          'รอบันทึก',
+                          style: TextStyle(fontSize: 12, color: AppColors.warning, fontWeight: FontWeight.w500),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(width: 4),
@@ -343,13 +469,22 @@ class _MeterScreenState extends State<MeterScreen>
                       Expanded(
                         child: TextField(
                           controller: controller,
+                          focusNode: focusNode,
                           keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          textInputAction: index < _electricityRecords.length - 1
+                              ? TextInputAction.next
+                              : TextInputAction.done,
                           decoration: const InputDecoration(
                             labelText: 'มิเตอร์ปัจจุบัน',
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           ),
                           onChanged: (val) => setState(() => record.currentReading = double.tryParse(val)),
+                          onSubmitted: (val) {
+                            setState(() => record.currentReading = double.tryParse(val));
+                            _focusNextElec(index);
+                          },
                         ),
                       ),
                     ],
@@ -367,27 +502,74 @@ class _MeterScreenState extends State<MeterScreen>
     );
   }
 
-  Widget _buildWaterCard(WaterRecord record) {
+  Widget _buildWaterCard(WaterRecord record, int index) {
     final key = 'water-${record.roomDbId}';
     final controller = _getController(key, record.amount.toStringAsFixed(0));
+    final focusNode = _getFocusNode(key);
+    final isSaved = record.id != null;
+    final isModified = _modifiedWaterRoomIds.contains(record.roomDbId);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Colors.blue.withValues(alpha: 0.1),
-          child: const Icon(Icons.water_drop, color: Colors.blue, size: 20),
+          backgroundColor: isSaved && !isModified
+              ? AppColors.success.withValues(alpha: 0.1)
+              : Colors.blue.withValues(alpha: 0.1),
+          child: Icon(
+            isSaved && !isModified ? Icons.check : Icons.water_drop,
+            color: isSaved && !isModified ? AppColors.success : Colors.blue,
+            size: 20,
+          ),
         ),
-        title: Text('ห้อง ${record.roomNumber}', style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: Row(
+          children: [
+            Text('ห้อง ${record.roomNumber}', style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(width: 8),
+            if (isSaved && !isModified)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text('บันทึกแล้ว', style: TextStyle(fontSize: 10, color: AppColors.success, fontWeight: FontWeight.w600)),
+              )
+            else if (isModified)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text('แก้ไขแล้ว', style: TextStyle(fontSize: 10, color: AppColors.warning, fontWeight: FontWeight.w600)),
+              ),
+          ],
+        ),
         subtitle: Text(record.tenantName ?? '-', style: const TextStyle(fontSize: 11)),
         trailing: SizedBox(
           width: 100,
           child: TextField(
             controller: controller,
+            focusNode: focusNode,
             keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            textInputAction: index < _waterRecords.length - 1
+                ? TextInputAction.next
+                : TextInputAction.done,
             textAlign: TextAlign.right,
             decoration: const InputDecoration(prefixText: '฿', border: UnderlineInputBorder(), contentPadding: EdgeInsets.zero),
-            onChanged: (val) => setState(() => record.amount = double.tryParse(val) ?? 0.0),
+            onChanged: (val) => setState(() {
+              record.amount = double.tryParse(val) ?? 0.0;
+              _modifiedWaterRoomIds.add(record.roomDbId);
+            }),
+            onSubmitted: (val) {
+              setState(() {
+                record.amount = double.tryParse(val) ?? 0.0;
+                _modifiedWaterRoomIds.add(record.roomDbId);
+              });
+              _focusNextWater(index);
+            },
           ),
         ),
       ),
@@ -416,12 +598,6 @@ class _MeterScreenState extends State<MeterScreen>
           const Icon(Icons.inbox_outlined, size: 48, color: AppColors.mutedForeground),
           const SizedBox(height: 12),
           Text(msg, style: const TextStyle(color: AppColors.mutedForeground)),
-          const SizedBox(height: 4),
-          const Text(
-            'ตรวจสอบว่ามีข้อมูลห้องพักใน Supabase และ RLS Policy ถูกต้อง',
-            style: TextStyle(fontSize: 11, color: AppColors.mutedForeground),
-            textAlign: TextAlign.center,
-          ),
           const SizedBox(height: 16),
           TextButton.icon(
             onPressed: _loadAllRecords,

@@ -208,7 +208,7 @@ class MobileHeader extends StatelessWidget implements PreferredSizeWidget {
                 ),
           ),
           Text(
-            "ศักดิ์เพลส • $subtitle",
+            subtitle,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: AppColors.mutedForeground,
                 ),

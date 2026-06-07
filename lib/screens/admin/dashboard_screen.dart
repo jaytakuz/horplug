@@ -91,7 +91,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       (sum, room) => sum + room.price,
     );
     final floorNumbers = _rooms.map((room) => room.floor).toSet().toList()
-      ..sort((a, b) => int.parse(a).compareTo(int.parse(b)));
+      ..sort((a, b) {
+        final ai = int.tryParse(a);
+        final bi = int.tryParse(b);
+        if (ai != null && bi != null) return ai.compareTo(bi);
+        return a.compareTo(b);
+      });
 
     return _buildBody(
       context,

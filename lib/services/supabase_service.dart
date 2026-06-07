@@ -126,7 +126,9 @@ class SupabaseService {
         billingMonth: month,
         billingYear: year,
         previousReading: prevVal,
-        currentReading: currentPeriod.isNotEmpty ? _parseDouble(currentPeriod['current_reading']) : null,
+        currentReading: currentPeriod.isNotEmpty
+            ? _parseDouble(currentPeriod['current_reading'])
+            : (room.status == RoomStatus.vacant ? prevVal : null),
         unitRate: currentPeriod.isNotEmpty ? _parseDouble(currentPeriod['unit_rate']) : defaultRate,
       ));
     }
@@ -175,7 +177,9 @@ class SupabaseService {
         tenantName: room.tenantName ?? (room.status == RoomStatus.vacant ? 'ห้องว่าง' : '-'),
         billingMonth: month,
         billingYear: year,
-        amount: existing.isNotEmpty ? _parseDouble(existing['amount']) : defaultAmount,
+        amount: existing.isNotEmpty
+            ? _parseDouble(existing['amount'])
+            : (room.status == RoomStatus.vacant ? 0.0 : defaultAmount),
       );
     }).toList();
   }
