@@ -129,6 +129,8 @@ class SupabaseService {
             ? _parseDouble(currentPeriod['current_reading'])
             : (room.status == RoomStatus.vacant ? prevVal : null),
         unitRate: currentPeriod.isNotEmpty ? _parseDouble(currentPeriod['unit_rate']) : defaultRate,
+        floor: room.floor,
+        roomStatus: room.status,
       ));
     }
     return results;
@@ -191,6 +193,8 @@ class SupabaseService {
         amount: existing.isNotEmpty
             ? _parseDouble(existing['amount'])
             : (room.status == RoomStatus.vacant ? 0.0 : defaultAmount),
+        floor: room.floor,
+        roomStatus: room.status,
       );
     }).toList();
   }

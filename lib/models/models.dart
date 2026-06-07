@@ -161,8 +161,10 @@ class ElectricityRecord {
   final double previousReading;
   double? currentReading;
   final double unitRate;
-  
-   ElectricityRecord({
+  final String? floor;
+  final RoomStatus? roomStatus;
+
+  ElectricityRecord({
     this.id,
     required this.roomDbId,
     required this.roomNumber,
@@ -172,9 +174,20 @@ class ElectricityRecord {
     required this.previousReading,
     this.currentReading,
     required this.unitRate,
+    this.floor,
+    this.roomStatus,
   });
 
-  double get unitsUsed => (currentReading ?? previousReading) - previousReading;
+  // Returns true when meter wrapped around from 9999 → 0000
+  bool get isOverflow => currentReading != null && currentReading! < previousReading;
+
+  // Handles 4-digit meter overflow: (10000 - prev) + current
+  double get unitsUsed {
+    if (currentReading == null) return 0;
+    if (currentReading! >= previousReading) return currentReading! - previousReading;
+    return (10000 - previousReading) + currentReading!;
+  }
+
   double get amount => unitsUsed * unitRate;
 
   Map<String, dynamic> toJson() {
@@ -203,6 +216,8 @@ class WaterRecord {
   final int billingMonth;
   final int billingYear;
   double amount;
+  final String? floor;
+  final RoomStatus? roomStatus;
 
   WaterRecord({
     this.id,
@@ -212,6 +227,8 @@ class WaterRecord {
     required this.billingMonth,
     required this.billingYear,
     required this.amount,
+    this.floor,
+    this.roomStatus,
   });
 
   Map<String, dynamic> toJson() {

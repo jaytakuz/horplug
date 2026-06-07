@@ -18,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _passwordFocusNode = FocusNode();
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -26,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
@@ -97,9 +99,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
                           labelText: 'อีเมล',
                         ),
+                        onFieldSubmitted: (_) => _passwordFocusNode.requestFocus(),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
                             return 'กรอกอีเมล';
@@ -113,10 +117,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _passwordController,
+                        focusNode: _passwordFocusNode,
                         obscureText: true,
+                        textInputAction: TextInputAction.done,
                         decoration: const InputDecoration(
                           labelText: 'รหัสผ่าน',
                         ),
+                        onFieldSubmitted: (_) => _isLoading ? null : _submit(),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
                             return 'กรอกรหัสผ่าน';

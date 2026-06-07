@@ -28,6 +28,12 @@ class _MeterScreenState extends State<MeterScreen>
   final Set<int> _modifiedWaterRoomIds = {};
   final Map<String, FocusNode> _focusNodes = {};
 
+  // Search & Filter
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String _selectedFloor = 'ทั้งหมด';
+  String _selectedRoomStatus = 'ทั้งหมด';
+
   List<ElectricityRecord> _electricityRecords = [];
   List<WaterRecord> _waterRecords = [];
 
@@ -46,8 +52,63 @@ class _MeterScreenState extends State<MeterScreen>
     for (final node in _focusNodes.values) {
       node.dispose();
     }
+    _searchController.dispose();
     _tabController.dispose();
     super.dispose();
+  }
+
+  // ---- Search & Filter helpers ----
+
+  Set<String> get _availableFloors {
+    return _electricityRecords
+        .map((r) => r.floor ?? '')
+        .where((f) => f.isNotEmpty)
+        .toSet();
+  }
+
+  int get _activeMeterFilterCount => [
+        _selectedFloor != 'ทั้งหมด',
+        _selectedRoomStatus != 'ทั้งหมด',
+      ].where((v) => v).length;
+
+  String _roomStatusLabel(RoomStatus? status) {
+    switch (status) {
+      case RoomStatus.occupied:
+        return 'มีคนอยู่';
+      case RoomStatus.vacant:
+        return 'ว่าง';
+      case RoomStatus.maintenance:
+        return 'ซ่อมบำรุง';
+      default:
+        return '-';
+    }
+  }
+
+  bool _matchesFilters({required String roomNumber, required String? tenantName, required String? floor, required RoomStatus? roomStatus}) {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      final matchRoom = roomNumber.toLowerCase().contains(q);
+      final matchName = (tenantName ?? '').toLowerCase().contains(q);
+      if (!matchRoom && !matchName) return false;
+    }
+    if (_selectedFloor != 'ทั้งหมด' && (floor ?? '') != _selectedFloor) return false;
+    if (_selectedRoomStatus != 'ทั้งหมด' && _roomStatusLabel(roomStatus) != _selectedRoomStatus) return false;
+    return true;
+  }
+
+  List<ElectricityRecord> get _filteredElecRecords => _electricityRecords
+      .where((r) => _matchesFilters(roomNumber: r.roomNumber, tenantName: r.tenantName, floor: r.floor, roomStatus: r.roomStatus))
+      .toList();
+
+  List<WaterRecord> get _filteredWaterRecords => _waterRecords
+      .where((r) => _matchesFilters(roomNumber: r.roomNumber, tenantName: r.tenantName, floor: r.floor, roomStatus: r.roomStatus))
+      .toList();
+
+  void _clearMeterFilters() {
+    setState(() {
+      _selectedFloor = 'ทั้งหมด';
+      _selectedRoomStatus = 'ทั้งหมด';
+    });
   }
 
   Future<void> _loadAllRecords() async {
@@ -126,11 +187,8 @@ class _MeterScreenState extends State<MeterScreen>
   bool get _canSave {
     if (_isLoading || _isSaving) return false;
 
-    final hasValidElec = _electricityRecords.any(
-      (r) => r.currentReading != null && r.currentReading! >= r.previousReading,
-    );
-    // Only enable save for water if the user explicitly changed an amount
-    // or if there are new water records (id == null) that haven't been saved yet
+    // Any reading entered (including overflow case) is valid
+    final hasValidElec = _electricityRecords.any((r) => r.currentReading != null);
     final hasNewOrModifiedWater = _modifiedWaterRoomIds.isNotEmpty ||
         _waterRecords.any((r) => r.id == null);
 
@@ -205,6 +263,7 @@ class _MeterScreenState extends State<MeterScreen>
       children: [
         _buildHeader(),
         _buildPeriodSelector(),
+        _buildSearchAndFilterSection(),
         if (_errorMessage != null) _buildErrorBanner(),
         TabBar(
           controller: _tabController,
@@ -227,6 +286,208 @@ class _MeterScreenState extends State<MeterScreen>
                   ],
                 ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildSearchAndFilterSection() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: PaperCard(
+        padding: EdgeInsets.zero,
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'ค้นหาห้อง หรือชื่อผู้เช่า',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchQuery.trim().isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => setState(() {
+                            _searchController.clear();
+                            _searchQuery = '';
+                          }),
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onChanged: (v) => setState(() => _searchQuery = v),
+              ),
+            ),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _showMeterFilterSheet(context),
+                  icon: const Icon(Icons.filter_list),
+                  label: const Text('ตัวกรอง'),
+                ),
+                if (_activeMeterFilterCount > 0)
+                  Positioned(
+                    right: 4,
+                    top: 4,
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '$_activeMeterFilterCount',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showMeterFilterSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.55,
+          minChildSize: 0.4,
+          maxChildSize: 0.85,
+          builder: (_, scrollController) => Container(
+            decoration: const BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: StatefulBuilder(
+              builder: (sheetContext, setSheetState) => SingleChildScrollView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 48,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.mutedForeground,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('ตัวกรอง', style: Theme.of(context).textTheme.titleLarge),
+                        ),
+                        TextButton.icon(
+                          onPressed: _activeMeterFilterCount > 0
+                              ? () {
+                                  _clearMeterFilters();
+                                  setSheetState(() {});
+                                }
+                              : null,
+                          icon: const Icon(Icons.filter_alt_off),
+                          label: const Text('ล้างทั้งหมด'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: _activeMeterFilterCount > 0
+                                ? AppColors.primary
+                                : AppColors.mutedForeground,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildMeterFilterGroup(
+                      context,
+                      setSheetState: setSheetState,
+                      title: 'ชั้น',
+                      options: ['ทั้งหมด', ..._availableFloors.toList()..sort()],
+                      selectedValue: _selectedFloor,
+                      onSelected: (v) => setState(() => _selectedFloor = v),
+                    ),
+                    _buildMeterFilterGroup(
+                      context,
+                      setSheetState: setSheetState,
+                      title: 'สถานะห้อง',
+                      options: const ['ทั้งหมด', 'มีคนอยู่', 'ว่าง', 'ซ่อมบำรุง'],
+                      selectedValue: _selectedRoomStatus,
+                      onSelected: (v) => setState(() => _selectedRoomStatus = v),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                        ),
+                        child: const Text('เสร็จสิ้น'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMeterFilterGroup(
+    BuildContext context, {
+    required StateSetter setSheetState,
+    required String title,
+    required List<String> options,
+    required String selectedValue,
+    required ValueChanged<String> onSelected,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options.map((opt) {
+            final isActive = selectedValue == opt;
+            return FilterChip(
+              label: Text(opt),
+              selected: isActive,
+              onSelected: (_) {
+                onSelected(opt);
+                setSheetState(() {});
+              },
+              backgroundColor: AppColors.card,
+              selectedColor: AppColors.primary,
+              labelStyle: TextStyle(
+                color: isActive ? Colors.white : AppColors.primary,
+                fontSize: 12,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+                side: BorderSide(color: isActive ? AppColors.primary : AppColors.border),
+              ),
+              showCheckmark: false,
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 16),
       ],
     );
   }
@@ -301,21 +562,23 @@ class _MeterScreenState extends State<MeterScreen>
   Widget _buildElectricityList() {
     if (_electricityRecords.isEmpty) return _buildEmptyState('ไม่พบรายการห้องพัก');
 
-    final recorded = _electricityRecords
-        .where((r) => r.currentReading != null && r.currentReading! >= r.previousReading)
-        .length;
+    final records = _filteredElecRecords;
+    final recorded = _electricityRecords.where((r) => r.currentReading != null).length;
     final total = _electricityRecords.length;
 
     return Column(
       children: [
         _buildProgressHeader(recorded, total),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: _electricityRecords.length,
-            itemBuilder: (context, index) => _buildElecCard(_electricityRecords[index], index),
+        if (records.isEmpty)
+          _buildNoResultState()
+        else
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: records.length,
+              itemBuilder: (context, index) => _buildElecCard(records[index], index),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -323,20 +586,48 @@ class _MeterScreenState extends State<MeterScreen>
   Widget _buildWaterList() {
     if (_waterRecords.isEmpty) return _buildEmptyState('ไม่พบรายการห้องพัก');
 
+    final records = _filteredWaterRecords;
     final saved = _waterRecords.where((r) => r.id != null).length;
     final total = _waterRecords.length;
 
     return Column(
       children: [
         _buildProgressHeader(saved, total),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: _waterRecords.length,
-            itemBuilder: (context, index) => _buildWaterCard(_waterRecords[index], index),
+        if (records.isEmpty)
+          _buildNoResultState()
+        else
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: records.length,
+              itemBuilder: (context, index) => _buildWaterCard(records[index], index),
+            ),
           ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildNoResultState() {
+    return Expanded(
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.search_off, size: 40, color: AppColors.mutedForeground),
+            const SizedBox(height: 12),
+            const Text('ไม่พบห้องตามเงื่อนไขที่เลือก',
+                style: TextStyle(color: AppColors.mutedForeground)),
+            if (_activeMeterFilterCount > 0) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _clearMeterFilters,
+                icon: const Icon(Icons.filter_alt_off, size: 16),
+                label: const Text('ล้างตัวกรอง'),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -371,23 +662,24 @@ class _MeterScreenState extends State<MeterScreen>
     final controller = _getController(key, record.currentReading?.toStringAsFixed(0) ?? '');
     final focusNode = _getFocusNode(key);
     final isExpanded = _expandedRooms.contains(key);
+    final isRecorded = record.currentReading != null;
+    final isOverflow = record.isOverflow;
     final units = record.unitsUsed;
     final cost = record.amount;
     final currentText = record.currentReading != null ? record.currentReading!.toStringAsFixed(0) : '-';
 
-    final isRecorded = record.currentReading != null && record.currentReading! >= record.previousReading;
-    final isInvalid = record.currentReading != null && record.currentReading! < record.previousReading;
-
-    final avatarBg = isRecorded
-        ? AppColors.success.withValues(alpha: 0.12)
-        : isInvalid
-            ? AppColors.destructive.withValues(alpha: 0.12)
-            : AppColors.primary.withValues(alpha: 0.1);
-    final avatarTextColor = isRecorded
-        ? AppColors.success
-        : isInvalid
-            ? AppColors.destructive
-            : AppColors.primary;
+    final Color avatarBg;
+    final Color avatarTextColor;
+    if (isRecorded && isOverflow) {
+      avatarBg = AppColors.warning.withValues(alpha: 0.12);
+      avatarTextColor = AppColors.warning;
+    } else if (isRecorded) {
+      avatarBg = AppColors.success.withValues(alpha: 0.12);
+      avatarTextColor = AppColors.success;
+    } else {
+      avatarBg = AppColors.primary.withValues(alpha: 0.1);
+      avatarTextColor = AppColors.primary;
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -403,10 +695,10 @@ class _MeterScreenState extends State<MeterScreen>
                   CircleAvatar(
                     radius: 20,
                     backgroundColor: avatarBg,
-                    child: Text(record.roomNumber, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: avatarTextColor)),
+                    child: Text(record.roomNumber,
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: avatarTextColor)),
                   ),
                   const SizedBox(width: 12),
-                  // Column 1: ชื่อผู้เช่า + เลขมิเตอร์
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,22 +717,35 @@ class _MeterScreenState extends State<MeterScreen>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Column 2: หน่วย + ยอดเงิน / สถานะ
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       if (isRecorded) ...[
-                        Text(
-                          '${units.toStringAsFixed(1)} หน่วย',
-                          style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+                        Row(
+                          children: [
+                            if (isOverflow)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 4),
+                                child: Icon(Icons.refresh, size: 12, color: AppColors.warning),
+                              ),
+                            Text(
+                              '${units.toStringAsFixed(1)} หน่วย',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isOverflow ? AppColors.warning : AppColors.mutedForeground,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
                           '฿${cost.toStringAsFixed(0)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.success),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: isOverflow ? AppColors.warning : AppColors.success,
+                          ),
                         ),
-                      ] else if (isInvalid) ...[
-                        const Text('ข้อมูลผิดพลาด', style: TextStyle(fontSize: 12, color: AppColors.destructive, fontWeight: FontWeight.w500)),
                       ] else ...[
                         Text(
                           'รอบันทึก',
@@ -450,7 +755,8 @@ class _MeterScreenState extends State<MeterScreen>
                     ],
                   ),
                   const SizedBox(width: 4),
-                  Icon(isExpanded ? Icons.expand_less : Icons.expand_more, size: 20, color: AppColors.mutedForeground),
+                  Icon(isExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 20, color: AppColors.mutedForeground),
                 ],
               ),
             ),
@@ -459,6 +765,7 @@ class _MeterScreenState extends State<MeterScreen>
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Divider(),
                   const SizedBox(height: 8),
@@ -471,14 +778,22 @@ class _MeterScreenState extends State<MeterScreen>
                           controller: controller,
                           focusNode: focusNode,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          textInputAction: index < _electricityRecords.length - 1
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(4),
+                          ],
+                          textInputAction: index < _filteredElecRecords.length - 1
                               ? TextInputAction.next
                               : TextInputAction.done,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'มิเตอร์ปัจจุบัน',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            border: const OutlineInputBorder(),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            helperText: '0 – 9999',
+                            helperStyle: const TextStyle(fontSize: 10),
+                            errorText: record.currentReading != null && record.currentReading! > 9999
+                                ? 'ค่าต้องอยู่ในช่วง 0-9999'
+                                : null,
                           ),
                           onChanged: (val) => setState(() => record.currentReading = double.tryParse(val)),
                           onSubmitted: (val) {
@@ -489,11 +804,32 @@ class _MeterScreenState extends State<MeterScreen>
                       ),
                     ],
                   ),
-                  if (record.currentReading != null && record.currentReading! < record.previousReading)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 8.0),
-                      child: Text('เลขปัจจุบันต้องไม่น้อยกว่าเลขเดิม', style: TextStyle(color: Colors.red, fontSize: 11)),
+                  // Overflow info banner
+                  if (isOverflow) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, size: 14, color: AppColors.warning),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'มิเตอร์ครบรอบ (9999→0000): '
+                              '(10000 − ${record.previousReading.toStringAsFixed(0)}) + ${record.currentReading!.toStringAsFixed(0)} '
+                              '= ${units.toStringAsFixed(1)} หน่วย',
+                              style: const TextStyle(fontSize: 11, color: AppColors.warning),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                  ],
                 ],
               ),
             ),

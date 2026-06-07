@@ -31,6 +31,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _baseWaterRateController = TextEditingController();
   final _baseElectricityRateController = TextEditingController();
 
+  // Focus nodes for Tab/Enter navigation
+  final _lastNameFocus = FocusNode();
+  final _emailFocus = FocusNode();
+  final _phoneFocus = FocusNode();
+  final _passwordFocus = FocusNode();
+  final _confirmPasswordFocus = FocusNode();
+  final _dormitoryNameFocus = FocusNode();
+  final _locationFocus = FocusNode();
+  final _totalFloorsFocus = FocusNode();
+  final _roomsPerFloorFocus = FocusNode();
+  final _baseWaterRateFocus = FocusNode();
+  final _baseElectricityRateFocus = FocusNode();
+
   AppRole _selectedRole = AppRole.tenant;
   bool _isLoading = false;
   String? _errorMessage;
@@ -49,6 +62,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _roomsPerFloorController.dispose();
     _baseWaterRateController.dispose();
     _baseElectricityRateController.dispose();
+    _lastNameFocus.dispose();
+    _emailFocus.dispose();
+    _phoneFocus.dispose();
+    _passwordFocus.dispose();
+    _confirmPasswordFocus.dispose();
+    _dormitoryNameFocus.dispose();
+    _locationFocus.dispose();
+    _totalFloorsFocus.dispose();
+    _roomsPerFloorFocus.dispose();
+    _baseWaterRateFocus.dispose();
+    _baseElectricityRateFocus.dispose();
     super.dispose();
   }
 
@@ -181,22 +205,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           Expanded(
                             child: TextFormField(
                               controller: _firstNameController,
-                              decoration: const InputDecoration(
-                                labelText: 'ชื่อ',
-                              ),
-                              validator: (value) =>
-                                  _requiredValidator(value, 'ชื่อ'),
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(labelText: 'ชื่อ'),
+                              onFieldSubmitted: (_) => _lastNameFocus.requestFocus(),
+                              validator: (value) => _requiredValidator(value, 'ชื่อ'),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: TextFormField(
                               controller: _lastNameController,
-                              decoration: const InputDecoration(
-                                labelText: 'นามสกุล',
-                              ),
-                              validator: (value) =>
-                                  _requiredValidator(value, 'นามสกุล'),
+                              focusNode: _lastNameFocus,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(labelText: 'นามสกุล'),
+                              onFieldSubmitted: (_) => _emailFocus.requestFocus(),
+                              validator: (value) => _requiredValidator(value, 'นามสกุล'),
                             ),
                           ),
                         ],
@@ -204,80 +227,80 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _emailController,
+                        focusNode: _emailFocus,
                         keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(labelText: 'อีเมล'),
+                        onFieldSubmitted: (_) => _phoneFocus.requestFocus(),
                         validator: (value) {
                           final required = _requiredValidator(value, 'อีเมล');
                           if (required != null) return required;
-                          if (!value!.contains('@')) {
-                            return 'อีเมลไม่ถูกต้อง';
-                          }
+                          if (!value!.contains('@')) return 'อีเมลไม่ถูกต้อง';
                           return null;
                         },
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _phoneController,
+                        focusNode: _phoneFocus,
                         keyboardType: TextInputType.phone,
-                        decoration:
-                            const InputDecoration(labelText: 'เบอร์โทรศัพท์'),
-                        validator: (value) =>
-                            _requiredValidator(value, 'เบอร์โทรศัพท์'),
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(labelText: 'เบอร์โทรศัพท์'),
+                        onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+                        validator: (value) => _requiredValidator(value, 'เบอร์โทรศัพท์'),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _passwordController,
+                        focusNode: _passwordFocus,
                         obscureText: true,
-                        decoration:
-                            const InputDecoration(labelText: 'รหัสผ่าน'),
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(labelText: 'รหัสผ่าน'),
+                        onFieldSubmitted: (_) => _confirmPasswordFocus.requestFocus(),
                         validator: (value) {
                           final required = _requiredValidator(value, 'รหัสผ่าน');
                           if (required != null) return required;
-                          if (value!.length < 6) {
-                            return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
-                          }
+                          if (value!.length < 6) return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
                           return null;
                         },
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _confirmPasswordController,
+                        focusNode: _confirmPasswordFocus,
                         obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'ยืนยันรหัสผ่าน',
-                        ),
+                        textInputAction: isLandlord ? TextInputAction.next : TextInputAction.done,
+                        decoration: const InputDecoration(labelText: 'ยืนยันรหัสผ่าน'),
+                        onFieldSubmitted: (_) => isLandlord
+                            ? _dormitoryNameFocus.requestFocus()
+                            : (_isLoading ? null : _submit()),
                         validator: (value) {
-                          final required =
-                              _requiredValidator(value, 'ยืนยันรหัสผ่าน');
+                          final required = _requiredValidator(value, 'ยืนยันรหัสผ่าน');
                           if (required != null) return required;
-                          if (value != _passwordController.text) {
-                            return 'รหัสผ่านไม่ตรงกัน';
-                          }
+                          if (value != _passwordController.text) return 'รหัสผ่านไม่ตรงกัน';
                           return null;
                         },
                       ),
                       if (isLandlord) ...[
                         const SizedBox(height: 24),
-                        Text(
-                          'ข้อมูลหอพัก',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
+                        Text('ข้อมูลหอพัก', style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _dormitoryNameController,
-                          decoration: const InputDecoration(
-                            labelText: 'ชื่อหอพัก',
-                          ),
-                          validator: (value) =>
-                              _requiredValidator(value, 'ชื่อหอพัก'),
+                          focusNode: _dormitoryNameFocus,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(labelText: 'ชื่อหอพัก'),
+                          onFieldSubmitted: (_) => _locationFocus.requestFocus(),
+                          validator: (value) => _requiredValidator(value, 'ชื่อหอพัก'),
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _locationController,
-                          decoration:
-                              const InputDecoration(labelText: 'ที่อยู่'),
-                          validator: (value) =>
-                              _requiredValidator(value, 'ที่อยู่'),
+                          focusNode: _locationFocus,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(labelText: 'ที่อยู่'),
+                          onFieldSubmitted: (_) => _totalFloorsFocus.requestFocus(),
+                          validator: (value) => _requiredValidator(value, 'ที่อยู่'),
                         ),
                         const SizedBox(height: 16),
                         Row(
@@ -285,24 +308,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             Expanded(
                               child: TextFormField(
                                 controller: _totalFloorsController,
+                                focusNode: _totalFloorsFocus,
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'จำนวนชั้น',
-                                ),
-                                validator: (value) =>
-                                    _requiredValidator(value, 'จำนวนชั้น'),
+                                textInputAction: TextInputAction.next,
+                                decoration: const InputDecoration(labelText: 'จำนวนชั้น'),
+                                onFieldSubmitted: (_) => _roomsPerFloorFocus.requestFocus(),
+                                validator: (value) => _requiredValidator(value, 'จำนวนชั้น'),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: _roomsPerFloorController,
+                                focusNode: _roomsPerFloorFocus,
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'ห้องต่อชั้น',
-                                ),
-                                validator: (value) =>
-                                    _requiredValidator(value, 'ห้องต่อชั้น'),
+                                textInputAction: TextInputAction.next,
+                                decoration: const InputDecoration(labelText: 'ห้องต่อชั้น'),
+                                onFieldSubmitted: (_) => _baseWaterRateFocus.requestFocus(),
+                                validator: (value) => _requiredValidator(value, 'ห้องต่อชั้น'),
                               ),
                             ),
                           ],
@@ -313,32 +336,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             Expanded(
                               child: TextFormField(
                                 controller: _baseWaterRateController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
-                                decoration: const InputDecoration(
-                                  labelText: 'ค่าน้ำพื้นฐาน',
-                                ),
-                                validator: (value) =>
-                                    _requiredValidator(value, 'ค่าน้ำพื้นฐาน'),
+                                focusNode: _baseWaterRateFocus,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                textInputAction: TextInputAction.next,
+                                decoration: const InputDecoration(labelText: 'ค่าน้ำพื้นฐาน'),
+                                onFieldSubmitted: (_) => _baseElectricityRateFocus.requestFocus(),
+                                validator: (value) => _requiredValidator(value, 'ค่าน้ำพื้นฐาน'),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: _baseElectricityRateController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
-                                decoration: const InputDecoration(
-                                  labelText: 'ค่าไฟพื้นฐาน',
-                                ),
-                                validator: (value) => _requiredValidator(
-                                  value,
-                                  'ค่าไฟพื้นฐาน',
-                                ),
+                                focusNode: _baseElectricityRateFocus,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                textInputAction: TextInputAction.done,
+                                decoration: const InputDecoration(labelText: 'ค่าไฟพื้นฐาน'),
+                                onFieldSubmitted: (_) => _isLoading ? null : _submit(),
+                                validator: (value) => _requiredValidator(value, 'ค่าไฟพื้นฐาน'),
                               ),
                             ),
                           ],
