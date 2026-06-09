@@ -109,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             return 'กรอกอีเมล';
                           }
                           if (!value.contains('@')) {
-                            return 'อีเมลไม่ถูกต้อง';
+                            return 'รูปแบบอีเมลไม่ถูกต้อง';
                           }
                           return null;
                         },

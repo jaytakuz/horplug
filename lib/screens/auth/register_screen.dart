@@ -235,7 +235,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         validator: (value) {
                           final required = _requiredValidator(value, 'อีเมล');
                           if (required != null) return required;
-                          if (!value!.contains('@')) return 'อีเมลไม่ถูกต้อง';
+                          if (!value!.contains('@')) return 'รูปแบบอีเมลไม่ถูกต้อง';
                           return null;
                         },
                       ),

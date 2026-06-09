@@ -403,7 +403,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Expanded(
                     child: PrimaryButton(
-                      label: 'ส่งคำขอถึงผู้พักอาศัย',
+                      label: 'เพิ่มผู้พักอาศัย',
                       icon: Icons.person_add_alt_1,
                       onPressed: room.status == RoomStatus.vacant &&
                               _availableTenants.isNotEmpty
@@ -475,7 +475,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        'ส่งคำขอเข้าห้อง',
+                        'เพิ่มผู้พักอาศัย',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),

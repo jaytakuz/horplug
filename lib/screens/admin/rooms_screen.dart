@@ -743,7 +743,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
               ListTile(
                 leading: const Icon(Icons.person_add_alt_1,
                     color: AppColors.primary),
-                title: const Text('ส่งคำขอถึงผู้พักอาศัย'),
+                title: const Text('เพิ่มผู้พักอาศัย'),
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   _showAssignTenantDialog(context);
@@ -817,7 +817,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        'ส่งคำขอเข้าห้อง',
+                        'เพิ่มผู้พักอาศัย',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
