@@ -106,7 +106,7 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('ตอบรับคำขอไม่สำเร็จ: ${_formatErrorMessage(error)}'),
+          content: Text('ตอบคำขอไม่สำเร็จ: ${_formatErrorMessage(error)}'),
         ),
       );
     } finally {
