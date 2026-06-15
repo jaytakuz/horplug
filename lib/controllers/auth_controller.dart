@@ -13,8 +13,16 @@ class AuthController extends ChangeNotifier {
       : _authService = authService ?? AuthService() {
     _subscription = _authService.authStateChanges.listen((event) async {
       if (event.event == AuthChangeEvent.signedOut) {
+        _isRecovering = false;
         _profile = null;
         _status = AuthStatus.unauthenticated;
+        notifyListeners();
+        return;
+      }
+
+      if (event.event == AuthChangeEvent.passwordRecovery) {
+        _isRecovering = true;
+        _status = AuthStatus.authenticated;
         notifyListeners();
         return;
       }
@@ -28,6 +36,9 @@ class AuthController extends ChangeNotifier {
 
   AuthStatus _status = AuthStatus.loading;
   UserProfile? _profile;
+  bool _isRecovering = false;
+
+  bool get isRecovering => _isRecovering;
 
   AuthStatus get status => _status;
   UserProfile? get profile => _profile;
@@ -131,6 +142,16 @@ class AuthController extends ChangeNotifier {
       baseWaterRate: baseWaterRate,
       baseElectricityRate: baseElectricityRate,
     );
+    await refreshProfile();
+  }
+
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    await _authService.sendPasswordResetEmail(email: email);
+  }
+
+  Future<void> updatePassword({required String password}) async {
+    await _authService.updatePassword(password: password);
+    _isRecovering = false;
     await refreshProfile();
   }
 

@@ -125,7 +125,7 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tenant Portal'),
+        title: const Text('ผู้พักอาศัย'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),

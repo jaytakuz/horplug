@@ -46,6 +46,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   AppRole _selectedRole = AppRole.tenant;
   bool _isLoading = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
   String? _errorMessage;
 
   @override
@@ -253,9 +255,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       TextFormField(
                         controller: _passwordController,
                         focusNode: _passwordFocus,
-                        obscureText: true,
+                        obscureText: _obscurePassword,
                         textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(labelText: 'รหัสผ่าน'),
+                        decoration: InputDecoration(
+                          labelText: 'รหัสผ่าน',
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
+                          ),
+                        ),
                         onFieldSubmitted: (_) => _confirmPasswordFocus.requestFocus(),
                         validator: (value) {
                           final required = _requiredValidator(value, 'รหัสผ่าน');
@@ -268,9 +279,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       TextFormField(
                         controller: _confirmPasswordController,
                         focusNode: _confirmPasswordFocus,
-                        obscureText: true,
+                        obscureText: _obscureConfirm,
                         textInputAction: isLandlord ? TextInputAction.next : TextInputAction.done,
-                        decoration: const InputDecoration(labelText: 'ยืนยันรหัสผ่าน'),
+                        decoration: InputDecoration(
+                          labelText: 'ยืนยันรหัสผ่าน',
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscureConfirm
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined),
+                            onPressed: () => setState(
+                                () => _obscureConfirm = !_obscureConfirm),
+                          ),
+                        ),
                         onFieldSubmitted: (_) => isLandlord
                             ? _dormitoryNameFocus.requestFocus()
                             : (_isLoading ? null : _submit()),

@@ -12,8 +12,10 @@ import 'screens/admin/dashboard_screen.dart';
 import 'screens/admin/lease_screen.dart';
 import 'screens/admin/meter_screen.dart';
 import 'screens/admin/rooms_screen.dart';
+import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
+import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/splash_screen.dart';
 import 'screens/tenant/tenant_home_screen.dart';
 import 'theme/app_theme.dart';
@@ -35,6 +37,9 @@ Future<void> main() async {
   await Supabase.initialize(
     url: supabaseUrl,
     anonKey: supabaseAnonKey,
+    authOptions: const FlutterAuthClientOptions(
+      authFlowType: AuthFlowType.implicit,
+    ),
   );
 
   final authController = AuthController();
@@ -72,10 +77,16 @@ GoRouter _buildRouter(AuthController authController) {
     redirect: (context, state) {
       final location = state.uri.path;
       final isLoading = authController.status == AuthStatus.loading;
-      final isAuthPage = location == '/login' || location == '/register';
+      final isAuthPage = location == '/login' ||
+          location == '/register' ||
+          location == '/forgot-password';
 
       if (isLoading) {
         return location == '/splash' ? null : '/splash';
+      }
+
+      if (authController.isRecovering) {
+        return location == '/reset-password' ? null : '/reset-password';
       }
 
       if (!authController.isAuthenticated) {
@@ -118,6 +129,14 @@ GoRouter _buildRouter(AuthController authController) {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => const ResetPasswordScreen(),
       ),
       ShellRoute(
         builder: (context, state, child) => const AdminShell(),

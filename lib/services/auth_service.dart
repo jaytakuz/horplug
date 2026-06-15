@@ -27,6 +27,17 @@ class AuthService {
     await _client.auth.signOut();
   }
 
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    await _client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: 'horplug://reset-callback',
+    );
+  }
+
+  Future<void> updatePassword({required String password}) async {
+    await _client.auth.updateUser(UserAttributes(password: password));
+  }
+
   Future<void> signUpTenant({
     required String email,
     required String password,
