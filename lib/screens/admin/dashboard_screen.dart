@@ -6,6 +6,39 @@ import '../../services/supabase_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 
+double estimatedMonthlyRevenue(List<Room> rooms) => rooms
+    .where((r) => r.status == RoomStatus.occupied)
+    .fold<double>(0, (sum, r) => sum + r.price);
+
+int occupancyRate(List<Room> rooms) {
+  final total = rooms.length;
+  if (total == 0) return 0;
+  final occupied = rooms.where((r) => r.status == RoomStatus.occupied).length;
+  return ((occupied / total) * 100).round();
+}
+
+int occupiedCount(List<Room> rooms) =>
+    rooms.where((r) => r.status == RoomStatus.occupied).length;
+
+int vacantCount(List<Room> rooms) =>
+    rooms.where((r) => r.status == RoomStatus.vacant).length;
+
+List<String> sortedFloorNumbers(List<Room> rooms) {
+  final floors = rooms.map((r) => r.floor).toSet().toList()
+    ..sort((a, b) {
+      final ai = int.tryParse(a);
+      final bi = int.tryParse(b);
+      if (ai != null && bi != null) return ai.compareTo(bi);
+      return a.compareTo(b);
+    });
+  return floors;
+}
+
+String shortTenantName(String? fullName) {
+  if (fullName == null || fullName.trim().isEmpty) return '';
+  return fullName.trim().split(RegExp(r'\s+')).first;
+}
+
 class DashboardScreen extends StatefulWidget {
   final int dormitoryId;
 

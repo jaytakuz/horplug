@@ -6,6 +6,60 @@ import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../services/supabase_service.dart';
 
+String? validateElecReading(double? reading) {
+  if (reading == null) return null;
+  if (reading > 9999) return 'ค่าต้องอยู่ในช่วง 0-9999';
+  return null;
+}
+
+String roomStatusLabel(RoomStatus? status) {
+  switch (status) {
+    case RoomStatus.occupied:
+      return 'มีคนอยู่';
+    case RoomStatus.vacant:
+      return 'ว่าง';
+    case RoomStatus.maintenance:
+      return 'ซ่อมบำรุง';
+    default:
+      return '-';
+  }
+}
+
+bool matchesFilters({
+  required String roomNumber,
+  required String? tenantName,
+  required String? floor,
+  required RoomStatus? roomStatus,
+  required String query,
+  required String selectedFloor,
+  required String selectedRoomStatus,
+}) {
+  final q = query.trim().toLowerCase();
+  if (q.isNotEmpty) {
+    final matchRoom = roomNumber.toLowerCase().contains(q);
+    final matchName = (tenantName ?? '').toLowerCase().contains(q);
+    if (!matchRoom && !matchName) { return false; }
+  }
+  if (selectedFloor != 'ทั้งหมด' && (floor ?? '') != selectedFloor) { return false; }
+  if (selectedRoomStatus != 'ทั้งหมด' &&
+      roomStatusLabel(roomStatus) != selectedRoomStatus) { return false; }
+  return true;
+}
+
+int electricityProgress(List<ElectricityRecord> records) =>
+    records.where((r) => r.currentReading != null).length;
+
+List<WaterRecord> waterRecordsToSave(
+  List<WaterRecord> records,
+  Set<int> modifiedRoomIds,
+) =>
+    records
+        .where((r) => r.id == null || modifiedRoomIds.contains(r.roomDbId))
+        .toList();
+
+int waterProgress(List<WaterRecord> records) =>
+    records.where((r) => r.id != null).length;
+
 class MeterScreen extends StatefulWidget {
   final int dormitoryId;
   const MeterScreen({super.key, required this.dormitoryId});

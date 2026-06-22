@@ -27,6 +27,72 @@ String _formatRoomErrorMessage(Object error) {
   return normalized;
 }
 
+List<Room> filterRooms(
+  List<Room> rooms, {
+  String query = '',
+  String selectedFloor = 'ทั้งหมด',
+  String selectedFilter = 'ทั้งหมด',
+}) {
+  return rooms.where((room) {
+    final normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.isNotEmpty) {
+      final roomNumber = room.id.toLowerCase();
+      final tenantName = (room.tenantName ?? '').toLowerCase();
+      final tenantPhone = (room.phoneNumber ?? '').toLowerCase();
+      final tenantEmail = (room.tenantEmail ?? '').toLowerCase();
+
+      final matchesSearch = roomNumber.contains(normalizedQuery) ||
+          tenantName.contains(normalizedQuery) ||
+          tenantPhone.contains(normalizedQuery) ||
+          tenantEmail.contains(normalizedQuery);
+
+      if (!matchesSearch) return false;
+    }
+
+    if (selectedFloor != 'ทั้งหมด' && room.floor != selectedFloor) return false;
+
+    if (selectedFilter == 'ทั้งหมด') return true;
+    if (selectedFilter == 'มีคนอยู่') return room.status == RoomStatus.occupied;
+    if (selectedFilter == 'ว่าง') return room.status == RoomStatus.vacant;
+    if (selectedFilter == 'ซ่อมบำรุง') return room.status == RoomStatus.maintenance;
+    return true;
+  }).toList();
+}
+
+Map<String, int> roomStats(List<Room> rooms) {
+  return {
+    'occupied': rooms.where((r) => r.status == RoomStatus.occupied).length,
+    'vacant': rooms.where((r) => r.status == RoomStatus.vacant).length,
+    'maintenance': rooms.where((r) => r.status == RoomStatus.maintenance).length,
+    'total': rooms.length,
+  };
+}
+
+String? validateAddRoomInput(String roomNumber, String basePriceStr) {
+  if (roomNumber.trim().isEmpty || basePriceStr.trim().isEmpty) {
+    return 'กรุณากรอกข้อมูลที่จำเป็นทั้งหมด';
+  }
+  final parsedPrice = double.tryParse(basePriceStr);
+  if (parsedPrice == null || parsedPrice <= 0) return 'ราคาไม่ถูกต้อง';
+  return null;
+}
+
+bool canDeleteRoom(RoomStatus status) => status == RoomStatus.vacant;
+
+bool priceUnchanged(double currentPrice, String input) {
+  final trimmed = input.trim();
+  if (trimmed.isEmpty) return true;
+  final parsed = double.tryParse(trimmed);
+  if (parsed == null) return false;
+  return parsed == currentPrice;
+}
+
+String? validateUpdatedRoomNumber(String value, String currentRoomNumber) {
+  if (value.trim().isEmpty) return 'กรุณากรอกเลขห้องใหม่';
+  if (value.trim() == currentRoomNumber) return 'เลขห้องใหม่ต้องแตกต่างจากเดิม';
+  return null;
+}
+
 class RoomsScreen extends StatefulWidget {
   final int dormitoryId;
 
@@ -461,7 +527,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
           minChildSize: 0.45,
           maxChildSize: 0.95,
           builder: (context, scrollController) {
-            return Container(
+            return StatefulBuilder(
+              builder: (sheetContext, setSheetState) => Container(
               decoration: const BoxDecoration(
                 color: AppColors.card,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -503,6 +570,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       selectedValue: selectedFloor,
                       onSelected: (value) {
                         setState(() => selectedFloor = value);
+                        setSheetState(() {});
                       },
                     ),
                     _buildFilterGroup(
@@ -512,6 +580,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       selectedValue: selectedFilter,
                       onSelected: (value) {
                         setState(() => selectedFilter = value);
+                        setSheetState(() {});
                       },
                     ),
                     _buildFilterGroup(
@@ -521,6 +590,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       selectedValue: selectedPaymentStatus,
                       onSelected: (value) {
                         setState(() => selectedPaymentStatus = value);
+                        setSheetState(() {});
                       },
                       note: selectedPaymentStatus != 'ทั้งหมด'
                           ? 'ข้อมูลการชำระเงินยังไม่เชื่อมต่อกับสถานะห้องในหน้านี้'
@@ -547,8 +617,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   ],
                 ),
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );

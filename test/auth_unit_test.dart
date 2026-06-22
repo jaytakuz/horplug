@@ -104,11 +104,11 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // UTC-01: AuthController.signIn()
+  // UTC-33: AuthController.signIn()
   // -------------------------------------------------------------------------
-  group('UTC-01 AuthController.signIn()', () {
+  group('UTC-33 AuthController.signIn()', () {
     test(
-        'UTC-01-TC-01: status becomes authenticated and role is landlord '
+        'UTC-33-TC-01: status becomes authenticated and role is landlord '
         'after successful sign in with landlord credentials', () async {
       final service = FakeAuthService()..profile = landlordProfile();
       final controller = AuthController(authService: service);
@@ -124,7 +124,7 @@ void main() {
     });
 
     test(
-        'UTC-01-TC-02: status becomes authenticated and role is tenant '
+        'UTC-33-TC-02: status becomes authenticated and role is tenant '
         'after successful sign in with tenant credentials', () async {
       final service = FakeAuthService()..profile = tenantProfile();
       final controller = AuthController(authService: service);
@@ -140,7 +140,7 @@ void main() {
     });
 
     test(
-        'UTC-01-TC-03: exception is rethrown and status stays unauthenticated '
+        'UTC-33-TC-03: exception is rethrown and status stays unauthenticated '
         'when credentials are incorrect', () async {
       final service = FakeAuthService()
         ..signInError = Exception('invalid login credentials');
@@ -157,7 +157,7 @@ void main() {
     });
 
     test(
-        'UTC-01-TC-04: exception is rethrown and status stays unauthenticated '
+        'UTC-33-TC-04: exception is rethrown and status stays unauthenticated '
         'when email and password are empty', () async {
       final service = FakeAuthService()
         ..signInError = Exception('invalid login credentials');
@@ -174,7 +174,7 @@ void main() {
     });
 
     test(
-        'UTC-01-TC-05: SocketException is rethrown and status stays unauthenticated '
+        'UTC-33-TC-05: SocketException is rethrown and status stays unauthenticated '
         'when network is unavailable', () async {
       final service = FakeAuthService()
         ..signInError = const SocketException('Failed host lookup');
