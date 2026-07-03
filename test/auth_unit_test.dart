@@ -192,11 +192,11 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // UTC-02: AuthController.registerTenant()
+  // UTC-34: AuthController.registerTenant()
   // -------------------------------------------------------------------------
-  group('UTC-02 AuthController.registerTenant()', () {
+  group('UTC-34 AuthController.registerTenant()', () {
     test(
-        'UTC-02-TC-01: status becomes authenticated and role is tenant '
+        'UTC-34-TC-01: status becomes authenticated and role is tenant '
         'after successful tenant registration', () async {
       final service = FakeAuthService()
         ..profile = tenantProfile(email: 'tenant_new@test.com');
@@ -218,7 +218,7 @@ void main() {
     });
 
     test(
-        'UTC-02-TC-02: exception is rethrown and status stays unauthenticated '
+        'UTC34-TC-02: exception is rethrown and status stays unauthenticated '
         'when email is already registered', () async {
       final service = FakeAuthService()
         ..signUpTenantError = Exception('email_exists');
@@ -241,7 +241,7 @@ void main() {
     });
 
     test(
-        'UTC-02-TC-03: exception is rethrown and status stays unauthenticated '
+        'UTC-34-TC-03: exception is rethrown and status stays unauthenticated '
         'when name is already taken', () async {
       final service = FakeAuthService()
         ..signUpTenantError = Exception('database error saving new user');
@@ -264,7 +264,7 @@ void main() {
     });
 
     test(
-        'UTC-02-TC-04: SocketException is rethrown and status stays unauthenticated '
+        'UTC-34-TC-04: SocketException is rethrown and status stays unauthenticated '
         'when network is unavailable during tenant registration', () async {
       final service = FakeAuthService()
         ..signUpTenantError = const SocketException('Failed host lookup');
@@ -288,11 +288,11 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // UTC-03: AuthController.registerLandlord()
+  // UTC-35: AuthController.registerLandlord()
   // -------------------------------------------------------------------------
-  group('UTC-03 AuthController.registerLandlord()', () {
+  group('UTC-35 AuthController.registerLandlord()', () {
     test(
-        'UTC-03-TC-01: status becomes authenticated and role is landlord '
+        'UTC-35-TC-01: status becomes authenticated and role is landlord '
         'after successful landlord registration', () async {
       final service = FakeAuthService()
         ..profile = landlordProfile(email: 'owner_new@test.com');
@@ -320,7 +320,7 @@ void main() {
     });
 
     test(
-        'UTC-03-TC-02: exception is rethrown and status stays unauthenticated '
+        'UTC-35-TC-02: exception is rethrown and status stays unauthenticated '
         'when email is already registered', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = Exception('email_exists');
@@ -349,7 +349,7 @@ void main() {
     });
 
     test(
-        'UTC-03-TC-03: exception is rethrown and status stays unauthenticated '
+        'UTC-35-TC-03: exception is rethrown and status stays unauthenticated '
         'when dormitory name is already taken', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = Exception('dormitory_name_exists');
@@ -378,7 +378,7 @@ void main() {
     });
 
     test(
-        'UTC-03-TC-04: exception is rethrown and status stays unauthenticated '
+        'UTC-35-TC-04: exception is rethrown and status stays unauthenticated '
         'when name is already taken', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = Exception('database error saving new user');
@@ -407,7 +407,7 @@ void main() {
     });
 
     test(
-        'UTC-03-TC-05: SocketException is rethrown and status stays unauthenticated '
+        'UTC-35-TC-05: SocketException is rethrown and status stays unauthenticated '
         'when network is unavailable during landlord registration', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = const SocketException('Failed host lookup');

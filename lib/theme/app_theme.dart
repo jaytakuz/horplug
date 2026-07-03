@@ -56,6 +56,18 @@ ThemeData buildAppTheme() {
         borderRadius: BorderRadius.circular(16),
       ),
     ),
+    dialogTheme: const DialogThemeData(
+      backgroundColor: AppColors.card,
+      titleTextStyle: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        color: AppColors.primary,
+      ),
+      contentTextStyle: TextStyle(
+        fontSize: 14,
+        color: AppColors.primary,
+      ),
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.card,
