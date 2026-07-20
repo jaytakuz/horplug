@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:horplug/controllers/auth_controller.dart';
+import 'package:horplug/viewmodels/auth_view_model.dart';
 import 'package:horplug/models/models.dart';
 import 'package:horplug/services/auth_service.dart';
 
@@ -104,14 +104,14 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // UTC-33: AuthController.signIn()
+  // UTC-33: AuthViewModel.signIn()
   // -------------------------------------------------------------------------
-  group('UTC-33 AuthController.signIn()', () {
+  group('UTC-33 AuthViewModel.signIn()', () {
     test(
         'UTC-33-TC-01: status becomes authenticated and role is landlord '
         'after successful sign in with landlord credentials', () async {
       final service = FakeAuthService()..profile = landlordProfile();
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await controller.signIn(
@@ -127,7 +127,7 @@ void main() {
         'UTC-33-TC-02: status becomes authenticated and role is tenant '
         'after successful sign in with tenant credentials', () async {
       final service = FakeAuthService()..profile = tenantProfile();
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await controller.signIn(
@@ -144,7 +144,7 @@ void main() {
         'when credentials are incorrect', () async {
       final service = FakeAuthService()
         ..signInError = Exception('invalid login credentials');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await expectLater(
@@ -161,7 +161,7 @@ void main() {
         'when email and password are empty', () async {
       final service = FakeAuthService()
         ..signInError = Exception('invalid login credentials');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await expectLater(
@@ -178,7 +178,7 @@ void main() {
         'when network is unavailable', () async {
       final service = FakeAuthService()
         ..signInError = const SocketException('Failed host lookup');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await expectLater(
@@ -192,15 +192,15 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // UTC-34: AuthController.registerTenant()
+  // UTC-34: AuthViewModel.registerTenant()
   // -------------------------------------------------------------------------
-  group('UTC-34 AuthController.registerTenant()', () {
+  group('UTC-34 AuthViewModel.registerTenant()', () {
     test(
         'UTC-34-TC-01: status becomes authenticated and role is tenant '
         'after successful tenant registration', () async {
       final service = FakeAuthService()
         ..profile = tenantProfile(email: 'tenant_new@test.com');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await controller.registerTenant(
@@ -222,7 +222,7 @@ void main() {
         'when email is already registered', () async {
       final service = FakeAuthService()
         ..signUpTenantError = Exception('email_exists');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await expectLater(
@@ -245,7 +245,7 @@ void main() {
         'when name is already taken', () async {
       final service = FakeAuthService()
         ..signUpTenantError = Exception('database error saving new user');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await expectLater(
@@ -268,7 +268,7 @@ void main() {
         'when network is unavailable during tenant registration', () async {
       final service = FakeAuthService()
         ..signUpTenantError = const SocketException('Failed host lookup');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await expectLater(
@@ -288,15 +288,15 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // UTC-35: AuthController.registerLandlord()
+  // UTC-35: AuthViewModel.registerLandlord()
   // -------------------------------------------------------------------------
-  group('UTC-35 AuthController.registerLandlord()', () {
+  group('UTC-35 AuthViewModel.registerLandlord()', () {
     test(
         'UTC-35-TC-01: status becomes authenticated and role is landlord '
         'after successful landlord registration', () async {
       final service = FakeAuthService()
         ..profile = landlordProfile(email: 'owner_new@test.com');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await controller.registerLandlord(
@@ -324,7 +324,7 @@ void main() {
         'when email is already registered', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = Exception('email_exists');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await expectLater(
@@ -353,7 +353,7 @@ void main() {
         'when dormitory name is already taken', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = Exception('dormitory_name_exists');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await expectLater(
@@ -382,7 +382,7 @@ void main() {
         'when name is already taken', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = Exception('database error saving new user');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await expectLater(
@@ -411,7 +411,7 @@ void main() {
         'when network is unavailable during landlord registration', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = const SocketException('Failed host lookup');
-      final controller = AuthController(authService: service);
+      final controller = AuthViewModel(authService: service);
       await controller.initialize();
 
       await expectLater(
