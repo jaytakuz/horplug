@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../controllers/auth_controller.dart';
+import 'package:provider/provider.dart';
+import '../../viewmodels/admin_shell_view_model.dart';
+import '../../viewmodels/auth_view_model.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 import 'dashboard_screen.dart';
@@ -13,11 +15,30 @@ import 'lease_screen.dart';
 class AdminShell extends StatelessWidget {
   const AdminShell({super.key});
 
+  @override
+  Widget build(BuildContext context) {
+    final auth = AuthScope.of(context);
+    final dormitoryId = auth.dormitoryId ?? 0;
+    final ownerId = auth.profile?.id ?? '';
+
+    return ChangeNotifierProvider(
+      create: (_) => AdminShellViewModel(
+        dormitoryId: dormitoryId,
+        ownerId: ownerId,
+      )..refreshUnreadCount(),
+      child: const _AdminShellView(),
+    );
+  }
+}
+
+class _AdminShellView extends StatelessWidget {
+  const _AdminShellView();
+
   List<Widget> _buildPages(BuildContext context, int? dormitoryId) {
     // Return all pages always with the dormitoryId (even if it's 0)
     // This ensures IndexedStack always has consistent indices
     final id = dormitoryId ?? 0;
-    
+
     return [
       DashboardScreen(dormitoryId: id),
       RoomsScreen(dormitoryId: id),
@@ -37,7 +58,8 @@ class AdminShell extends StatelessWidget {
     return 0;
   }
 
-  void _onItemTapped(BuildContext context, int index) {
+  void _onItemTapped(
+      BuildContext context, AdminShellViewModel viewModel, int index) {
     switch (index) {
       case 0:
         context.go('/landlord');
@@ -55,6 +77,7 @@ class AdminShell extends StatelessWidget {
         context.go('/landlord/chat');
         break;
     }
+    viewModel.refreshUnreadCount();
   }
 
   String _getHeaderSubtitle(String location) {
@@ -69,6 +92,7 @@ class AdminShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = AuthScope.of(context);
+    final viewModel = context.watch<AdminShellViewModel>();
     final dormitoryId = auth.dormitoryId;
     final pages = _buildPages(context, dormitoryId);
     final location = GoRouterState.of(context).uri.path;
@@ -93,7 +117,7 @@ class AdminShell extends StatelessWidget {
           const SizedBox(width: 8),
         ],
       ),
-      body: dormitoryId == null && activeIndex == 0 
+      body: dormitoryId == null && activeIndex == 0
           ? _buildNoDormitoryView(context)
           : IndexedStack(
               index: activeIndex,
@@ -111,7 +135,7 @@ class AdminShell extends StatelessWidget {
               ),
               child: BottomNavigationBar(
                 currentIndex: bottomNavIndex,
-                onTap: (index) => _onItemTapped(context, index),
+                onTap: (index) => _onItemTapped(context, viewModel, index),
                 type: BottomNavigationBarType.fixed,
                 backgroundColor: AppColors.card,
                 selectedItemColor: AppColors.primary,
@@ -138,13 +162,13 @@ class AdminShell extends StatelessWidget {
                       activeIcon: Icon(Icons.receipt_long),
                       label: 'บิล'),
                   BottomNavigationBarItem(
-                    icon: Badge(
-                      label: const Text('2'),
-                      child: const Icon(Icons.chat_bubble_outline),
+                    icon: _ChatNavIcon(
+                      unreadCount: viewModel.unreadMessageCount,
+                      icon: Icons.chat_bubble_outline,
                     ),
-                    activeIcon: Badge(
-                      label: const Text('2'),
-                      child: const Icon(Icons.chat_bubble),
+                    activeIcon: _ChatNavIcon(
+                      unreadCount: viewModel.unreadMessageCount,
+                      icon: Icons.chat_bubble,
                     ),
                     label: 'แชท',
                   ),
@@ -170,6 +194,23 @@ class AdminShell extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ChatNavIcon extends StatelessWidget {
+  const _ChatNavIcon({required this.unreadCount, required this.icon});
+
+  final int unreadCount;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final iconWidget = Icon(icon);
+    if (unreadCount <= 0) return iconWidget;
+    return Badge(
+      label: Text('$unreadCount'),
+      child: iconWidget,
     );
   }
 }

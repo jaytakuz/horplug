@@ -327,4 +327,171 @@ class SupabaseService {
   Future<void> respondToTenantJoinRequest({required int requestId, required bool accept}) async {
     await client.rpc('respond_to_tenant_join_request', params: {'p_request_id': requestId, 'p_accept': accept});
   }
+
+  // --- ระบบแชท (ตาราง messages) ---
+
+  MessageType _mapMessageType(String? value) {
+    return MessageType.values.firstWhere(
+      (type) => type.name == value,
+      orElse: () => MessageType.text,
+    );
+  }
+
+  ChatMessage _mapMessageRow(
+    Map<String, dynamic> row, {
+    required String ownerName,
+    required String tenantName,
+  }) {
+    final isFromOwner = row['is_from_owner'] as bool;
+    return ChatMessage(
+      id: row['id'].toString(),
+      senderName: isFromOwner ? ownerName : tenantName,
+      text: row['body'] as String,
+      timestamp: DateTime.parse(row['created_at'] as String),
+      isFromOwner: isFromOwner,
+      type: _mapMessageType(row['message_type'] as String?),
+    );
+  }
+
+  /// รายการห้องที่มีผู้พักอาศัย พร้อมข้อความล่าสุดและจำนวนที่ยังไม่ได้อ่าน
+  Future<List<ChatPreview>> fetchChatPreviews({required int dormitoryId}) async {
+    final rooms = await fetchRooms(dormitoryId: dormitoryId);
+    final occupiedRooms = rooms.where((r) => r.status == RoomStatus.occupied).toList();
+    if (occupiedRooms.isEmpty) return [];
+
+    final roomIds = occupiedRooms.map((r) => r.dbId).toList();
+    final userId = client.auth.currentUser?.id;
+
+    final messagesData = await client
+        .from('messages')
+        .select('room_id, body, created_at, sender_id')
+        .inFilter('room_id', roomIds)
+        .order('created_at', ascending: false);
+    final rows = (messagesData as List).cast<Map<String, dynamic>>();
+
+    final readsData = userId == null
+        ? <Map<String, dynamic>>[]
+        : ((await client
+                .from('message_reads')
+                .select('room_id, last_read_at')
+                .inFilter('room_id', roomIds)
+                .eq('user_id', userId)) as List)
+            .cast<Map<String, dynamic>>();
+    final lastReadByRoom = {
+      for (final row in readsData)
+        row['room_id'] as int: DateTime.parse(row['last_read_at'] as String),
+    };
+
+    return occupiedRooms.map((room) {
+      final roomMessages = rows.where((row) => row['room_id'] == room.dbId).toList();
+      final lastMessage = roomMessages.isNotEmpty ? roomMessages.first['body'] as String : '';
+      final lastRead = lastReadByRoom[room.dbId];
+      final unreadCount = roomMessages.where((row) {
+        final isFromOther = (row['sender_id'] as String?) != userId;
+        final createdAt = DateTime.parse(row['created_at'] as String);
+        return isFromOther && (lastRead == null || createdAt.isAfter(lastRead));
+      }).length;
+
+      return ChatPreview(
+        roomDbId: room.dbId,
+        roomNumber: room.id,
+        tenantName: room.tenantName ?? '-',
+        lastMessage: lastMessage,
+        unreadCount: unreadCount,
+      );
+    }).toList();
+  }
+
+  /// ประวัติข้อความทั้งหมดของห้อง (ครั้งเดียว ไม่ realtime)
+  Future<List<ChatMessage>> fetchMessages({
+    required int roomId,
+    required String ownerName,
+    required String tenantName,
+  }) async {
+    final data = await client
+        .from('messages')
+        .select()
+        .eq('room_id', roomId)
+        .order('created_at', ascending: true);
+
+    return (data as List)
+        .cast<Map<String, dynamic>>()
+        .map((row) => _mapMessageRow(row, ownerName: ownerName, tenantName: tenantName))
+        .toList();
+  }
+
+  /// ติดตามข้อความของห้องแบบ realtime
+  Stream<List<ChatMessage>> watchMessages({
+    required int roomId,
+    required String ownerName,
+    required String tenantName,
+  }) {
+    return client
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('room_id', roomId)
+        .order('created_at')
+        .map((rows) => rows
+            .map((row) => _mapMessageRow(row, ownerName: ownerName, tenantName: tenantName))
+            .toList());
+  }
+
+  Future<void> sendMessage({
+    required int roomId,
+    required String senderId,
+    required bool isFromOwner,
+    required String body,
+    MessageType type = MessageType.text,
+  }) async {
+    await client.from('messages').insert({
+      'room_id': roomId,
+      'sender_id': senderId,
+      'is_from_owner': isFromOwner,
+      'body': body,
+      'message_type': type.name,
+    });
+  }
+
+  /// จำนวนข้อความที่ยังไม่ได้อ่านรวมทุกห้อง (ใช้กับ badge หน้าแดชบอร์ด)
+  Future<int> countUnreadMessages({
+    required List<int> roomIds,
+    required String userId,
+  }) async {
+    if (roomIds.isEmpty) return 0;
+
+    final messagesData = await client
+        .from('messages')
+        .select('room_id, created_at')
+        .inFilter('room_id', roomIds)
+        .neq('sender_id', userId);
+    final rows = (messagesData as List).cast<Map<String, dynamic>>();
+
+    final readsData = await client
+        .from('message_reads')
+        .select('room_id, last_read_at')
+        .inFilter('room_id', roomIds)
+        .eq('user_id', userId);
+    final lastReadByRoom = {
+      for (final row in (readsData as List).cast<Map<String, dynamic>>())
+        row['room_id'] as int: DateTime.parse(row['last_read_at'] as String),
+    };
+
+    return rows.where((row) {
+      final roomId = row['room_id'] as int;
+      final createdAt = DateTime.parse(row['created_at'] as String);
+      final lastRead = lastReadByRoom[roomId];
+      return lastRead == null || createdAt.isAfter(lastRead);
+    }).length;
+  }
+
+  Future<void> markRoomRead({required int roomId, required String userId}) async {
+    await client.from('message_reads').upsert(
+      {
+        'room_id': roomId,
+        'user_id': userId,
+        'last_read_at': DateTime.now().toUtc().toIso8601String(),
+      },
+      onConflict: 'room_id,user_id',
+    );
+  }
 }

@@ -1,159 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../controllers/auth_controller.dart';
+import 'package:provider/provider.dart';
+import '../../viewmodels/auth_view_model.dart';
 import '../../models/models.dart';
-import '../../services/supabase_service.dart';
 import '../../theme/app_theme.dart';
+import '../../viewmodels/dashboard_view_model.dart';
 import '../../widgets/reusable_widgets.dart';
 
-double estimatedMonthlyRevenue(List<Room> rooms) => rooms
-    .where((r) => r.status == RoomStatus.occupied)
-    .fold<double>(0, (sum, r) => sum + r.price);
-
-int occupancyRate(List<Room> rooms) {
-  final total = rooms.length;
-  if (total == 0) return 0;
-  final occupied = rooms.where((r) => r.status == RoomStatus.occupied).length;
-  return ((occupied / total) * 100).round();
-}
-
-int occupiedCount(List<Room> rooms) =>
-    rooms.where((r) => r.status == RoomStatus.occupied).length;
-
-int vacantCount(List<Room> rooms) =>
-    rooms.where((r) => r.status == RoomStatus.vacant).length;
-
-List<String> sortedFloorNumbers(List<Room> rooms) {
-  final floors = rooms.map((r) => r.floor).toSet().toList()
-    ..sort((a, b) {
-      final ai = int.tryParse(a);
-      final bi = int.tryParse(b);
-      if (ai != null && bi != null) return ai.compareTo(bi);
-      return a.compareTo(b);
-    });
-  return floors;
-}
-
-String shortTenantName(String? fullName) {
-  if (fullName == null || fullName.trim().isEmpty) return '';
-  return fullName.trim().split(RegExp(r'\s+')).first;
-}
-
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends StatelessWidget {
   final int dormitoryId;
 
   const DashboardScreen({super.key, required this.dormitoryId});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  Widget build(BuildContext context) {
+    final ownerId = AuthScope.of(context).profile?.id ?? '';
+    return ChangeNotifierProvider(
+      create: (_) => DashboardViewModel(
+        dormitoryId: dormitoryId,
+        ownerId: ownerId,
+      )..loadRooms(),
+      child: const _DashboardView(),
+    );
+  }
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
-  final SupabaseService _service = SupabaseService();
-  bool _isLoading = true;
-  bool _isUpdatingTenant = false;
-  String? _errorMessage;
-  List<Room> _rooms = [];
-  List<Tenant> _availableTenants = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadRooms();
-  }
-
-  Future<void> _loadRooms() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final rooms = await _service.fetchRooms(
-        dormitoryId: widget.dormitoryId,
-      );
-      final tenants = await _service.fetchAvailableTenants();
-
-      if (!mounted) return;
-
-      setState(() {
-        _rooms = rooms;
-        _availableTenants = tenants;
-        _isLoading = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-
-      setState(() {
-        _errorMessage = _formatErrorMessage(error);
-        _isLoading = false;
-      });
-    }
-  }
-
-  String _formatErrorMessage(Object error) {
-    final message = error.toString().trim();
-    final normalized = message.startsWith('Exception: ')
-        ? message.substring('Exception: '.length).trim()
-        : message;
-    final lowerCaseMessage = normalized.toLowerCase();
-
-    if (lowerCaseMessage.contains('failed host lookup') ||
-        lowerCaseMessage.contains('socketexception') ||
-        lowerCaseMessage.contains('clientexception') ||
-        lowerCaseMessage.contains('connection refused') ||
-        lowerCaseMessage.contains('network is unreachable') ||
-        lowerCaseMessage.contains('connection timed out') ||
-        lowerCaseMessage.contains('timed out')) {
-      return 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
-    }
-
-    return normalized;
-  }
+class _DashboardView extends StatelessWidget {
+  const _DashboardView();
 
   @override
   Widget build(BuildContext context) {
-    final occupiedRooms =
-        _rooms.where((room) => room.status == RoomStatus.occupied).toList();
-    final occupiedCount = occupiedRooms.length;
-    final totalRooms = _rooms.length;
-    final occupancyRate =
-        totalRooms == 0 ? 0 : ((occupiedCount / totalRooms) * 100).round();
-    final estimatedMonthlyRevenue = occupiedRooms.fold<double>(
-      0,
-      (sum, room) => sum + room.price,
-    );
-    final floorNumbers = _rooms.map((room) => room.floor).toSet().toList()
-      ..sort((a, b) {
-        final ai = int.tryParse(a);
-        final bi = int.tryParse(b);
-        if (ai != null && bi != null) return ai.compareTo(bi);
-        return a.compareTo(b);
-      });
-
-    return _buildBody(
-      context,
-      occupiedCount: occupiedCount,
-      totalRooms: totalRooms,
-      occupancyRate: occupancyRate,
-      estimatedMonthlyRevenue: estimatedMonthlyRevenue,
-      floorNumbers: floorNumbers,
-    );
+    final viewModel = context.watch<DashboardViewModel>();
+    return _buildBody(context, viewModel);
   }
 
-  Widget _buildBody(
-    BuildContext context, {
-    required int occupiedCount,
-    required int totalRooms,
-    required int occupancyRate,
-    required double estimatedMonthlyRevenue,
-    required List<String> floorNumbers,
-  }) {
-    if (_isLoading) {
+  Widget _buildBody(BuildContext context, DashboardViewModel viewModel) {
+    if (viewModel.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_errorMessage != null) {
+    if (viewModel.errorMessage != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -169,7 +55,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                _errorMessage!,
+                viewModel.errorMessage!,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -177,7 +63,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               PrimaryButton(
                 label: 'ลองใหม่',
                 icon: Icons.refresh,
-                onPressed: _loadRooms,
+                onPressed: viewModel.loadRooms,
               ),
             ],
           ),
@@ -185,8 +71,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
+    final floorNumbers = viewModel.floorNumbers;
+
     return RefreshIndicator(
-      onRefresh: _loadRooms,
+      onRefresh: viewModel.loadRooms,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
@@ -203,27 +91,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 StatCard(
                   title: 'รายได้คาดการณ์',
-                  value: '฿${estimatedMonthlyRevenue.toStringAsFixed(0)}',
+                  value: '฿${viewModel.estimatedMonthlyRevenue.toStringAsFixed(0)}',
                   subtitle: 'จากห้องที่มีผู้พักอาศัย',
                   icon: Icons.account_balance_wallet,
                   variant: BadgeVariant.primary,
                 ),
                 StatCard(
                   title: 'อัตราเข้าพัก',
-                  value: '$occupancyRate%',
-                  subtitle: '$occupiedCount/$totalRooms ห้อง',
+                  value: '${viewModel.occupancyRate}%',
+                  subtitle: '${viewModel.occupiedCount}/${viewModel.totalRooms} ห้อง',
                   icon: Icons.home,
                   variant: BadgeVariant.success,
                 ),
                 StatCard(
                   title: 'ผู้พักอาศัยทั้งหมด',
-                  value: '$occupiedCount',
+                  value: '${viewModel.occupiedCount}',
                   icon: Icons.people,
                 ),
                 StatCard(
                   title: 'ห้องว่าง',
-                  value:
-                      '${_rooms.where((room) => room.status == RoomStatus.vacant).length}',
+                  value: '${viewModel.vacantCount}',
                   icon: Icons.meeting_room_outlined,
                   variant: BadgeVariant.warning,
                 ),
@@ -267,14 +154,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ...floorNumbers.asMap().entries.map((entry) {
                       final index = entry.key;
                       final floor = entry.value;
-                      final roomsOnFloor =
-                          _rooms.where((room) => room.floor == floor).toList();
+                      final roomsOnFloor = viewModel.roomsOnFloor(floor);
 
                       return Column(
                         children: [
                           if (index > 0) const SizedBox(height: 16),
                           _buildFloorSection(
-                              context, 'ชั้น $floor', roomsOnFloor),
+                              context, viewModel, 'ชั้น $floor', roomsOnFloor),
                         ],
                       );
                     }),
@@ -314,7 +200,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   icon: Icons.chat_bubble_outline,
                   label: 'แชท',
                   color: AppColors.ring,
-                  badge: '2',
+                  badge: viewModel.unreadMessageCount > 0
+                      ? '${viewModel.unreadMessageCount}'
+                      : null,
                   onTap: () => context.go('/landlord/chat'),
                 ),
               ],
@@ -326,8 +214,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildFloorSection(
-      BuildContext context, String floorTitle, List<Room> rooms) {
+  Widget _buildFloorSection(BuildContext context, DashboardViewModel viewModel,
+      String floorTitle, List<Room> rooms) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -339,7 +227,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: rooms
               .map((room) => _RoomTile(
                     room: room,
-                    onTap: () => _showRoomDetailDialog(context, room),
+                    onTap: () =>
+                        _showRoomDetailDialog(context, viewModel, room),
                   ))
               .toList(),
         ),
@@ -347,7 +236,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showRoomDetailDialog(BuildContext context, Room room) {
+  void _showRoomDetailDialog(
+      BuildContext context, DashboardViewModel viewModel, Room room) {
     String statusText;
 
     switch (room.status) {
@@ -439,10 +329,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       label: 'เพิ่มผู้พักอาศัย',
                       icon: Icons.person_add_alt_1,
                       onPressed: room.status == RoomStatus.vacant &&
-                              _availableTenants.isNotEmpty
+                              viewModel.availableTenants.isNotEmpty
                           ? () {
                               Navigator.of(dialogContext).pop();
-                              _showAssignTenantDialog(context, room);
+                              _showAssignTenantDialog(context, viewModel, room);
                             }
                           : null,
                     ),
@@ -453,7 +343,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onPressed: room.status == RoomStatus.occupied
                           ? () {
                               Navigator.of(dialogContext).pop();
-                              _showRemoveTenantDialog(context, room);
+                              _showRemoveTenantDialog(context, viewModel, room);
                             }
                           : null,
                       icon: const Icon(Icons.person_remove_alt_1),
@@ -469,7 +359,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showAssignTenantDialog(BuildContext context, Room room) {
+  void _showAssignTenantDialog(
+      BuildContext context, DashboardViewModel viewModel, Room room) {
     if (room.status != RoomStatus.vacant) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ไม่มีห้องว่างสำหรับเพิ่มผู้พักอาศัย')),
@@ -477,7 +368,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    if (_availableTenants.isEmpty) {
+    if (viewModel.availableTenants.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ไม่พบผู้พักอาศัย')),
       );
@@ -491,8 +382,163 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
+      builder: (dialogContext) => AnimatedBuilder(
+        animation: viewModel,
+        builder: (context, _) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            backgroundColor: AppColors.card,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24)),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'เพิ่มผู้พักอาศัย',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        icon: const Icon(Icons.close, color: AppColors.primary),
+                        splashRadius: 20,
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _TenantDetailRow(label: 'ห้อง', value: room.id),
+                  _TenantDetailRow(label: 'ชั้น', value: room.floor),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: searchController,
+                    style: const TextStyle(color: AppColors.primary),
+                    decoration: const InputDecoration(
+                      labelText: 'ค้นหาผู้พักอาศัยด้วยชื่อ',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (value) {
+                      setDialogState(() {
+                        final keyword = value.trim().toLowerCase();
+                        if (keyword.isEmpty) {
+                          filteredTenants = [];
+                        } else {
+                          filteredTenants =
+                              viewModel.availableTenants.where((tenant) {
+                            return tenant.name.toLowerCase().contains(keyword);
+                          }).toList();
+                        }
+
+                        if (selectedTenant != null &&
+                            !filteredTenants.any(
+                                (tenant) => tenant.id == selectedTenant!.id)) {
+                          selectedTenant = null;
+                        }
+                      });
+                    },
+                  ),
+                  if (searchController.text.isNotEmpty &&
+                      filteredTenants.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: filteredTenants.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final tenant = filteredTenants[index];
+                          final isSelected = selectedTenant?.id == tenant.id;
+
+                          return ListTile(
+                            dense: true,
+                            title: Text(tenant.name),
+                            trailing: isSelected
+                                ? const Icon(Icons.check_circle,
+                                    color: AppColors.primary)
+                                : null,
+                            selected: isSelected,
+                            selectedTileColor: AppColors.muted,
+                            onTap: () {
+                              setDialogState(() {
+                                if (isSelected) {
+                                  selectedTenant = null;
+                                } else {
+                                  selectedTenant = tenant;
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  PrimaryButton(
+                    label: viewModel.isUpdatingTenant
+                        ? 'กำลังส่งคำขอ...'
+                        : 'ส่งคำขอ',
+                    fullWidth: true,
+                    onPressed: viewModel.isUpdatingTenant || selectedTenant == null
+                        ? null
+                        : () async {
+                            final navigator = Navigator.of(dialogContext);
+                            final landlordId = AuthScope.of(context).profile?.id;
+
+                            final result = await viewModel.createTenantJoinRequest(
+                              landlordId: landlordId,
+                              room: room,
+                              tenant: selectedTenant!,
+                            );
+
+                            if (!context.mounted) return;
+
+                            if (result.success) {
+                              navigator.pop();
+                            }
+                            messenger.showSnackBar(
+                              SnackBar(content: Text(result.message)),
+                            );
+                          },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showRemoveTenantDialog(
+      BuildContext context, DashboardViewModel viewModel, Room room) {
+    if (room.status != RoomStatus.occupied) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ไม่มีห้องที่มีผู้พักอาศัยให้ลบออก')),
+      );
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AnimatedBuilder(
+        animation: viewModel,
+        builder: (context, _) => AlertDialog(
           backgroundColor: AppColors.card,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -508,12 +554,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        'เพิ่มผู้พักอาศัย',
+                        'ลบผู้พักอาศัยออกจากห้อง',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
                     IconButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      onPressed: viewModel.isUpdatingTenant
+                          ? null
+                          : () => Navigator.of(dialogContext).pop(),
                       icon: const Icon(Icons.close, color: AppColors.primary),
                       splashRadius: 20,
                       visualDensity: VisualDensity.compact,
@@ -523,356 +571,147 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                _TenantDetailRow(label: 'ห้อง', value: room.id),
-                _TenantDetailRow(label: 'ชั้น', value: room.floor),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: searchController,
-                  style: const TextStyle(color: AppColors.primary),
-                  decoration: const InputDecoration(
-                    labelText: 'ค้นหาผู้พักอาศัยด้วยชื่อ',
-                    prefixIcon: Icon(Icons.search),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.destructiveBg,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.destructive.withValues(alpha: 0.3),
+                    ),
                   ),
-                  onChanged: (value) {
-                    setDialogState(() {
-                      final keyword = value.trim().toLowerCase();
-                      if (keyword.isEmpty) {
-                        filteredTenants = [];
-                      } else {
-                        filteredTenants = _availableTenants.where((tenant) {
-                          return tenant.name.toLowerCase().contains(keyword);
-                        }).toList();
-                      }
-
-                      if (selectedTenant != null &&
-                          !filteredTenants.any(
-                              (tenant) => tenant.id == selectedTenant!.id)) {
-                        selectedTenant = null;
-                      }
-                    });
-                  },
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2),
+                        child: Icon(
+                          Icons.warning_rounded,
+                          color: AppColors.destructive,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'คุณต้องการลบผู้พักอาศัยออกจากห้องนี้ใช่หรือไม่? ห้องนี้จะกลับเป็นห้องว่างและไม่ผูกกับผู้เช่าคนเดิมอีกต่อไป',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                color: AppColors.destructive,
+                                fontWeight: FontWeight.w500,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                if (searchController.text.isNotEmpty &&
-                    filteredTenants.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 180),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.border),
-                      borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 16),
+                Text(
+                  'รายละเอียดผู้พักอาศัยในห้อง',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.muted,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _TenantDetailRow(label: 'ห้อง', value: room.id),
+                      _TenantDetailRow(label: 'ชั้น', value: room.floor),
+                      _TenantDetailRow(
+                          label: 'ชื่อ', value: room.tenantName ?? '-'),
+                      _TenantDetailRow(
+                          label: 'เบอร์โทร', value: room.phoneNumber ?? '-'),
+                      _TenantDetailRow(
+                          label: 'อีเมล', value: room.tenantEmail ?? '-'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: viewModel.isUpdatingTenant
+                        ? null
+                        : () => Navigator.of(dialogContext).pop(),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.border),
+                      backgroundColor: AppColors.muted,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
                     ),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: filteredTenants.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final tenant = filteredTenants[index];
-                        final isSelected = selectedTenant?.id == tenant.id;
-
-                        return ListTile(
-                          dense: true,
-                          title: Text(tenant.name),
-                          trailing: isSelected
-                              ? const Icon(Icons.check_circle,
-                                  color: AppColors.primary)
-                              : null,
-                          selected: isSelected,
-                          selectedTileColor: AppColors.muted,
-                          onTap: () {
-                            setDialogState(() {
-                              if (isSelected) {
-                                selectedTenant = null;
-                              } else {
-                                selectedTenant = tenant;
-                              }
-                            });
-                          },
-                        );
-                      },
+                    child: const Text(
+                      'ยกเลิก',
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
-                ],
-                const SizedBox(height: 24),
-                PrimaryButton(
-                  label: _isUpdatingTenant ? 'กำลังส่งคำขอ...' : 'ส่งคำขอ',
-                  fullWidth: true,
-                  onPressed: _isUpdatingTenant || selectedTenant == null
-                      ? null
-                      : () async {
-                          final navigator = Navigator.of(dialogContext);
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: viewModel.isUpdatingTenant
+                        ? null
+                        : () async {
+                            final navigator = Navigator.of(dialogContext);
 
-                          setDialogState(() {
-                            _isUpdatingTenant = true;
-                          });
+                            final result =
+                                await viewModel.removeTenantFromRoom(room);
 
-                          try {
-                            final landlordId = AuthScope.of(context).profile?.id;
-                            if (landlordId == null) {
-                              throw Exception('ไม่พบข้อมูลเจ้าของหอพัก');
+                            if (!context.mounted) return;
+
+                            if (result.success) {
+                              navigator.pop();
                             }
-
-                            await _service.createTenantJoinRequest(
-                              landlordId: landlordId,
-                              dormitoryId: widget.dormitoryId,
-                              roomDbId: room.dbId,
-                              tenantId: selectedTenant!.id,
-                            );
-
-                            if (!mounted) return;
-
-                            navigator.pop();
-                            await _loadRooms();
-
-                            if (!mounted) return;
-
                             messenger.showSnackBar(
-                              SnackBar(
-                                  content: Text(
-                                      'ส่งคำขอถึง ${selectedTenant!.name} สำหรับห้อง ${room.id} แล้ว')),
+                              SnackBar(content: Text(result.message)),
                             );
-                          } catch (error) {
-                            if (!mounted) return;
-
-                            messenger.showSnackBar(
-                              SnackBar(
-                                  content: Text(
-                                      'ส่งคำขอไม่สำเร็จ: ${_formatErrorMessage(error)}')),
-                            );
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                _isUpdatingTenant = false;
-                              });
-                            }
-                          }
-                        },
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.destructive,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor:
+                          AppColors.destructive.withValues(alpha: 0.5),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    child: viewModel.isUpdatingTenant
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'ยืนยันลบผู้พักอาศัย',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                  ),
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  void _showRemoveTenantDialog(BuildContext context, Room room) {
-    if (room.status != RoomStatus.occupied) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่มีห้องที่มีผู้พักอาศัยให้ลบออก')),
-      );
-      return;
-    }
-
-    final messenger = ScaffoldMessenger.of(context);
-
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) {
-          void safeSetDialogState(VoidCallback fn) {
-            if (!dialogContext.mounted) return;
-            setDialogState(fn);
-          }
-
-          return AlertDialog(
-            backgroundColor: AppColors.card,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'ลบผู้พักอาศัยออกจากห้อง',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _isUpdatingTenant
-                            ? null
-                            : () => Navigator.of(dialogContext).pop(),
-                        icon: const Icon(Icons.close, color: AppColors.primary),
-                        splashRadius: 20,
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.destructiveBg,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: AppColors.destructive.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.only(top: 2),
-                          child: Icon(
-                            Icons.warning_rounded,
-                            color: AppColors.destructive,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'คุณต้องการลบผู้พักอาศัยออกจากห้องนี้ใช่หรือไม่? ห้องนี้จะกลับเป็นห้องว่างและไม่ผูกกับผู้เช่าคนเดิมอีกต่อไป',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: AppColors.destructive,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'รายละเอียดผู้พักอาศัยในห้อง',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.muted,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _TenantDetailRow(label: 'ห้อง', value: room.id),
-                        _TenantDetailRow(label: 'ชั้น', value: room.floor),
-                        _TenantDetailRow(
-                            label: 'ชื่อ', value: room.tenantName ?? '-'),
-                        _TenantDetailRow(
-                            label: 'เบอร์โทร', value: room.phoneNumber ?? '-'),
-                        _TenantDetailRow(
-                            label: 'อีเมล', value: room.tenantEmail ?? '-'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: _isUpdatingTenant
-                          ? null
-                          : () => Navigator.of(dialogContext).pop(),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.border),
-                        backgroundColor: AppColors.muted,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                      child: const Text(
-                        'ยกเลิก',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isUpdatingTenant
-                          ? null
-                          : () async {
-                              final navigator = Navigator.of(dialogContext);
-
-                              safeSetDialogState(() {
-                                _isUpdatingTenant = true;
-                              });
-
-                              try {
-                                await _service.removeTenantFromRoom(
-                                    roomDbId: room.dbId);
-
-                                if (!mounted) return;
-
-                                navigator.pop();
-                                await _loadRooms();
-
-                                if (!mounted) return;
-
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                      content: Text(
-                                          'ลบผู้พักอาศัยออกจากห้อง ${room.id} แล้ว')),
-                                );
-                              } catch (error) {
-                                if (!mounted) return;
-
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                      content: Text(
-                                          'ลบไม่สำเร็จ: ${_formatErrorMessage(error)}')),
-                                );
-                              } finally {
-                                if (mounted) {
-                                  safeSetDialogState(() {
-                                    _isUpdatingTenant = false;
-                                  });
-                                }
-                              }
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.destructive,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor:
-                            AppColors.destructive.withValues(alpha: 0.5),
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                      child: _isUpdatingTenant
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'ยืนยันลบผู้พักอาศัย',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
       ),
     );
   }

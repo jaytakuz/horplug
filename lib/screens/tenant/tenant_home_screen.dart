@@ -1,127 +1,54 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
-import '../../controllers/auth_controller.dart';
+import '../../viewmodels/auth_view_model.dart';
 import '../../models/models.dart';
-import '../../services/supabase_service.dart';
 import '../../theme/app_theme.dart';
+import '../../viewmodels/tenant_home_view_model.dart';
 import '../../widgets/reusable_widgets.dart';
 
-class TenantHomeScreen extends StatefulWidget {
+class TenantHomeScreen extends StatelessWidget {
   const TenantHomeScreen({super.key});
 
   @override
-  State<TenantHomeScreen> createState() => _TenantHomeScreenState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => TenantHomeViewModel()..loadPendingRequests(),
+      child: const _TenantHomeView(),
+    );
+  }
 }
 
-class _TenantHomeScreenState extends State<TenantHomeScreen> {
-  final SupabaseService _service = SupabaseService();
+class _TenantHomeView extends StatelessWidget {
+  const _TenantHomeView();
 
-  bool _isLoadingRequests = true;
-  bool _isResponding = false;
-  List<TenantJoinRequest> _pendingRequests = [];
-  String? _requestErrorMessage;
+  Future<void> _handleRespond(
+    BuildContext context,
+    TenantHomeViewModel viewModel,
+    TenantJoinRequest request,
+    bool accept,
+  ) async {
+    final result = await viewModel.respondToRequest(
+      request: request,
+      accept: accept,
+    );
+    if (!context.mounted) return;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadPendingRequests();
-  }
-
-  String _formatErrorMessage(Object error) {
-    final message = error.toString().trim();
-    final normalized = message.startsWith('Exception: ')
-        ? message.substring('Exception: '.length).trim()
-        : message;
-    final lowerCaseMessage = normalized.toLowerCase();
-
-    if (lowerCaseMessage.contains('failed host lookup') ||
-        lowerCaseMessage.contains('socketexception') ||
-        lowerCaseMessage.contains('clientexception') ||
-        lowerCaseMessage.contains('connection refused') ||
-        lowerCaseMessage.contains('network is unreachable') ||
-        lowerCaseMessage.contains('connection timed out') ||
-        lowerCaseMessage.contains('timed out')) {
-      return 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
-    }
-
-    return normalized;
-  }
-
-  Future<void> _loadPendingRequests() async {
-    setState(() {
-      _isLoadingRequests = true;
-      _requestErrorMessage = null;
-    });
-
-    try {
-      final requests = await _service.fetchPendingJoinRequestsForTenant();
-      if (!mounted) return;
-
-      setState(() {
-        _pendingRequests = requests;
-        _isLoadingRequests = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-
-      setState(() {
-        _requestErrorMessage = _formatErrorMessage(error);
-        _isLoadingRequests = false;
-      });
-    }
-  }
-
-  Future<void> _respondToRequest({
-    required TenantJoinRequest request,
-    required bool accept,
-  }) async {
-    setState(() {
-      _isResponding = true;
-    });
-
-    try {
-      await _service.respondToTenantJoinRequest(
-        requestId: request.id,
-        accept: accept,
-      );
-
-      if (!mounted) return;
-
+    if (result.success) {
       await AuthScope.of(context).refreshProfile();
-      await _loadPendingRequests();
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            accept
-                ? 'เข้าหอ ${request.dormitoryName} แล้ว'
-                : 'ปฏิเสธเข้าหอ ${request.dormitoryName} แล้ว',
-          ),
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('ตอบคำขอไม่สำเร็จ: ${_formatErrorMessage(error)}'),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isResponding = false;
-        });
-      }
     }
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = AuthScope.of(context);
     final profile = auth.profile;
+    final viewModel = context.watch<TenantHomeViewModel>();
 
     return Scaffold(
       appBar: AppBar(
@@ -138,7 +65,7 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
       body: RefreshIndicator(
         onRefresh: () async {
           await AuthScope.of(context).refreshProfile();
-          await _loadPendingRequests();
+          await viewModel.loadPendingRequests();
         },
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -159,9 +86,9 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
                 ],
               ),
             ),
-            if (_shouldShowJoinRequestSection) ...[
+            if (viewModel.shouldShowJoinRequestSection) ...[
               const SizedBox(height: 16),
-              _buildJoinRequestSection(context),
+              _buildJoinRequestSection(context, viewModel),
             ],
             const SizedBox(height: 16),
             PaperCard(
@@ -188,6 +115,23 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            PaperCard(
+              onTap: () => context.push('/tenant/chat'),
+              child: Row(
+                children: [
+                  const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'แชทกับเจ้าของหอ',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: AppColors.mutedForeground),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -207,14 +151,11 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
     );
   }
 
-  bool get _shouldShowJoinRequestSection {
-    return _isLoadingRequests ||
-        _requestErrorMessage != null ||
-        _pendingRequests.isNotEmpty;
-  }
-
-  Widget _buildJoinRequestSection(BuildContext context) {
-    if (_isLoadingRequests) {
+  Widget _buildJoinRequestSection(
+    BuildContext context,
+    TenantHomeViewModel viewModel,
+  ) {
+    if (viewModel.isLoadingRequests) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: 12),
@@ -223,7 +164,7 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
       );
     }
 
-    if (_requestErrorMessage != null) {
+    if (viewModel.requestErrorMessage != null) {
       return PaperCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,6 +185,8 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
       );
     }
 
+    final pendingRequests = viewModel.pendingRequests;
+
     return PaperCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -254,14 +197,14 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _pendingRequests.isEmpty
+            pendingRequests.isEmpty
                 ? 'ยังไม่มีคำขอเข้าหอที่รอการตอบรับ'
                 : 'ตรวจสอบและตอบรับคำขอจากเจ้าของหอพัก',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (_pendingRequests.isNotEmpty) ...[
+          if (pendingRequests.isNotEmpty) ...[
             const SizedBox(height: 16),
-            ..._pendingRequests.map(
+            ...pendingRequests.map(
               (request) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Container(
@@ -302,11 +245,13 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: _isResponding
+                              onPressed: viewModel.isResponding
                                   ? null
-                                  : () => _respondToRequest(
-                                        request: request,
-                                        accept: false,
+                                  : () => _handleRespond(
+                                        context,
+                                        viewModel,
+                                        request,
+                                        false,
                                       ),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.destructive,
@@ -320,17 +265,19 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton(
-                              onPressed: _isResponding
+                              onPressed: viewModel.isResponding
                                   ? null
-                                  : () => _respondToRequest(
-                                        request: request,
-                                        accept: true,
+                                  : () => _handleRespond(
+                                        context,
+                                        viewModel,
+                                        request,
+                                        true,
                                       ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
                               ),
-                              child: _isResponding
+                              child: viewModel.isResponding
                                   ? const SizedBox(
                                       height: 18,
                                       width: 18,
@@ -392,5 +339,3 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
-
-

@@ -8,8 +8,8 @@ import '../services/auth_service.dart';
 
 enum AuthStatus { loading, unauthenticated, authenticated }
 
-class AuthController extends ChangeNotifier {
-  AuthController({AuthService? authService})
+class AuthViewModel extends ChangeNotifier {
+  AuthViewModel({AuthService? authService})
       : _authService = authService ?? AuthService() {
     _subscription = _authService.authStateChanges.listen((event) async {
       if (event.event == AuthChangeEvent.signedOut) {
@@ -71,7 +71,7 @@ class AuthController extends ChangeNotifier {
     } catch (e) {
       _profile = null;
       _status = AuthStatus.unauthenticated;
-      debugPrint('[AuthController] refreshProfile error: $e');
+      debugPrint('[AuthViewModel] refreshProfile error: $e');
     }
 
     notifyListeners();
@@ -166,14 +166,14 @@ class AuthController extends ChangeNotifier {
   }
 }
 
-class AuthScope extends InheritedNotifier<AuthController> {
+class AuthScope extends InheritedNotifier<AuthViewModel> {
   const AuthScope({
     super.key,
-    required AuthController controller,
+    required AuthViewModel controller,
     required Widget child,
   }) : super(notifier: controller, child: child);
 
-  static AuthController of(BuildContext context) {
+  static AuthViewModel of(BuildContext context) {
     final scope =
         context.dependOnInheritedWidgetOfExactType<AuthScope>();
     assert(scope != null, 'AuthScope is missing from the widget tree.');

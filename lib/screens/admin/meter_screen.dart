@@ -1,101 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
-import '../../services/supabase_service.dart';
+import '../../viewmodels/meter_view_model.dart';
 
-String? validateElecReading(double? reading) {
-  if (reading == null) return null;
-  if (reading > 9999) return 'ค่าต้องอยู่ในช่วง 0-9999';
-  return null;
-}
-
-String roomStatusLabel(RoomStatus? status) {
-  switch (status) {
-    case RoomStatus.occupied:
-      return 'มีคนอยู่';
-    case RoomStatus.vacant:
-      return 'ว่าง';
-    case RoomStatus.maintenance:
-      return 'ซ่อมบำรุง';
-    default:
-      return '-';
-  }
-}
-
-bool matchesFilters({
-  required String roomNumber,
-  required String? tenantName,
-  required String? floor,
-  required RoomStatus? roomStatus,
-  required String query,
-  required String selectedFloor,
-  required String selectedRoomStatus,
-}) {
-  final q = query.trim().toLowerCase();
-  if (q.isNotEmpty) {
-    final matchRoom = roomNumber.toLowerCase().contains(q);
-    final matchName = (tenantName ?? '').toLowerCase().contains(q);
-    if (!matchRoom && !matchName) { return false; }
-  }
-  if (selectedFloor != 'ทั้งหมด' && (floor ?? '') != selectedFloor) { return false; }
-  if (selectedRoomStatus != 'ทั้งหมด' &&
-      roomStatusLabel(roomStatus) != selectedRoomStatus) { return false; }
-  return true;
-}
-
-int electricityProgress(List<ElectricityRecord> records) =>
-    records.where((r) => r.currentReading != null).length;
-
-List<WaterRecord> waterRecordsToSave(
-  List<WaterRecord> records,
-  Set<int> modifiedRoomIds,
-) =>
-    records
-        .where((r) => r.id == null || modifiedRoomIds.contains(r.roomDbId))
-        .toList();
-
-int waterProgress(List<WaterRecord> records) =>
-    records.where((r) => r.id != null).length;
-
-class MeterScreen extends StatefulWidget {
+class MeterScreen extends StatelessWidget {
   final int dormitoryId;
   const MeterScreen({super.key, required this.dormitoryId});
 
   @override
-  State<MeterScreen> createState() => _MeterScreenState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) =>
+          MeterViewModel(dormitoryId: dormitoryId)..loadAllRecords(),
+      child: const _MeterView(),
+    );
+  }
 }
 
-class _MeterScreenState extends State<MeterScreen>
+class _MeterView extends StatefulWidget {
+  const _MeterView();
+
+  @override
+  State<_MeterView> createState() => _MeterViewState();
+}
+
+class _MeterViewState extends State<_MeterView>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final SupabaseService _service = SupabaseService();
   final Map<String, TextEditingController> _controllers = {};
-  bool _isLoading = true;
-  bool _isSaving = false;
-  String? _errorMessage;
-  int _selectedMonth = DateTime.now().month;
-  int _selectedYear = DateTime.now().year;
   final Set<String> _expandedRooms = {};
-  final Set<int> _modifiedWaterRoomIds = {};
   final Map<String, FocusNode> _focusNodes = {};
+  int _seenReloadTick = 0;
 
-  // Search & Filter
   final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-  String _selectedFloor = 'ทั้งหมด';
-  String _selectedRoomStatus = 'ทั้งหมด';
-
-  List<ElectricityRecord> _electricityRecords = [];
-  List<WaterRecord> _waterRecords = [];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadAllRecords();
   }
 
   @override
@@ -111,103 +57,15 @@ class _MeterScreenState extends State<MeterScreen>
     super.dispose();
   }
 
-  // ---- Search & Filter helpers ----
-
-  Set<String> get _availableFloors {
-    return _electricityRecords
-        .map((r) => r.floor ?? '')
-        .where((f) => f.isNotEmpty)
-        .toSet();
-  }
-
-  int get _activeMeterFilterCount => [
-        _selectedFloor != 'ทั้งหมด',
-        _selectedRoomStatus != 'ทั้งหมด',
-      ].where((v) => v).length;
-
-  String _roomStatusLabel(RoomStatus? status) {
-    switch (status) {
-      case RoomStatus.occupied:
-        return 'มีคนอยู่';
-      case RoomStatus.vacant:
-        return 'ว่าง';
-      case RoomStatus.maintenance:
-        return 'ซ่อมบำรุง';
-      default:
-        return '-';
+  void _resetFieldControllers() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
     }
-  }
-
-  bool _matchesFilters({required String roomNumber, required String? tenantName, required String? floor, required RoomStatus? roomStatus}) {
-    final q = _searchQuery.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      final matchRoom = roomNumber.toLowerCase().contains(q);
-      final matchName = (tenantName ?? '').toLowerCase().contains(q);
-      if (!matchRoom && !matchName) return false;
+    _controllers.clear();
+    for (final node in _focusNodes.values) {
+      node.dispose();
     }
-    if (_selectedFloor != 'ทั้งหมด' && (floor ?? '') != _selectedFloor) return false;
-    if (_selectedRoomStatus != 'ทั้งหมด' && _roomStatusLabel(roomStatus) != _selectedRoomStatus) return false;
-    return true;
-  }
-
-  List<ElectricityRecord> get _filteredElecRecords => _electricityRecords
-      .where((r) => _matchesFilters(roomNumber: r.roomNumber, tenantName: r.tenantName, floor: r.floor, roomStatus: r.roomStatus))
-      .toList();
-
-  List<WaterRecord> get _filteredWaterRecords => _waterRecords
-      .where((r) => _matchesFilters(roomNumber: r.roomNumber, tenantName: r.tenantName, floor: r.floor, roomStatus: r.roomStatus))
-      .toList();
-
-  void _clearMeterFilters() {
-    setState(() {
-      _selectedFloor = 'ทั้งหมด';
-      _selectedRoomStatus = 'ทั้งหมด';
-    });
-  }
-
-  Future<void> _loadAllRecords() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final elecs = await _service.fetchElectricityRecords(
-        dormitoryId: widget.dormitoryId,
-        month: _selectedMonth,
-        year: _selectedYear,
-      );
-      final waters = await _service.fetchWaterRecords(
-        dormitoryId: widget.dormitoryId,
-        month: _selectedMonth,
-        year: _selectedYear,
-      );
-
-      // Clean up old controllers and focus nodes
-      for (final controller in _controllers.values) {
-        controller.dispose();
-      }
-      _controllers.clear();
-      for (final node in _focusNodes.values) {
-        node.dispose();
-      }
-      _focusNodes.clear();
-      _modifiedWaterRoomIds.clear();
-
-      if (!mounted) return;
-      setState(() {
-        _electricityRecords = elecs;
-        _waterRecords = waters;
-        _isLoading = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = 'ไม่สามารถโหลดข้อมูลได้: $error';
-        _isLoading = false;
-      });
-    }
+    _focusNodes.clear();
   }
 
   TextEditingController _getController(String key, String initialValue) {
@@ -221,9 +79,10 @@ class _MeterScreenState extends State<MeterScreen>
     return _focusNodes.putIfAbsent(key, () => FocusNode());
   }
 
-  void _focusNextElec(int currentIndex) {
-    if (currentIndex >= _electricityRecords.length - 1) return;
-    final nextRecord = _electricityRecords[currentIndex + 1];
+  void _focusNextElec(MeterViewModel viewModel, int currentIndex) {
+    final records = viewModel.electricityRecords;
+    if (currentIndex >= records.length - 1) return;
+    final nextRecord = records[currentIndex + 1];
     final nextKey = 'elec-${nextRecord.roomDbId}';
     setState(() => _expandedRooms.add(nextKey));
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -231,46 +90,18 @@ class _MeterScreenState extends State<MeterScreen>
     });
   }
 
-  void _focusNextWater(int currentIndex) {
-    if (currentIndex >= _waterRecords.length - 1) return;
-    final nextRecord = _waterRecords[currentIndex + 1];
+  void _focusNextWater(MeterViewModel viewModel, int currentIndex) {
+    final records = viewModel.waterRecords;
+    if (currentIndex >= records.length - 1) return;
+    final nextRecord = records[currentIndex + 1];
     final nextKey = 'water-${nextRecord.roomDbId}';
     _getFocusNode(nextKey).requestFocus();
   }
 
-  bool get _canSave {
-    if (_isLoading || _isSaving) return false;
-
-    // Any reading entered (including overflow case) is valid
-    final hasValidElec = _electricityRecords.any((r) => r.currentReading != null);
-    final hasNewOrModifiedWater = _modifiedWaterRoomIds.isNotEmpty ||
-        _waterRecords.any((r) => r.id == null);
-
-    return hasValidElec || hasNewOrModifiedWater;
-  }
-
-  Future<void> _saveAll() async {
-    if (!_canSave) return;
-
-    setState(() => _isSaving = true);
-    try {
-      await _service.saveElectricityRecords(_electricityRecords);
-
-      // Only save water records that are new (no id) or explicitly modified
-      final waterToSave = _waterRecords
-          .where((r) => r.id == null || _modifiedWaterRoomIds.contains(r.roomDbId))
-          .toList();
-      await _service.saveWaterRecords(waterToSave);
-
-      if (mounted) {
-        _showSuccessDialog();
-        await _loadAllRecords();
-      }
-    } catch (e) {
-      if (mounted) setState(() => _errorMessage = 'บันทึกไม่สำเร็จ: $e');
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
+  Future<void> _handleSave(MeterViewModel viewModel) async {
+    final success = await viewModel.saveAll();
+    if (!mounted || !success) return;
+    _showSuccessDialog();
   }
 
   void _showSuccessDialog() {
@@ -313,12 +144,19 @@ class _MeterScreenState extends State<MeterScreen>
 
   @override
   Widget build(BuildContext context) {
+    final viewModel = context.watch<MeterViewModel>();
+
+    if (viewModel.reloadTick != _seenReloadTick) {
+      _seenReloadTick = viewModel.reloadTick;
+      _resetFieldControllers();
+    }
+
     return Column(
       children: [
-        _buildHeader(),
-        _buildPeriodSelector(),
-        _buildSearchAndFilterSection(),
-        if (_errorMessage != null) _buildErrorBanner(),
+        _buildHeader(viewModel),
+        _buildPeriodSelector(viewModel),
+        _buildSearchAndFilterSection(viewModel),
+        if (viewModel.errorMessage != null) _buildErrorBanner(viewModel),
         TabBar(
           controller: _tabController,
           indicatorColor: AppColors.primary,
@@ -330,13 +168,13 @@ class _MeterScreenState extends State<MeterScreen>
           ],
         ),
         Expanded(
-          child: _isLoading
+          child: viewModel.isLoading
               ? const Center(child: CircularProgressIndicator())
               : TabBarView(
                   controller: _tabController,
                   children: [
-                    _buildElectricityList(),
-                    _buildWaterList(),
+                    _buildElectricityList(viewModel),
+                    _buildWaterList(viewModel),
                   ],
                 ),
         ),
@@ -344,7 +182,7 @@ class _MeterScreenState extends State<MeterScreen>
     );
   }
 
-  Widget _buildSearchAndFilterSection() {
+  Widget _buildSearchAndFilterSection(MeterViewModel viewModel) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
       child: PaperCard(
@@ -357,30 +195,30 @@ class _MeterScreenState extends State<MeterScreen>
                 decoration: InputDecoration(
                   hintText: 'ค้นหาห้อง หรือชื่อผู้เช่า',
                   prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchQuery.trim().isNotEmpty
+                  suffixIcon: viewModel.searchQuery.trim().isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.close),
-                          onPressed: () => setState(() {
+                          onPressed: () {
                             _searchController.clear();
-                            _searchQuery = '';
-                          }),
+                            viewModel.setSearchQuery('');
+                          },
                         )
                       : null,
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
-                onChanged: (v) => setState(() => _searchQuery = v),
+                onChanged: viewModel.setSearchQuery,
               ),
             ),
             Stack(
               clipBehavior: Clip.none,
               children: [
                 TextButton.icon(
-                  onPressed: () => _showMeterFilterSheet(context),
+                  onPressed: () => _showMeterFilterSheet(context, viewModel),
                   icon: const Icon(Icons.filter_list),
                   label: const Text('ตัวกรอง'),
                 ),
-                if (_activeMeterFilterCount > 0)
+                if (viewModel.activeFilterCount > 0)
                   Positioned(
                     right: 4,
                     top: 4,
@@ -392,7 +230,7 @@ class _MeterScreenState extends State<MeterScreen>
                         shape: BoxShape.circle,
                       ),
                       child: Text(
-                        '$_activeMeterFilterCount',
+                        '${viewModel.activeFilterCount}',
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                       ),
@@ -406,7 +244,7 @@ class _MeterScreenState extends State<MeterScreen>
     );
   }
 
-  void _showMeterFilterSheet(BuildContext context) {
+  void _showMeterFilterSheet(BuildContext context, MeterViewModel viewModel) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -421,8 +259,9 @@ class _MeterScreenState extends State<MeterScreen>
               color: AppColors.card,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            child: StatefulBuilder(
-              builder: (sheetContext, setSheetState) => SingleChildScrollView(
+            child: AnimatedBuilder(
+              animation: viewModel,
+              builder: (sheetContext, _) => SingleChildScrollView(
                 controller: scrollController,
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -445,16 +284,13 @@ class _MeterScreenState extends State<MeterScreen>
                           child: Text('ตัวกรอง', style: Theme.of(context).textTheme.titleLarge),
                         ),
                         TextButton.icon(
-                          onPressed: _activeMeterFilterCount > 0
-                              ? () {
-                                  _clearMeterFilters();
-                                  setSheetState(() {});
-                                }
+                          onPressed: viewModel.activeFilterCount > 0
+                              ? viewModel.clearFilters
                               : null,
                           icon: const Icon(Icons.filter_alt_off),
                           label: const Text('ล้างทั้งหมด'),
                           style: TextButton.styleFrom(
-                            foregroundColor: _activeMeterFilterCount > 0
+                            foregroundColor: viewModel.activeFilterCount > 0
                                 ? AppColors.primary
                                 : AppColors.mutedForeground,
                           ),
@@ -464,19 +300,17 @@ class _MeterScreenState extends State<MeterScreen>
                     const SizedBox(height: 16),
                     _buildMeterFilterGroup(
                       context,
-                      setSheetState: setSheetState,
                       title: 'ชั้น',
-                      options: ['ทั้งหมด', ..._availableFloors.toList()..sort()],
-                      selectedValue: _selectedFloor,
-                      onSelected: (v) => setState(() => _selectedFloor = v),
+                      options: ['ทั้งหมด', ...viewModel.availableFloors.toList()..sort()],
+                      selectedValue: viewModel.selectedFloor,
+                      onSelected: viewModel.setFloorFilter,
                     ),
                     _buildMeterFilterGroup(
                       context,
-                      setSheetState: setSheetState,
                       title: 'สถานะห้อง',
                       options: const ['ทั้งหมด', 'มีคนอยู่', 'ว่าง', 'ซ่อมบำรุง'],
-                      selectedValue: _selectedRoomStatus,
-                      onSelected: (v) => setState(() => _selectedRoomStatus = v),
+                      selectedValue: viewModel.selectedRoomStatus,
+                      onSelected: viewModel.setRoomStatusFilter,
                     ),
                     const SizedBox(height: 8),
                     SizedBox(
@@ -504,7 +338,6 @@ class _MeterScreenState extends State<MeterScreen>
 
   Widget _buildMeterFilterGroup(
     BuildContext context, {
-    required StateSetter setSheetState,
     required String title,
     required List<String> options,
     required String selectedValue,
@@ -523,10 +356,7 @@ class _MeterScreenState extends State<MeterScreen>
             return FilterChip(
               label: Text(opt),
               selected: isActive,
-              onSelected: (_) {
-                onSelected(opt);
-                setSheetState(() {});
-              },
+              onSelected: (_) => onSelected(opt),
               backgroundColor: AppColors.card,
               selectedColor: AppColors.primary,
               labelStyle: TextStyle(
@@ -546,7 +376,7 @@ class _MeterScreenState extends State<MeterScreen>
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(MeterViewModel viewModel) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Row(
@@ -559,7 +389,7 @@ class _MeterScreenState extends State<MeterScreen>
               Text('บันทึกมิเตอร์', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 2),
               Text(
-                'งวด ${_getMonthName(_selectedMonth)} $_selectedYear',
+                'งวด ${_getMonthName(viewModel.selectedMonth)} ${viewModel.selectedYear}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: AppColors.mutedForeground,
                     ),
@@ -567,44 +397,38 @@ class _MeterScreenState extends State<MeterScreen>
             ],
           ),
           PrimaryButton(
-            label: _isSaving ? 'กำลังบันทึก...' : 'บันทึกทั้งหมด',
+            label: viewModel.isSaving ? 'กำลังบันทึก...' : 'บันทึกทั้งหมด',
             icon: Icons.save,
-            onPressed: _canSave ? _saveAll : null,
+            onPressed: viewModel.canSave ? () => _handleSave(viewModel) : null,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPeriodSelector() {
+  Widget _buildPeriodSelector(MeterViewModel viewModel) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
           Expanded(
             child: DropdownButtonFormField<int>(
-              value: _selectedMonth,
+              initialValue: viewModel.selectedMonth,
               decoration: const InputDecoration(labelText: 'เดือน', contentPadding: EdgeInsets.symmetric(horizontal: 12)),
               items: List.generate(12, (i) => i + 1).map((month) => DropdownMenuItem(value: month, child: Text(_getMonthName(month)))).toList(),
               onChanged: (val) {
-                if (val != null) {
-                  setState(() => _selectedMonth = val);
-                  _loadAllRecords();
-                }
+                if (val != null) viewModel.setPeriod(month: val);
               },
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: DropdownButtonFormField<int>(
-              value: _selectedYear,
+              initialValue: viewModel.selectedYear,
               decoration: const InputDecoration(labelText: 'ปี', contentPadding: EdgeInsets.symmetric(horizontal: 12)),
               items: List.generate(5, (i) => 2024 + i).map((year) => DropdownMenuItem(value: year, child: Text('$year'))).toList(),
               onChanged: (val) {
-                if (val != null) {
-                  setState(() => _selectedYear = val);
-                  _loadAllRecords();
-                }
+                if (val != null) viewModel.setPeriod(year: val);
               },
             ),
           ),
@@ -613,55 +437,61 @@ class _MeterScreenState extends State<MeterScreen>
     );
   }
 
-  Widget _buildElectricityList() {
-    if (_electricityRecords.isEmpty) return _buildEmptyState('ไม่พบรายการห้องพัก');
+  Widget _buildElectricityList(MeterViewModel viewModel) {
+    if (viewModel.electricityRecords.isEmpty) {
+      return _buildEmptyState('ไม่พบรายการห้องพัก', viewModel);
+    }
 
-    final records = _filteredElecRecords;
-    final recorded = _electricityRecords.where((r) => r.currentReading != null).length;
-    final total = _electricityRecords.length;
+    final records = viewModel.filteredElectricityRecords;
+    final recorded = viewModel.electricityRecordedCount;
+    final total = viewModel.electricityRecords.length;
 
     return Column(
       children: [
         _buildProgressHeader(recorded, total),
         if (records.isEmpty)
-          _buildNoResultState()
+          _buildNoResultState(viewModel)
         else
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: records.length,
-              itemBuilder: (context, index) => _buildElecCard(records[index], index),
+              itemBuilder: (context, index) =>
+                  _buildElecCard(viewModel, records[index], index),
             ),
           ),
       ],
     );
   }
 
-  Widget _buildWaterList() {
-    if (_waterRecords.isEmpty) return _buildEmptyState('ไม่พบรายการห้องพัก');
+  Widget _buildWaterList(MeterViewModel viewModel) {
+    if (viewModel.waterRecords.isEmpty) {
+      return _buildEmptyState('ไม่พบรายการห้องพัก', viewModel);
+    }
 
-    final records = _filteredWaterRecords;
-    final saved = _waterRecords.where((r) => r.id != null).length;
-    final total = _waterRecords.length;
+    final records = viewModel.filteredWaterRecords;
+    final saved = viewModel.waterSavedCount;
+    final total = viewModel.waterRecords.length;
 
     return Column(
       children: [
         _buildProgressHeader(saved, total),
         if (records.isEmpty)
-          _buildNoResultState()
+          _buildNoResultState(viewModel)
         else
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: records.length,
-              itemBuilder: (context, index) => _buildWaterCard(records[index], index),
+              itemBuilder: (context, index) =>
+                  _buildWaterCard(viewModel, records[index], index),
             ),
           ),
       ],
     );
   }
 
-  Widget _buildNoResultState() {
+  Widget _buildNoResultState(MeterViewModel viewModel) {
     return Expanded(
       child: Center(
         child: Column(
@@ -671,10 +501,10 @@ class _MeterScreenState extends State<MeterScreen>
             const SizedBox(height: 12),
             const Text('ไม่พบห้องตามเงื่อนไขที่เลือก',
                 style: TextStyle(color: AppColors.mutedForeground)),
-            if (_activeMeterFilterCount > 0) ...[
+            if (viewModel.activeFilterCount > 0) ...[
               const SizedBox(height: 8),
               TextButton.icon(
-                onPressed: _clearMeterFilters,
+                onPressed: viewModel.clearFilters,
                 icon: const Icon(Icons.filter_alt_off, size: 16),
                 label: const Text('ล้างตัวกรอง'),
               ),
@@ -711,7 +541,7 @@ class _MeterScreenState extends State<MeterScreen>
     );
   }
 
-  Widget _buildElecCard(ElectricityRecord record, int index) {
+  Widget _buildElecCard(MeterViewModel viewModel, ElectricityRecord record, int index) {
     final key = 'elec-${record.roomDbId}';
     final controller = _getController(key, record.currentReading?.toStringAsFixed(0) ?? '');
     final focusNode = _getFocusNode(key);
@@ -836,7 +666,7 @@ class _MeterScreenState extends State<MeterScreen>
                             FilteringTextInputFormatter.digitsOnly,
                             LengthLimitingTextInputFormatter(4),
                           ],
-                          textInputAction: index < _filteredElecRecords.length - 1
+                          textInputAction: index < viewModel.filteredElectricityRecords.length - 1
                               ? TextInputAction.next
                               : TextInputAction.done,
                           decoration: InputDecoration(
@@ -849,10 +679,10 @@ class _MeterScreenState extends State<MeterScreen>
                                 ? 'ค่าต้องอยู่ในช่วง 0-9999'
                                 : null,
                           ),
-                          onChanged: (val) => setState(() => record.currentReading = double.tryParse(val)),
+                          onChanged: (val) => viewModel.setElectricityReading(record, double.tryParse(val)),
                           onSubmitted: (val) {
-                            setState(() => record.currentReading = double.tryParse(val));
-                            _focusNextElec(index);
+                            viewModel.setElectricityReading(record, double.tryParse(val));
+                            _focusNextElec(viewModel, index);
                           },
                         ),
                       ),
@@ -892,12 +722,12 @@ class _MeterScreenState extends State<MeterScreen>
     );
   }
 
-  Widget _buildWaterCard(WaterRecord record, int index) {
+  Widget _buildWaterCard(MeterViewModel viewModel, WaterRecord record, int index) {
     final key = 'water-${record.roomDbId}';
     final controller = _getController(key, record.amount.toStringAsFixed(0));
     final focusNode = _getFocusNode(key);
     final isSaved = record.id != null;
-    final isModified = _modifiedWaterRoomIds.contains(record.roomDbId);
+    final isModified = viewModel.modifiedWaterRoomIds.contains(record.roomDbId);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -944,21 +774,15 @@ class _MeterScreenState extends State<MeterScreen>
             focusNode: focusNode,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            textInputAction: index < _waterRecords.length - 1
+            textInputAction: index < viewModel.waterRecords.length - 1
                 ? TextInputAction.next
                 : TextInputAction.done,
             textAlign: TextAlign.right,
             decoration: const InputDecoration(prefixText: '฿', border: UnderlineInputBorder(), contentPadding: EdgeInsets.zero),
-            onChanged: (val) => setState(() {
-              record.amount = double.tryParse(val) ?? 0.0;
-              _modifiedWaterRoomIds.add(record.roomDbId);
-            }),
+            onChanged: (val) => viewModel.setWaterAmount(record, double.tryParse(val) ?? 0.0),
             onSubmitted: (val) {
-              setState(() {
-                record.amount = double.tryParse(val) ?? 0.0;
-                _modifiedWaterRoomIds.add(record.roomDbId);
-              });
-              _focusNextWater(index);
+              viewModel.setWaterAmount(record, double.tryParse(val) ?? 0.0);
+              _focusNextWater(viewModel, index);
             },
           ),
         ),
@@ -980,7 +804,7 @@ class _MeterScreenState extends State<MeterScreen>
     );
   }
 
-  Widget _buildEmptyState(String msg) {
+  Widget _buildEmptyState(String msg, MeterViewModel viewModel) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -990,7 +814,7 @@ class _MeterScreenState extends State<MeterScreen>
           Text(msg, style: const TextStyle(color: AppColors.mutedForeground)),
           const SizedBox(height: 16),
           TextButton.icon(
-            onPressed: _loadAllRecords,
+            onPressed: viewModel.loadAllRecords,
             icon: const Icon(Icons.refresh, size: 16),
             label: const Text('โหลดใหม่'),
           ),
@@ -999,7 +823,7 @@ class _MeterScreenState extends State<MeterScreen>
     );
   }
 
-  Widget _buildErrorBanner() {
+  Widget _buildErrorBanner(MeterViewModel viewModel) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -1008,7 +832,7 @@ class _MeterScreenState extends State<MeterScreen>
         children: [
           const Icon(Icons.error_outline, color: Colors.red, size: 20),
           const SizedBox(width: 8),
-          Expanded(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 12))),
+          Expanded(child: Text(viewModel.errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 12))),
         ],
       ),
     );

@@ -265,18 +265,18 @@ class ChatMessage {
 }
 
 class ChatPreview {
+  final int roomDbId;
   final String roomNumber;
   final String tenantName;
   final String lastMessage;
   final int unreadCount;
-  final bool hasPendingMaintenance;
 
   ChatPreview({
+    required this.roomDbId,
     required this.roomNumber,
     required this.tenantName,
     required this.lastMessage,
     required this.unreadCount,
-    this.hasPendingMaintenance = false,
   });
 }
 
