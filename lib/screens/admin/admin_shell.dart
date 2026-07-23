@@ -19,12 +19,10 @@ class AdminShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = AuthScope.of(context);
     final dormitoryId = auth.dormitoryId ?? 0;
-    final ownerId = auth.profile?.id ?? '';
 
     return ChangeNotifierProvider(
       create: (_) => AdminShellViewModel(
         dormitoryId: dormitoryId,
-        ownerId: ownerId,
       )..refreshUnreadCount(),
       child: const _AdminShellView(),
     );

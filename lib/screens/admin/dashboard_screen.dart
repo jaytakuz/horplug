@@ -14,12 +14,8 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ownerId = AuthScope.of(context).profile?.id ?? '';
     return ChangeNotifierProvider(
-      create: (_) => DashboardViewModel(
-        dormitoryId: dormitoryId,
-        ownerId: ownerId,
-      )..loadRooms(),
+      create: (_) => DashboardViewModel(dormitoryId: dormitoryId)..loadRooms(),
       child: const _DashboardView(),
     );
   }

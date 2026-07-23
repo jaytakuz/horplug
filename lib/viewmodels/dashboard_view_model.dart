@@ -7,12 +7,10 @@ import 'action_result.dart';
 class DashboardViewModel extends ChangeNotifier {
   DashboardViewModel({
     required this.dormitoryId,
-    required this.ownerId,
     SupabaseService? service,
   }) : _service = service ?? SupabaseService();
 
   final int dormitoryId;
-  final String ownerId;
   final SupabaseService _service;
 
   bool isLoading = true;
@@ -80,14 +78,8 @@ class DashboardViewModel extends ChangeNotifier {
     try {
       final fetchedRooms = await _service.fetchRooms(dormitoryId: dormitoryId);
       final tenants = await _service.fetchAvailableTenants();
-      final occupiedRoomIds = fetchedRooms
-          .where((room) => room.status == RoomStatus.occupied)
-          .map((room) => room.dbId)
-          .toList();
-      final unread = await _service.countUnreadMessages(
-        roomIds: occupiedRoomIds,
-        userId: ownerId,
-      );
+      final unread =
+          await _service.countUnreadMessages(dormitoryId: dormitoryId);
 
       rooms = fetchedRooms;
       availableTenants = tenants;

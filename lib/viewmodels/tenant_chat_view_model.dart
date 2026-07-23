@@ -13,6 +13,9 @@ class TenantChatViewModel extends ChangeNotifier {
     SupabaseService? service,
   }) : _service = service ?? SupabaseService();
 
+  static const int _pageSize = 10;
+  static const String _ownerLabel = 'เจ้าของหอ';
+
   final int roomId;
   final String tenantId;
   final String tenantName;
@@ -22,32 +25,55 @@ class TenantChatViewModel extends ChangeNotifier {
   bool isSending = false;
   String? errorMessage;
   List<ChatMessage> conversation = [];
+  bool hasMoreMessages = true;
+  bool isLoadingMore = false;
 
+  int _messageLimit = _pageSize;
   StreamSubscription<List<ChatMessage>>? _subscription;
 
   void start() {
     isLoading = true;
     errorMessage = null;
+    _messageLimit = _pageSize;
+    hasMoreMessages = true;
     notifyListeners();
 
+    _subscribeToMessages();
+    _service.markRoomRead(roomId: roomId, userId: tenantId);
+  }
+
+  void _subscribeToMessages() {
     _subscription?.cancel();
     _subscription = _service
         .watchMessages(
       roomId: roomId,
-      ownerName: 'เจ้าของหอ',
+      ownerName: _ownerLabel,
       tenantName: tenantName,
+      limit: _messageLimit,
     )
         .listen((messages) {
+      hasMoreMessages = messages.length >= _messageLimit;
       conversation = messages;
       isLoading = false;
+      isLoadingMore = false;
       notifyListeners();
     }, onError: (error) {
       errorMessage = error.toString();
       isLoading = false;
+      isLoadingMore = false;
       notifyListeners();
     });
+  }
 
-    _service.markRoomRead(roomId: roomId, userId: tenantId);
+  /// Widens the live window and re-subscribes to pull in older history.
+  void loadMoreMessages() {
+    if (isLoadingMore || !hasMoreMessages) return;
+
+    isLoadingMore = true;
+    notifyListeners();
+
+    _messageLimit += _pageSize;
+    _subscribeToMessages();
   }
 
   Future<void> sendMessage(String text) async {

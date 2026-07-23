@@ -81,7 +81,11 @@ class _TenantChatView extends StatelessWidget {
                   messages: viewModel.conversation,
                   isSending: viewModel.isSending,
                   onSend: viewModel.sendMessage,
+                  isCurrentUserOwner: false,
                   showQuickChips: false,
+                  hasMoreMessages: viewModel.hasMoreMessages,
+                  isLoadingMore: viewModel.isLoadingMore,
+                  onLoadMore: viewModel.loadMoreMessages,
                 ),
     );
   }

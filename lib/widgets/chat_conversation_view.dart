@@ -12,13 +12,29 @@ class ChatConversationView extends StatefulWidget {
     required this.messages,
     required this.isSending,
     required this.onSend,
+    required this.isCurrentUserOwner,
     this.showQuickChips = true,
+    this.hasMoreMessages = false,
+    this.isLoadingMore = false,
+    this.onLoadMore,
   });
 
   final List<ChatMessage> messages;
   final bool isSending;
   final Future<void> Function(String text) onSend;
+
+  /// Whether the person viewing this conversation is the landlord (owner).
+  /// Bubble alignment is relative to the viewer: a message shows on the
+  /// right when it was sent by whichever role is currently looking at it.
+  final bool isCurrentUserOwner;
   final bool showQuickChips;
+
+  /// Whether older history exists beyond what's currently loaded.
+  final bool hasMoreMessages;
+  final bool isLoadingMore;
+
+  /// Called when the user scrolls up to the oldest loaded message.
+  final VoidCallback? onLoadMore;
 
   @override
   State<ChatConversationView> createState() => _ChatConversationViewState();
@@ -26,11 +42,32 @@ class ChatConversationView extends StatefulWidget {
 
 class _ChatConversationViewState extends State<ChatConversationView> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+  }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
     _messageController.dispose();
     super.dispose();
+  }
+
+  // The list is `reverse: true`, so the oldest loaded message sits at
+  // maxScrollExtent — scrolling near there means "reached the top" visually.
+  void _handleScroll() {
+    if (!widget.hasMoreMessages || widget.isLoadingMore) return;
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 200) {
+      widget.onLoadMore?.call();
+    }
   }
 
   Future<void> _handleSend() async {
@@ -52,10 +89,28 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                 ),
               )
             : ListView.builder(
+                controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
                 reverse: true,
-                itemCount: widget.messages.length,
+                itemCount:
+                    widget.messages.length + (widget.hasMoreMessages ? 1 : 0),
                 itemBuilder: (context, index) {
+                  // Reverse:true renders the last index at the very top of
+                  // the screen — the correct spot for a "loading older" cue.
+                  if (index == widget.messages.length) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: widget.isLoadingMore
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    );
+                  }
                   final message = widget.messages.reversed.toList()[index];
                   return _buildChatBubble(context, message);
                 },
@@ -71,32 +126,33 @@ class _ChatConversationViewState extends State<ChatConversationView> {
   }
 
   Widget _buildChatBubble(BuildContext context, ChatMessage message) {
-    final isOwner = message.isFromOwner;
+    final isMine = message.isFromOwner == widget.isCurrentUserOwner;
+    final localTimestamp = message.timestamp.toLocal();
     return Align(
-      alignment: isOwner ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         constraints: const BoxConstraints(maxWidth: 280),
         child: Column(
           crossAxisAlignment:
-              isOwner ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isOwner ? AppColors.primary : AppColors.muted,
+                color: isMine ? AppColors.primary : AppColors.muted,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(isOwner ? 16 : 0),
-                  bottomRight: Radius.circular(isOwner ? 0 : 16),
+                  bottomLeft: Radius.circular(isMine ? 16 : 0),
+                  bottomRight: Radius.circular(isMine ? 0 : 16),
                 ),
               ),
-              child: _buildMessageContent(message),
+              child: _buildMessageContent(message, isMine),
             ),
             const SizedBox(height: 2),
             Text(
-              '${message.timestamp.hour.toString().padLeft(2, '0')}:${message.timestamp.minute.toString().padLeft(2, '0')} น.',
+              '${localTimestamp.hour.toString().padLeft(2, '0')}:${localTimestamp.minute.toString().padLeft(2, '0')} น.',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 8),
             ),
           ],
@@ -105,8 +161,8 @@ class _ChatConversationViewState extends State<ChatConversationView> {
     );
   }
 
-  Widget _buildMessageContent(ChatMessage message) {
-    final textColor = message.isFromOwner ? Colors.white : AppColors.primary;
+  Widget _buildMessageContent(ChatMessage message, bool isMine) {
+    final textColor = isMine ? Colors.white : AppColors.primary;
 
     if (message.type == MessageType.maintenanceRequest) {
       return Column(

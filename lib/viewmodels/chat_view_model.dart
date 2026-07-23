@@ -13,6 +13,8 @@ class ChatViewModel extends ChangeNotifier {
     SupabaseService? service,
   }) : _service = service ?? SupabaseService();
 
+  static const int _pageSize = 10;
+
   final int dormitoryId;
   final String ownerId;
   final String ownerName;
@@ -25,7 +27,10 @@ class ChatViewModel extends ChangeNotifier {
   ChatPreview? selectedChat;
   List<ChatMessage> conversation = [];
   bool isSending = false;
+  bool hasMoreMessages = true;
+  bool isLoadingMore = false;
 
+  int _messageLimit = _pageSize;
   StreamSubscription<List<ChatMessage>>? _messagesSubscription;
 
   Future<void> loadChatPreviews() async {
@@ -47,21 +52,42 @@ class ChatViewModel extends ChangeNotifier {
   void openChat(ChatPreview chat) {
     selectedChat = chat;
     conversation = [];
+    _messageLimit = _pageSize;
+    hasMoreMessages = true;
     notifyListeners();
 
+    _subscribeToMessages(chat.roomDbId, chat.tenantName);
+    _service.markRoomRead(roomId: chat.roomDbId, userId: ownerId);
+  }
+
+  void _subscribeToMessages(int roomId, String tenantName) {
     _messagesSubscription?.cancel();
     _messagesSubscription = _service
         .watchMessages(
-      roomId: chat.roomDbId,
+      roomId: roomId,
       ownerName: ownerName,
-      tenantName: chat.tenantName,
+      tenantName: tenantName,
+      limit: _messageLimit,
     )
         .listen((messages) {
+      // Fewer rows than requested means we've reached the start of history.
+      hasMoreMessages = messages.length >= _messageLimit;
       conversation = messages;
+      isLoadingMore = false;
       notifyListeners();
     });
+  }
 
-    _service.markRoomRead(roomId: chat.roomDbId, userId: ownerId);
+  /// Widens the live window and re-subscribes to pull in older history.
+  void loadMoreMessages() {
+    final chat = selectedChat;
+    if (chat == null || isLoadingMore || !hasMoreMessages) return;
+
+    isLoadingMore = true;
+    notifyListeners();
+
+    _messageLimit += _pageSize;
+    _subscribeToMessages(chat.roomDbId, chat.tenantName);
   }
 
   void closeChat() {

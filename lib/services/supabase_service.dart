@@ -354,86 +354,46 @@ class SupabaseService {
   }
 
   /// รายการห้องที่มีผู้พักอาศัย พร้อมข้อความล่าสุดและจำนวนที่ยังไม่ได้อ่าน
+  ///
+  /// Computed entirely server-side via the fetch_chat_previews RPC — only one
+  /// small row per room crosses the network, not full message history.
   Future<List<ChatPreview>> fetchChatPreviews({required int dormitoryId}) async {
-    final rooms = await fetchRooms(dormitoryId: dormitoryId);
-    final occupiedRooms = rooms.where((r) => r.status == RoomStatus.occupied).toList();
-    if (occupiedRooms.isEmpty) return [];
+    final data = await client
+        .rpc('fetch_chat_previews', params: {'p_dorm_id': dormitoryId});
+    final rows = (data as List).cast<Map<String, dynamic>>();
 
-    final roomIds = occupiedRooms.map((r) => r.dbId).toList();
-    final userId = client.auth.currentUser?.id;
-
-    final messagesData = await client
-        .from('messages')
-        .select('room_id, body, created_at, sender_id')
-        .inFilter('room_id', roomIds)
-        .order('created_at', ascending: false);
-    final rows = (messagesData as List).cast<Map<String, dynamic>>();
-
-    final readsData = userId == null
-        ? <Map<String, dynamic>>[]
-        : ((await client
-                .from('message_reads')
-                .select('room_id, last_read_at')
-                .inFilter('room_id', roomIds)
-                .eq('user_id', userId)) as List)
-            .cast<Map<String, dynamic>>();
-    final lastReadByRoom = {
-      for (final row in readsData)
-        row['room_id'] as int: DateTime.parse(row['last_read_at'] as String),
-    };
-
-    return occupiedRooms.map((room) {
-      final roomMessages = rows.where((row) => row['room_id'] == room.dbId).toList();
-      final lastMessage = roomMessages.isNotEmpty ? roomMessages.first['body'] as String : '';
-      final lastRead = lastReadByRoom[room.dbId];
-      final unreadCount = roomMessages.where((row) {
-        final isFromOther = (row['sender_id'] as String?) != userId;
-        final createdAt = DateTime.parse(row['created_at'] as String);
-        return isFromOther && (lastRead == null || createdAt.isAfter(lastRead));
-      }).length;
-
+    return rows.map((row) {
       return ChatPreview(
-        roomDbId: room.dbId,
-        roomNumber: room.id,
-        tenantName: room.tenantName ?? '-',
-        lastMessage: lastMessage,
-        unreadCount: unreadCount,
+        roomDbId: row['room_id'] as int,
+        roomNumber: row['room_number'] as String,
+        tenantName: row['tenant_name'] as String? ?? '-',
+        lastMessage: row['last_message'] as String? ?? '',
+        unreadCount: (row['unread_count'] as num).toInt(),
       );
     }).toList();
   }
 
-  /// ประวัติข้อความทั้งหมดของห้อง (ครั้งเดียว ไม่ realtime)
-  Future<List<ChatMessage>> fetchMessages({
-    required int roomId,
-    required String ownerName,
-    required String tenantName,
-  }) async {
-    final data = await client
-        .from('messages')
-        .select()
-        .eq('room_id', roomId)
-        .order('created_at', ascending: true);
-
-    return (data as List)
-        .cast<Map<String, dynamic>>()
-        .map((row) => _mapMessageRow(row, ownerName: ownerName, tenantName: tenantName))
-        .toList();
-  }
-
-  /// ติดตามข้อความของห้องแบบ realtime
+  /// ติดตามข้อความล่าสุด [limit] รายการของห้องแบบ realtime — เพิ่ม limit
+  /// เพื่อ "โหลดข้อความเก่าเพิ่ม" แทนที่จะดึงประวัติทั้งหมดทุกครั้ง
   Stream<List<ChatMessage>> watchMessages({
     required int roomId,
     required String ownerName,
     required String tenantName,
+    int limit = 50,
   }) {
     return client
         .from('messages')
         .stream(primaryKey: ['id'])
         .eq('room_id', roomId)
-        .order('created_at')
+        .order('created_at', ascending: false)
+        .limit(limit)
         .map((rows) => rows
             .map((row) => _mapMessageRow(row, ownerName: ownerName, tenantName: tenantName))
-            .toList());
+            .toList()
+          // `.order()`/`.limit()` apply cleanly to the initial snapshot only;
+          // realtime INSERT events get merged in arrival order, so re-sort
+          // ascending here for chronological (oldest-first) display.
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp)));
   }
 
   Future<void> sendMessage({
@@ -453,35 +413,11 @@ class SupabaseService {
   }
 
   /// จำนวนข้อความที่ยังไม่ได้อ่านรวมทุกห้อง (ใช้กับ badge หน้าแดชบอร์ด)
-  Future<int> countUnreadMessages({
-    required List<int> roomIds,
-    required String userId,
-  }) async {
-    if (roomIds.isEmpty) return 0;
-
-    final messagesData = await client
-        .from('messages')
-        .select('room_id, created_at')
-        .inFilter('room_id', roomIds)
-        .neq('sender_id', userId);
-    final rows = (messagesData as List).cast<Map<String, dynamic>>();
-
-    final readsData = await client
-        .from('message_reads')
-        .select('room_id, last_read_at')
-        .inFilter('room_id', roomIds)
-        .eq('user_id', userId);
-    final lastReadByRoom = {
-      for (final row in (readsData as List).cast<Map<String, dynamic>>())
-        row['room_id'] as int: DateTime.parse(row['last_read_at'] as String),
-    };
-
-    return rows.where((row) {
-      final roomId = row['room_id'] as int;
-      final createdAt = DateTime.parse(row['created_at'] as String);
-      final lastRead = lastReadByRoom[roomId];
-      return lastRead == null || createdAt.isAfter(lastRead);
-    }).length;
+  /// Total unread messages across a dormitory (badges) — reuses the same
+  /// server-side aggregate as fetchChatPreviews instead of a bespoke query.
+  Future<int> countUnreadMessages({required int dormitoryId}) async {
+    final previews = await fetchChatPreviews(dormitoryId: dormitoryId);
+    return previews.fold<int>(0, (sum, preview) => sum + preview.unreadCount);
   }
 
   Future<void> markRoomRead({required int roomId, required String userId}) async {
