@@ -23,6 +23,21 @@ class ChatViewModel extends ChangeNotifier {
   bool isLoadingPreviews = true;
   String? previewsErrorMessage;
   List<ChatPreview> chatPreviews = [];
+  String searchQuery = '';
+
+  List<ChatPreview> get filteredChatPreviews {
+    final query = searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return chatPreviews;
+    return chatPreviews.where((chat) {
+      return chat.roomNumber.toLowerCase().contains(query) ||
+          chat.tenantName.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  void setSearchQuery(String value) {
+    searchQuery = value;
+    notifyListeners();
+  }
 
   ChatPreview? selectedChat;
   List<ChatMessage> conversation = [];

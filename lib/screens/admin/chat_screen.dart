@@ -27,8 +27,21 @@ class ChatScreen extends StatelessWidget {
   }
 }
 
-class _ChatView extends StatelessWidget {
+class _ChatView extends StatefulWidget {
   const _ChatView();
+
+  @override
+  State<_ChatView> createState() => _ChatViewState();
+}
+
+class _ChatViewState extends State<_ChatView> {
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,73 +108,132 @@ class _ChatView extends StatelessWidget {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: viewModel.loadChatPreviews,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: viewModel.chatPreviews.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final chat = viewModel.chatPreviews[index];
-          return PaperCard(
-            onTap: () => viewModel.openChat(chat),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'ห้อง ${chat.roomNumber}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: AppColors.primary,
+    final filteredChats = viewModel.filteredChatPreviews;
+
+    return Column(
+      children: [
+        _buildSearchSection(viewModel),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: viewModel.loadChatPreviews,
+            child: filteredChats.isEmpty
+                ? _buildNoResultState(viewModel)
+                : ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filteredChats.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final chat = filteredChats[index];
+                      return PaperCard(
+                        onTap: () => viewModel.openChat(chat),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'ห้อง ${chat.roomNumber}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        chat.tenantName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 14,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    chat.lastMessage.isEmpty
+                                        ? 'ยังไม่มีข้อความ'
+                                        : chat.lastMessage,
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            chat.tenantName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        chat.lastMessage.isEmpty ? 'ยังไม่มีข้อความ' : chat.lastMessage,
-                        style: Theme.of(context).textTheme.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                            if (chat.unreadCount > 0)
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.destructive,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  '${chat.unreadCount}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                ),
-                if (chat.unreadCount > 0)
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: const BoxDecoration(
-                      color: AppColors.destructive,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      '${chat.unreadCount}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          );
-        },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchSection(ChatViewModel viewModel) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: PaperCard(
+        padding: EdgeInsets.zero,
+        child: TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'ค้นหาห้อง หรือชื่อผู้เช่า',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: viewModel.searchQuery.trim().isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      _searchController.clear();
+                      viewModel.setSearchQuery('');
+                    },
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+          onChanged: viewModel.setSearchQuery,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoResultState(ChatViewModel viewModel) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.search_off,
+                size: 40, color: AppColors.mutedForeground),
+            const SizedBox(height: 12),
+            const Text('ไม่พบห้องหรือผู้เช่าตามที่ค้นหา',
+                style: TextStyle(color: AppColors.mutedForeground)),
+          ],
+        ),
       ),
     );
   }
