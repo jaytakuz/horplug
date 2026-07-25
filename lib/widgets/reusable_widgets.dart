@@ -243,6 +243,58 @@ class MobileHeader extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
+/// A labeled row of selectable [FilterChip]s (e.g. "ชั้น: ทั้งหมด / 1 / 2 / 3").
+class FilterChipGroup extends StatelessWidget {
+  final String title;
+  final List<String> options;
+  final String selectedValue;
+  final ValueChanged<String> onSelected;
+
+  const FilterChipGroup({
+    super.key,
+    required this.title,
+    required this.options,
+    required this.selectedValue,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options.map((option) {
+            final isActive = selectedValue == option;
+            return FilterChip(
+              label: Text(option),
+              selected: isActive,
+              onSelected: (_) => onSelected(option),
+              backgroundColor: AppColors.card,
+              selectedColor: AppColors.primary,
+              labelStyle: TextStyle(
+                color: isActive ? Colors.white : AppColors.primary,
+                fontSize: 12,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+                side: BorderSide(
+                  color: isActive ? AppColors.primary : AppColors.border,
+                ),
+              ),
+              showCheckmark: false,
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
 class PrimaryButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;

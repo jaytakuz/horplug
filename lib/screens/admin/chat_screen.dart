@@ -113,6 +113,7 @@ class _ChatViewState extends State<_ChatView> {
     return Column(
       children: [
         _buildSearchSection(viewModel),
+        _buildFloorFilterSection(viewModel),
         Expanded(
           child: RefreshIndicator(
             onRefresh: viewModel.loadChatPreviews,
@@ -194,7 +195,7 @@ class _ChatViewState extends State<_ChatView> {
 
   Widget _buildSearchSection(ChatViewModel viewModel) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: PaperCard(
         padding: EdgeInsets.zero,
         child: TextField(
@@ -216,6 +217,25 @@ class _ChatViewState extends State<_ChatView> {
           ),
           onChanged: viewModel.setSearchQuery,
         ),
+      ),
+    );
+  }
+
+  Widget _buildFloorFilterSection(ChatViewModel viewModel) {
+    final floorOptions = [
+      ChatViewModel.allFloors,
+      ...viewModel.availableFloors.toList()..sort(),
+    ];
+
+    if (floorOptions.length <= 1) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
+      child: FilterChipGroup(
+        title: '',
+        options: floorOptions,
+        selectedValue: viewModel.selectedFloor,
+        onSelected: viewModel.setFloorFilter,
       ),
     );
   }

@@ -267,6 +267,7 @@ class ChatMessage {
 class ChatPreview {
   final int roomDbId;
   final String roomNumber;
+  final String floor;
   final String tenantName;
   final String lastMessage;
   final int unreadCount;
@@ -274,6 +275,7 @@ class ChatPreview {
   ChatPreview({
     required this.roomDbId,
     required this.roomNumber,
+    required this.floor,
     required this.tenantName,
     required this.lastMessage,
     required this.unreadCount,

@@ -20,22 +20,36 @@ class ChatViewModel extends ChangeNotifier {
   final String ownerName;
   final SupabaseService _service;
 
+  static const String allFloors = 'ทั้งหมด';
+
   bool isLoadingPreviews = true;
   String? previewsErrorMessage;
   List<ChatPreview> chatPreviews = [];
   String searchQuery = '';
+  String selectedFloor = allFloors;
+
+  Set<String> get availableFloors =>
+      chatPreviews.map((chat) => chat.floor).toSet();
 
   List<ChatPreview> get filteredChatPreviews {
     final query = searchQuery.trim().toLowerCase();
-    if (query.isEmpty) return chatPreviews;
     return chatPreviews.where((chat) {
-      return chat.roomNumber.toLowerCase().contains(query) ||
+      final matchesQuery = query.isEmpty ||
+          chat.roomNumber.toLowerCase().contains(query) ||
           chat.tenantName.toLowerCase().contains(query);
+      final matchesFloor =
+          selectedFloor == allFloors || chat.floor == selectedFloor;
+      return matchesQuery && matchesFloor;
     }).toList();
   }
 
   void setSearchQuery(String value) {
     searchQuery = value;
+    notifyListeners();
+  }
+
+  void setFloorFilter(String value) {
+    selectedFloor = value;
     notifyListeners();
   }
 
