@@ -86,6 +86,8 @@ class _TenantChatView extends StatelessWidget {
                   hasMoreMessages: viewModel.hasMoreMessages,
                   isLoadingMore: viewModel.isLoadingMore,
                   onLoadMore: viewModel.loadMoreMessages,
+                  onPickImage: viewModel.pickAndSendImage,
+                  isUploadingImage: viewModel.isUploadingImage,
                 ),
     );
   }

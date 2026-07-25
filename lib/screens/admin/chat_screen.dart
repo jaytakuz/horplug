@@ -274,6 +274,8 @@ class _ChatViewState extends State<_ChatView> {
             hasMoreMessages: viewModel.hasMoreMessages,
             isLoadingMore: viewModel.isLoadingMore,
             onLoadMore: viewModel.loadMoreMessages,
+            onPickImage: viewModel.pickAndSendImage,
+            isUploadingImage: viewModel.isUploadingImage,
           ),
         ),
       ],

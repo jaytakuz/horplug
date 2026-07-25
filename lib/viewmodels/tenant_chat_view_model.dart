@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
 import '../services/supabase_service.dart';
@@ -23,6 +25,7 @@ class TenantChatViewModel extends ChangeNotifier {
 
   bool isLoading = true;
   bool isSending = false;
+  bool isUploadingImage = false;
   String? errorMessage;
   List<ChatMessage> conversation = [];
   bool hasMoreMessages = true;
@@ -92,6 +95,35 @@ class TenantChatViewModel extends ChangeNotifier {
       );
     } finally {
       isSending = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> pickAndSendImage(ImageSource source) async {
+    if (isUploadingImage) return;
+
+    final picked =
+        await ImagePicker().pickImage(source: source, imageQuality: 80);
+    if (picked == null) return;
+
+    isUploadingImage = true;
+    notifyListeners();
+
+    try {
+      final path = await _service.uploadChatImage(
+        roomId: roomId,
+        imageFile: File(picked.path),
+      );
+      await _service.sendMessage(
+        roomId: roomId,
+        senderId: tenantId,
+        isFromOwner: false,
+        body: 'รูปภาพ',
+        type: MessageType.image,
+        attachmentUrl: path,
+      );
+    } finally {
+      isUploadingImage = false;
       notifyListeners();
     }
   }

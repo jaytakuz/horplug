@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
+
+const _chatImageBucket = 'chat-image';
 
 class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
@@ -341,6 +345,7 @@ class SupabaseService {
     Map<String, dynamic> row, {
     required String ownerName,
     required String tenantName,
+    String? resolvedAttachmentUrl,
   }) {
     final isFromOwner = row['is_from_owner'] as bool;
     return ChatMessage(
@@ -350,7 +355,31 @@ class SupabaseService {
       timestamp: DateTime.parse(row['created_at'] as String),
       isFromOwner: isFromOwner,
       type: _mapMessageType(row['message_type'] as String?),
+      attachmentUrl: resolvedAttachmentUrl,
     );
+  }
+
+  /// แปลง storage path ในคอลัมน์ attachment_url ให้เป็น signed URL ที่แสดงผลได้
+  /// (bucket เป็น private) — สร้างเป็น batch เดียวเพื่อลดจำนวน round-trip
+  Future<Map<String, String>> _resolveAttachmentUrls(
+      List<Map<String, dynamic>> rows) async {
+    final paths = rows
+        .map((row) => row['attachment_url'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+    if (paths.isEmpty) return {};
+
+    final signed =
+        await client.storage.from(_chatImageBucket).createSignedUrls(paths, 3600);
+
+    final result = <String, String>{};
+    for (final entry in signed) {
+      if (entry.signedUrl.isNotEmpty) {
+        result[entry.path] = entry.signedUrl;
+      }
+    }
+    return result;
   }
 
   /// รายการห้องที่มีผู้พักอาศัย พร้อมข้อความล่าสุดและจำนวนที่ยังไม่ได้อ่าน
@@ -366,6 +395,7 @@ class SupabaseService {
       return ChatPreview(
         roomDbId: row['room_id'] as int,
         roomNumber: row['room_number'] as String,
+        floor: row['floor'].toString(),
         tenantName: row['tenant_name'] as String? ?? '-',
         lastMessage: row['last_message'] as String? ?? '',
         unreadCount: (row['unread_count'] as num).toInt(),
@@ -387,13 +417,39 @@ class SupabaseService {
         .eq('room_id', roomId)
         .order('created_at', ascending: false)
         .limit(limit)
-        .map((rows) => rows
-            .map((row) => _mapMessageRow(row, ownerName: ownerName, tenantName: tenantName))
-            .toList()
-          // `.order()`/`.limit()` apply cleanly to the initial snapshot only;
-          // realtime INSERT events get merged in arrival order, so re-sort
-          // ascending here for chronological (oldest-first) display.
-          ..sort((a, b) => a.timestamp.compareTo(b.timestamp)));
+        .asyncMap((rows) async {
+      final signedUrlByPath = await _resolveAttachmentUrls(rows);
+
+      final messages = rows.map((row) {
+        final path = row['attachment_url'] as String?;
+        return _mapMessageRow(
+          row,
+          ownerName: ownerName,
+          tenantName: tenantName,
+          resolvedAttachmentUrl: path != null ? signedUrlByPath[path] : null,
+        );
+      }).toList();
+
+      // `.order()`/`.limit()` apply cleanly to the initial snapshot only;
+      // realtime INSERT events get merged in arrival order, so re-sort
+      // ascending here for chronological (oldest-first) display.
+      messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      return messages;
+    });
+  }
+
+  /// อัปโหลดรูปภาพไปยัง Storage bucket ส่วนตัว คืนค่าเป็น storage path
+  /// (ไม่ใช่ URL) — path นี้จะถูกเก็บใน messages.attachment_url แล้วแปลงเป็น
+  /// signed URL ตอนอ่านข้อความ เพราะ bucket เป็น private
+  Future<String> uploadChatImage({
+    required int roomId,
+    required File imageFile,
+  }) async {
+    final extension = imageFile.path.split('.').last;
+    final path =
+        '$roomId/${DateTime.now().microsecondsSinceEpoch}.$extension';
+    await client.storage.from(_chatImageBucket).upload(path, imageFile);
+    return path;
   }
 
   Future<void> sendMessage({
@@ -402,6 +458,7 @@ class SupabaseService {
     required bool isFromOwner,
     required String body,
     MessageType type = MessageType.text,
+    String? attachmentUrl,
   }) async {
     await client.from('messages').insert({
       'room_id': roomId,
@@ -409,6 +466,7 @@ class SupabaseService {
       'is_from_owner': isFromOwner,
       'body': body,
       'message_type': type.name,
+      if (attachmentUrl != null) 'attachment_url': attachmentUrl,
     });
   }
 

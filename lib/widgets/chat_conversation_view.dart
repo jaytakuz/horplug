@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
 import '../theme/app_theme.dart';
@@ -17,6 +18,8 @@ class ChatConversationView extends StatefulWidget {
     this.hasMoreMessages = false,
     this.isLoadingMore = false,
     this.onLoadMore,
+    this.onPickImage,
+    this.isUploadingImage = false,
   });
 
   final List<ChatMessage> messages;
@@ -35,6 +38,11 @@ class ChatConversationView extends StatefulWidget {
 
   /// Called when the user scrolls up to the oldest loaded message.
   final VoidCallback? onLoadMore;
+
+  /// Called with the chosen source when the user picks an image to send.
+  /// Omit to hide the attachment button entirely.
+  final Future<void> Function(ImageSource source)? onPickImage;
+  final bool isUploadingImage;
 
   @override
   State<ChatConversationView> createState() => _ChatConversationViewState();
@@ -75,6 +83,71 @@ class _ChatConversationViewState extends State<ChatConversationView> {
     if (text.trim().isEmpty) return;
     _messageController.clear();
     await widget.onSend(text);
+  }
+
+  Future<void> _handlePickImage() async {
+    final onPickImage = widget.onPickImage;
+    if (onPickImage == null || widget.isUploadingImage) return;
+
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: SizedBox.shrink(),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined,
+                    color: AppColors.primary),
+                title: const Text('เลือกจากคลังภาพ'),
+                onTap: () =>
+                    Navigator.of(sheetContext).pop(ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined,
+                    color: AppColors.primary),
+                title: const Text('ถ่ายรูป'),
+                onTap: () =>
+                    Navigator.of(sheetContext).pop(ImageSource.camera),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (source != null) {
+      await onPickImage(source);
+    }
+  }
+
+  void _openFullScreenImage(String url) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              child: Image.network(url, fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -128,6 +201,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
   Widget _buildChatBubble(BuildContext context, ChatMessage message) {
     final isMine = message.isFromOwner == widget.isCurrentUserOwner;
     final localTimestamp = message.timestamp.toLocal();
+    final isImage = message.type == MessageType.image;
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -138,7 +212,8 @@ class _ChatConversationViewState extends State<ChatConversationView> {
               isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: isImage ? EdgeInsets.zero : const EdgeInsets.all(12),
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: isMine ? AppColors.primary : AppColors.muted,
                 borderRadius: BorderRadius.only(
@@ -163,6 +238,36 @@ class _ChatConversationViewState extends State<ChatConversationView> {
 
   Widget _buildMessageContent(ChatMessage message, bool isMine) {
     final textColor = isMine ? Colors.white : AppColors.primary;
+
+    if (message.type == MessageType.image && message.attachmentUrl != null) {
+      final url = message.attachmentUrl!;
+      return GestureDetector(
+        onTap: () => _openFullScreenImage(url),
+        child: Image.network(
+          url,
+          width: 220,
+          height: 220,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) return child;
+            return const SizedBox(
+              width: 220,
+              height: 220,
+              child: Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) => Container(
+            width: 220,
+            height: 220,
+            color: AppColors.muted,
+            child: const Icon(Icons.broken_image_outlined,
+                color: AppColors.mutedForeground),
+          ),
+        ),
+      );
+    }
 
     if (message.type == MessageType.maintenanceRequest) {
       return Column(
@@ -225,6 +330,17 @@ class _ChatConversationViewState extends State<ChatConversationView> {
           ],
           Row(
             children: [
+              if (widget.onPickImage != null)
+                IconButton(
+                  icon: widget.isUploadingImage
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.image_outlined, color: AppColors.primary),
+                  onPressed: widget.isUploadingImage ? null : _handlePickImage,
+                ),
               Expanded(
                 child: TextField(
                   controller: _messageController,

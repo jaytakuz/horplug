@@ -6,7 +6,8 @@ enum MessageType {
   text,
   maintenanceRequest,
   parcelNotification,
-  maintenanceUpdate
+  maintenanceUpdate,
+  image,
 }
 
 enum AppRole { landlord, tenant }
@@ -253,6 +254,7 @@ class ChatMessage {
   final DateTime timestamp;
   final bool isFromOwner;
   final MessageType type;
+  final String? attachmentUrl;
 
   ChatMessage({
     required this.id,
@@ -261,6 +263,7 @@ class ChatMessage {
     required this.timestamp,
     required this.isFromOwner,
     this.type = MessageType.text,
+    this.attachmentUrl,
   });
 }
 
