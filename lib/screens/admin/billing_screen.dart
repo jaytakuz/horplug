@@ -229,6 +229,8 @@ class _InvoiceCard extends StatelessWidget {
           _buildItemRow('🏠 ค่าห้อง', '฿${invoice.roomPrice.toStringAsFixed(0)}'),
           _buildItemRow('⚡ ไฟ ${invoice.electricityUnits.toStringAsFixed(1)} หน่วย', '฿${invoice.electricityCost.toStringAsFixed(0)}'),
           _buildItemRow('💧 ค่าน้ำ', '฿${invoice.waterCost.toStringAsFixed(0)}'),
+          if (invoice.cleaningFee > 0)
+            _buildItemRow('🧹 ค่าทำความสะอาด', '฿${invoice.cleaningFee.toStringAsFixed(0)}'),
           const Divider(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

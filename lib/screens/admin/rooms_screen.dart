@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../../viewmodels/action_result.dart';
 import '../../viewmodels/rooms_view_model.dart';
 import '../../widgets/reusable_widgets.dart';
+import 'maintenance_history_screen.dart';
 
 class RoomsScreen extends StatelessWidget {
   final int dormitoryId;
@@ -17,7 +18,9 @@ class RoomsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => RoomsViewModel(dormitoryId: dormitoryId)..loadData(),
+      create: (_) => RoomsViewModel(dormitoryId: dormitoryId)
+        ..loadData()
+        ..startWatchingRoomChanges(),
       child: const _RoomsView(),
     );
   }
@@ -1531,6 +1534,8 @@ class _RoomCard extends StatelessWidget {
                       _showRoomStatusDialog(context);
                     } else if (value == 'price') {
                       _showEditRoomPriceDialog(context);
+                    } else if (value == 'maintenance') {
+                      _showMaintenanceHistory(context);
                     }
                   },
                   itemBuilder: (BuildContext context) => [
@@ -1564,6 +1569,17 @@ class _RoomCard extends StatelessWidget {
                               size: 18, color: AppColors.primary),
                           SizedBox(width: 10),
                           Text('แก้ไขราคา'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'maintenance',
+                      child: Row(
+                        children: [
+                          Icon(Icons.build_outlined,
+                              size: 18, color: AppColors.primary),
+                          SizedBox(width: 10),
+                          Text('ประวัติการแจ้งซ่อม'),
                         ],
                       ),
                     ),
@@ -2042,6 +2058,17 @@ class _RoomCard extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final result = await viewModel.updateRoomStatus(room, newStatus);
     messenger.showSnackBar(SnackBar(content: Text(result.message)));
+  }
+
+  void _showMaintenanceHistory(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MaintenanceHistoryScreen(
+          roomId: room.dbId,
+          roomNumber: room.id,
+        ),
+      ),
+    );
   }
 
   Widget _detailRow(String label, String value) {

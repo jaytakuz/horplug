@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/chat_view_model.dart';
 import '../../widgets/chat_conversation_view.dart';
+import 'maintenance_history_screen.dart';
 
 class ChatScreen extends StatelessWidget {
   const ChatScreen({super.key});
@@ -276,6 +277,19 @@ class _ChatViewState extends State<_ChatView> {
             onLoadMore: viewModel.loadMoreMessages,
             onPickImage: viewModel.pickAndSendImage,
             isUploadingImage: viewModel.isUploadingImage,
+            onUpdateMaintenanceStatus: (requestId, status, requestType) =>
+                viewModel.updateMaintenanceStatus(
+                    requestId: requestId,
+                    status: status,
+                    requestType: requestType),
+            onViewMaintenanceHistory: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => MaintenanceHistoryScreen(
+                  roomId: chat.roomDbId,
+                  roomNumber: chat.roomNumber,
+                ),
+              ),
+            ),
           ),
         ),
       ],

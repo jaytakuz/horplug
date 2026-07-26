@@ -8,6 +8,8 @@ enum MessageType {
   parcelNotification,
   maintenanceUpdate,
   image,
+  cleaningRequest,
+  cleaningUpdate,
 }
 
 enum AppRole { landlord, tenant }
@@ -129,6 +131,7 @@ class Invoice {
   final double roomPrice;
   final double waterCost;
   final double electricityCost;
+  final double cleaningFee;
   final InvoiceStatus status;
   final DateTime date;
   final bool hasSlip;
@@ -142,12 +145,13 @@ class Invoice {
     required this.roomPrice,
     required this.waterCost,
     required this.electricityCost,
+    this.cleaningFee = 0,
     required this.status,
     required this.date,
     this.hasSlip = false,
   });
 
-  double get total => roomPrice + waterCost + electricityCost;
+  double get total => roomPrice + waterCost + electricityCost + cleaningFee;
 }
 
 enum UtilityType { electricity, water }
@@ -255,6 +259,7 @@ class ChatMessage {
   final bool isFromOwner;
   final MessageType type;
   final String? attachmentUrl;
+  final int? maintenanceRequestId;
 
   ChatMessage({
     required this.id,
@@ -264,6 +269,7 @@ class ChatMessage {
     required this.isFromOwner,
     this.type = MessageType.text,
     this.attachmentUrl,
+    this.maintenanceRequestId,
   });
 }
 
@@ -308,5 +314,39 @@ class TenantJoinRequest {
     this.roomNumber,
     required this.status,
     required this.createdAt,
+  });
+}
+
+enum MaintenanceRequestType { repair, cleaning }
+
+enum MaintenanceStatus { pending, inProgress, completed }
+
+class MaintenanceRequest {
+  final int id;
+  final int roomId;
+  final String roomNumber;
+  final String tenantId;
+  final String tenantName;
+  final MaintenanceRequestType requestType;
+  final String description;
+  final String? imageUrl;
+  final MaintenanceStatus status;
+  final DateTime requestedAt;
+  final DateTime? completedAt;
+  final double cleaningFee;
+
+  const MaintenanceRequest({
+    required this.id,
+    required this.roomId,
+    required this.roomNumber,
+    required this.tenantId,
+    required this.tenantName,
+    required this.requestType,
+    required this.description,
+    this.imageUrl,
+    required this.status,
+    required this.requestedAt,
+    this.completedAt,
+    this.cleaningFee = 0,
   });
 }

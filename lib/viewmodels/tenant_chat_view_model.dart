@@ -26,6 +26,7 @@ class TenantChatViewModel extends ChangeNotifier {
   bool isLoading = true;
   bool isSending = false;
   bool isUploadingImage = false;
+  bool isRequestingMaintenance = false;
   String? errorMessage;
   List<ChatMessage> conversation = [];
   bool hasMoreMessages = true;
@@ -124,6 +125,27 @@ class TenantChatViewModel extends ChangeNotifier {
       );
     } finally {
       isUploadingImage = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> requestMaintenance(
+      String description, MaintenanceRequestType type) async {
+    final trimmed = description.trim();
+    if (trimmed.isEmpty || isRequestingMaintenance) return;
+
+    isRequestingMaintenance = true;
+    notifyListeners();
+
+    try {
+      await _service.createMaintenanceRequest(
+        roomId: roomId,
+        tenantId: tenantId,
+        description: trimmed,
+        requestType: type,
+      );
+    } finally {
+      isRequestingMaintenance = false;
       notifyListeners();
     }
   }

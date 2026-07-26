@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
@@ -35,6 +37,8 @@ class RoomsViewModel extends ChangeNotifier {
   List<Room> rooms = [];
   List<Tenant> availableTenants = [];
   Set<String> floors = {};
+
+  StreamSubscription<List<Map<String, dynamic>>>? _roomChangesSubscription;
 
   String selectedFilter = 'ทั้งหมด';
   String selectedFloor = 'ทั้งหมด';
@@ -154,6 +158,23 @@ class RoomsViewModel extends ChangeNotifier {
       isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Screens like RoomsScreen stay mounted (IndexedStack) across tab
+  /// switches, so room changes made elsewhere (e.g. the chat/maintenance
+  /// flow updating a room's status) wouldn't otherwise be picked up. This
+  /// listens for any change to this dormitory's rooms and reloads.
+  void startWatchingRoomChanges() {
+    _roomChangesSubscription?.cancel();
+    _roomChangesSubscription = _service
+        .watchRoomChanges(dormitoryId: dormitoryId)
+        .listen((_) => loadData());
+  }
+
+  @override
+  void dispose() {
+    _roomChangesSubscription?.cancel();
+    super.dispose();
   }
 
   Future<ActionResult> createTenantJoinRequest({

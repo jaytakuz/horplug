@@ -59,6 +59,7 @@ class ChatViewModel extends ChangeNotifier {
   List<ChatMessage> conversation = [];
   bool isSending = false;
   bool isUploadingImage = false;
+  bool isUpdatingMaintenance = false;
   bool hasMoreMessages = true;
   bool isLoadingMore = false;
 
@@ -178,6 +179,31 @@ class ChatViewModel extends ChangeNotifier {
       );
     } finally {
       isUploadingImage = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateMaintenanceStatus({
+    required int requestId,
+    required MaintenanceStatus status,
+    required MaintenanceRequestType requestType,
+  }) async {
+    final chat = selectedChat;
+    if (chat == null || isUpdatingMaintenance) return;
+
+    isUpdatingMaintenance = true;
+    notifyListeners();
+
+    try {
+      await _service.updateMaintenanceStatus(
+        requestId: requestId,
+        roomId: chat.roomDbId,
+        landlordId: ownerId,
+        status: status,
+        requestType: requestType,
+      );
+    } finally {
+      isUpdatingMaintenance = false;
       notifyListeners();
     }
   }
