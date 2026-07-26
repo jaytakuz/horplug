@@ -20,7 +20,6 @@ class ChatConversationView extends StatefulWidget {
     this.onRequestMaintenance,
     this.isRequestingMaintenance = false,
     this.onUpdateMaintenanceStatus,
-    this.onViewMaintenanceHistory,
   });
 
   final List<ChatMessage> messages;
@@ -56,10 +55,6 @@ class ChatConversationView extends StatefulWidget {
   final Future<void> Function(
       int requestId, MaintenanceStatus status, MaintenanceRequestType type)?
       onUpdateMaintenanceStatus;
-
-  /// Landlord-only: called when they tap the history icon to view this
-  /// room's maintenance/cleaning request history. Omit to hide the icon.
-  final VoidCallback? onViewMaintenanceHistory;
 
   @override
   State<ChatConversationView> createState() => _ChatConversationViewState();
@@ -480,8 +475,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (widget.onPickImage != null ||
-              widget.onRequestMaintenance != null ||
-              widget.onViewMaintenanceHistory != null) ...[
+              widget.onRequestMaintenance != null) ...[
             Row(
               children: [
                 if (widget.onPickImage != null)
@@ -528,12 +522,6 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                             MaintenanceRequestType.cleaning),
                   ),
                 ],
-                if (widget.onViewMaintenanceHistory != null)
-                  IconButton(
-                    icon: const Icon(Icons.history, color: AppColors.primary),
-                    tooltip: 'ประวัติการแจ้งซ่อม/ทำความสะอาด',
-                    onPressed: widget.onViewMaintenanceHistory,
-                  ),
               ],
             ),
           ],

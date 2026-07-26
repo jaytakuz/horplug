@@ -12,10 +12,15 @@ class MaintenanceHistoryScreen extends StatelessWidget {
     super.key,
     required this.roomId,
     required this.roomNumber,
+    this.readOnly = false,
   });
 
   final int roomId;
   final String roomNumber;
+
+  /// Tenant view: hides the cleaning-fee editing affordance. Only landlords
+  /// may set the fee (enforced server-side via RLS too).
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -26,15 +31,16 @@ class MaintenanceHistoryScreen extends StatelessWidget {
         roomId: roomId,
         landlordId: landlordId,
       )..loadRequests(),
-      child: _MaintenanceHistoryView(roomNumber: roomNumber),
+      child: _MaintenanceHistoryView(roomNumber: roomNumber, readOnly: readOnly),
     );
   }
 }
 
 class _MaintenanceHistoryView extends StatelessWidget {
-  const _MaintenanceHistoryView({required this.roomNumber});
+  const _MaintenanceHistoryView({required this.roomNumber, required this.readOnly});
 
   final String roomNumber;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -107,18 +113,25 @@ class _MaintenanceHistoryView extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         itemCount: viewModel.requests.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) =>
-            _RequestCard(request: viewModel.requests[index], viewModel: viewModel),
+        itemBuilder: (context, index) => _RequestCard(
+            request: viewModel.requests[index],
+            viewModel: viewModel,
+            readOnly: readOnly),
       ),
     );
   }
 }
 
 class _RequestCard extends StatelessWidget {
-  const _RequestCard({required this.request, required this.viewModel});
+  const _RequestCard({
+    required this.request,
+    required this.viewModel,
+    required this.readOnly,
+  });
 
   final MaintenanceRequest request;
   final MaintenanceViewModel viewModel;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -190,7 +203,8 @@ class _RequestCard extends StatelessWidget {
                   .bodySmall
                   ?.copyWith(color: AppColors.mutedForeground),
             ),
-          if (request.requestType == MaintenanceRequestType.cleaning)
+          if (request.requestType == MaintenanceRequestType.cleaning &&
+              (!readOnly || request.cleaningFee > 0))
             _buildCleaningFeeRow(context),
           const SizedBox(height: 12),
         ],
@@ -199,34 +213,43 @@ class _RequestCard extends StatelessWidget {
   }
 
   Widget _buildCleaningFeeRow(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: InkWell(
-        onTap: () => _showEditFeeDialog(context),
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              const Icon(Icons.attach_money, size: 16, color: AppColors.primary),
-              const SizedBox(width: 4),
-              Text(
-                request.cleaningFee > 0
-                    ? 'ค่าทำความสะอาด: ฿${request.cleaningFee.toStringAsFixed(0)}'
-                    : 'กำหนดค่าทำความสะอาด',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.edit_outlined,
-                  size: 14, color: AppColors.mutedForeground),
-            ],
+    final feeLabel = Row(
+      children: [
+        const Icon(Icons.attach_money, size: 16, color: AppColors.primary),
+        const SizedBox(width: 4),
+        Text(
+          request.cleaningFee > 0
+              ? 'ค่าทำความสะอาด: ฿${request.cleaningFee.toStringAsFixed(0)}'
+              : 'กำหนดค่าทำความสะอาด',
+          style: const TextStyle(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
           ),
         ),
-      ),
+        if (!readOnly) ...[
+          const SizedBox(width: 4),
+          const Icon(Icons.edit_outlined,
+              size: 14, color: AppColors.mutedForeground),
+        ],
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: readOnly
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: feeLabel,
+            )
+          : InkWell(
+              onTap: () => _showEditFeeDialog(context),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: feeLabel,
+              ),
+            ),
     );
   }
 

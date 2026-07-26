@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/tenant_home_view_model.dart';
 import '../../widgets/reusable_widgets.dart';
+import '../admin/maintenance_history_screen.dart';
 
 class TenantHomeScreen extends StatelessWidget {
   const TenantHomeScreen({super.key});
@@ -131,6 +132,34 @@ class _TenantHomeView extends StatelessWidget {
                 ],
               ),
             ),
+            if (profile?.roomId != null) ...[
+              const SizedBox(height: 16),
+              PaperCard(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => MaintenanceHistoryScreen(
+                      roomId: profile!.roomId!,
+                      roomNumber: profile.roomNumber ?? '-',
+                      readOnly: true,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.history, color: AppColors.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'ประวัติการแจ้งซ่อม/ทำความสะอาด',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right,
+                        color: AppColors.mutedForeground),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(16),
