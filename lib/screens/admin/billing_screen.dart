@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../viewmodels/billing_view_model.dart';
+import '../../utils/formatters.dart';
 
 class BillingScreen extends StatelessWidget {
   final int dormitoryId;
@@ -226,11 +227,11 @@ class _InvoiceCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          _buildItemRow('🏠 ค่าห้อง', '฿${invoice.roomPrice.toStringAsFixed(0)}'),
-          _buildItemRow('⚡ ไฟ ${invoice.electricityUnits.toStringAsFixed(1)} หน่วย', '฿${invoice.electricityCost.toStringAsFixed(0)}'),
-          _buildItemRow('💧 ค่าน้ำ', '฿${invoice.waterCost.toStringAsFixed(0)}'),
+          _buildItemRow('🏠 ค่าห้อง', formatBaht(invoice.roomPrice)),
+          _buildItemRow('⚡ ไฟ ${formatUnits(invoice.electricityUnits)} หน่วย', formatBaht(invoice.electricityCost)),
+          _buildItemRow('💧 ค่าน้ำ', formatBaht(invoice.waterCost)),
           if (invoice.cleaningFee > 0)
-            _buildItemRow('🧹 ค่าทำความสะอาด', '฿${invoice.cleaningFee.toStringAsFixed(0)}'),
+            _buildItemRow('🧹 ค่าทำความสะอาด', formatBaht(invoice.cleaningFee)),
           const Divider(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -239,7 +240,7 @@ class _InvoiceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('ยอดรวมสุทธิ', style: TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
-                  Text('฿${invoice.total.toStringAsFixed(0)}',
+                  Text(formatBaht(invoice.total),
                       style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ],
               ),

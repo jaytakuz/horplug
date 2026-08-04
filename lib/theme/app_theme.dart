@@ -93,13 +93,27 @@ ThemeData buildAppTheme() {
       selectionColor: Color(0xFFB8D4F1),
       selectionHandleColor: AppColors.primary,
     ),
-    textTheme: const TextTheme(
-      titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary),
-      titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.primary),
-      bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.normal, color: AppColors.primary),
-      bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
-      bodySmall: TextStyle(fontSize: 12, color: AppColors.mutedForeground),
-      labelSmall: TextStyle(fontSize: 10, color: AppColors.mutedForeground),
-    ),
+    // ห้ามส่ง const TextTheme(...) ตรงๆ เข้า ThemeData.copyWith:
+    // copyWith เรียก ThemeData.raw จึงข้ามขั้น defaultTextTheme.merge() ที่มี
+    // เฉพาะใน constructor ⇒ slot ที่ไม่ได้ระบุกลายเป็น null ทั้งหมด และ
+    // TextStyle ที่ color เป็น null จะถูก engine เรนเดอร์เป็น "สีขาว"
+    // (เดิม bodyMedium ไม่มี color จึงมองไม่เห็นบนการ์ดขาวและพื้นครีม
+    //  และเพราะ Material ใช้ bodyMedium เป็น DefaultTextStyle ของทั้งแอป
+    //  Text ที่ไม่ใส่ style เลยก็ขาวไปด้วย)
+    //
+    // apply() ทับสีทุก slot ก่อน แล้วค่อย copyWith เฉพาะตัวที่ต้องปรับขนาด
+    textTheme: baseTheme.textTheme
+        .apply(
+          bodyColor: AppColors.primary,
+          displayColor: AppColors.primary,
+        )
+        .copyWith(
+          titleLarge: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary),
+          titleMedium: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.primary),
+          bodyLarge: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal, color: AppColors.primary),
+          bodyMedium: const TextStyle(fontSize: 14, fontWeight: FontWeight.normal, color: AppColors.primary),
+          bodySmall: const TextStyle(fontSize: 12, color: AppColors.mutedForeground),
+          labelSmall: const TextStyle(fontSize: 10, color: AppColors.mutedForeground),
+        ),
   );
 }

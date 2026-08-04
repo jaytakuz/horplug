@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/lease_view_model.dart';
 import '../../widgets/reusable_widgets.dart';
+import '../../utils/formatters.dart';
 
 class LeaseScreen extends StatelessWidget {
   const LeaseScreen({super.key});
@@ -115,8 +116,8 @@ class _LeaseView extends StatelessWidget {
               _buildLeaseRow('ห้อง', viewModel.selectedRoom ?? '305'),
               _buildLeaseRow('ผู้พักอาศัย', 'คุณแจ็ค (ตัวอย่าง)'),
               _buildLeaseRow('เบอร์โทร', '081-XXX-XXXX'),
-              _buildLeaseRow('ค่าเช่า', '฿4,000 / เดือน'),
-              _buildLeaseRow('เงินประกัน', '฿8,000'),
+              _buildLeaseRow('ค่าเช่า', '${formatBaht(4000)}/เดือน'),
+              _buildLeaseRow('เงินประกัน', formatBaht(8000)),
               _buildLeaseRow('วันเริ่มสัญญา', '1 มีนาคม 2569'),
               const SizedBox(height: 32),
               const Divider(),

@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/dashboard_view_model.dart';
 import '../../widgets/reusable_widgets.dart';
+import '../../utils/formatters.dart';
 
 class DashboardScreen extends StatelessWidget {
   final int dormitoryId;
@@ -89,7 +90,7 @@ class _DashboardView extends StatelessWidget {
               children: [
                 StatCard(
                   title: 'รายได้คาดการณ์',
-                  value: '฿${viewModel.estimatedMonthlyRevenue.toStringAsFixed(0)}',
+                  value: formatBaht(viewModel.estimatedMonthlyRevenue),
                   subtitle: 'จากห้องที่มีผู้พักอาศัย',
                   icon: Icons.account_balance_wallet,
                   variant: BadgeVariant.primary,
@@ -287,7 +288,7 @@ class _DashboardView extends StatelessWidget {
               _TenantDetailRow(label: 'สถานะ', value: statusText),
               _TenantDetailRow(
                   label: 'ราคา',
-                  value: '฿${room.price.toStringAsFixed(0)}/เดือน'),
+                  value: '${formatBaht(room.price)}/เดือน'),
               if (room.status == RoomStatus.occupied) ...[
                 const SizedBox(height: 12),
                 Text(
@@ -800,7 +801,7 @@ class _RoomTile extends StatelessWidget {
 
     return Tooltip(
       message:
-          'ห้อง ${room.id}\nสถานะ: ${room.status == RoomStatus.occupied ? 'มีคนอยู่' : room.status == RoomStatus.vacant ? 'ว่าง' : 'ซ่อม'}\nราคา ฿${room.price.toStringAsFixed(0)}/เดือน',
+          'ห้อง ${room.id}\nสถานะ: ${room.status == RoomStatus.occupied ? 'มีคนอยู่' : room.status == RoomStatus.vacant ? 'ว่าง' : 'ซ่อม'}\nราคา ${formatBaht(room.price)}/เดือน',
       waitDuration: const Duration(milliseconds: 350),
       child: InkWell(
         onTap: onTap,

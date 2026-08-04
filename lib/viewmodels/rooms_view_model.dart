@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/supabase_service.dart';
 import 'action_result.dart';
+import 'error_message.dart';
+import '../utils/formatters.dart';
 
 String roomStatusText(RoomStatus status) {
   switch (status) {
@@ -89,26 +91,6 @@ class RoomsViewModel extends ChangeNotifier {
           filtered.where((r) => r.status == RoomStatus.maintenance).length,
       'total': filtered.length,
     };
-  }
-
-  String formatErrorMessage(Object error) {
-    final message = error.toString().trim();
-    final normalized = message.startsWith('Exception: ')
-        ? message.substring('Exception: '.length).trim()
-        : message;
-    final lowerCaseMessage = normalized.toLowerCase();
-
-    if (lowerCaseMessage.contains('failed host lookup') ||
-        lowerCaseMessage.contains('socketexception') ||
-        lowerCaseMessage.contains('clientexception') ||
-        lowerCaseMessage.contains('connection refused') ||
-        lowerCaseMessage.contains('network is unreachable') ||
-        lowerCaseMessage.contains('connection timed out') ||
-        lowerCaseMessage.contains('timed out')) {
-      return 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
-    }
-
-    return normalized;
   }
 
   void setSearchQuery(String value) {
@@ -315,7 +297,7 @@ class RoomsViewModel extends ChangeNotifier {
       return ActionResult(
         success: true,
         message:
-            'เปลี่ยนราคาห้อง ${room.id} เป็น ฿${newPrice.toStringAsFixed(0)}/เดือน แล้ว',
+            'เปลี่ยนราคาห้อง ${room.id} เป็น ${formatBaht(newPrice)}/เดือน แล้ว',
       );
     } catch (error) {
       return ActionResult(

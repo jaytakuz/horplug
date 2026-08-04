@@ -17,8 +17,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/splash_screen.dart';
-import 'screens/tenant/tenant_chat_screen.dart';
-import 'screens/tenant/tenant_home_screen.dart';
+import 'screens/tenant/tenant_shell.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -180,13 +179,33 @@ GoRouter _buildRouter(AuthViewModel authController) {
           ),
         ],
       ),
-      GoRoute(
-        path: '/tenant',
-        builder: (context, state) => const TenantHomeScreen(),
-      ),
-      GoRoute(
-        path: '/tenant/chat',
-        builder: (context, state) => const TenantChatScreen(),
+      // ฝั่งผู้เช่าใช้ ShellRoute แบบเดียวกับ AdminShell: shell ถือ IndexedStack
+      // ของทุกแท็บเอง จึงจงใจทิ้ง `child` และให้ builder ของแต่ละ route คืน
+      // widget ว่าง แทนที่จะสร้างหน้าซ้ำสองครั้ง
+      ShellRoute(
+        builder: (context, state, child) => const TenantShell(),
+        routes: [
+          GoRoute(
+            path: '/tenant',
+            builder: (context, state) => const SizedBox.shrink(),
+          ),
+          GoRoute(
+            path: '/tenant/bills',
+            builder: (context, state) => const SizedBox.shrink(),
+          ),
+          GoRoute(
+            path: '/tenant/maintenance',
+            builder: (context, state) => const SizedBox.shrink(),
+          ),
+          GoRoute(
+            path: '/tenant/chat',
+            builder: (context, state) => const SizedBox.shrink(),
+          ),
+          GoRoute(
+            path: '/tenant/profile',
+            builder: (context, state) => const SizedBox.shrink(),
+          ),
+        ],
       ),
     ],
   );

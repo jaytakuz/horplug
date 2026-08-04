@@ -21,25 +21,42 @@ class PaperCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget content = Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(borderRadius),
-        boxShadow: shadow,
-      ),
-      child: child,
-    );
+    final radius = BorderRadius.circular(borderRadius);
 
-    if (onTap != null) {
-      return InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: content,
+    if (onTap == null) {
+      return Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: radius,
+          boxShadow: shadow,
+        ),
+        child: child,
       );
     }
 
-    return content;
+    // ซ้อนสามชั้นเพราะ:
+    // - DecoratedBox ชั้นนอกวาดเงา AppShadows.md ตามเดิมเป๊ะ
+    //   (ห้ามใช้ Material(elevation:) เพราะมันสร้างเงาสูตร M3 ของตัวเอง)
+    // - Material ชั้นกลางวาดพื้นและเป็น ink surface ให้ splash วาดทับได้
+    //   เดิม InkWell ครอบ Container ทึบ splash จึงไปตกบน Material บรรพบุรุษ
+    //   ที่อยู่ "ใต้" การ์ด แล้วถูกบังจนมองไม่เห็นเลย
+    // - clipBehavior ตัด splash ให้อยู่ในมุมโค้งเท่าเดิม
+    return DecoratedBox(
+      decoration: BoxDecoration(borderRadius: radius, boxShadow: shadow),
+      child: Material(
+        color: color ?? Colors.transparent,
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: padding ?? EdgeInsets.zero,
+            child: child,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -70,7 +87,7 @@ class StatusBadge extends StatelessWidget {
         textColor = AppColors.destructive;
         break;
       case BadgeVariant.primary:
-        bgColor = AppColors.primary.withOpacity(0.1);
+        bgColor = AppColors.primary.withValues(alpha: 0.1);
         textColor = AppColors.primary;
         break;
       case BadgeVariant.muted:
@@ -78,9 +95,9 @@ class StatusBadge extends StatelessWidget {
         textColor = AppColors.mutedForeground;
         break;
       case BadgeVariant.info:
-      default:
-        bgColor = AppColors.ring.withOpacity(0.1);
+        bgColor = AppColors.ring.withValues(alpha: 0.1);
         textColor = AppColors.ring;
+        break;
     }
 
     return Container(
@@ -131,7 +148,7 @@ class StatCard extends StatelessWidget {
         iconColor = AppColors.warning;
         break;
       case BadgeVariant.primary:
-        iconBg = AppColors.primary.withOpacity(0.1);
+        iconBg = AppColors.primary.withValues(alpha: 0.1);
         iconColor = AppColors.primary;
         break;
       default:
@@ -290,6 +307,104 @@ class FilterChipGroup extends StatelessWidget {
             );
           }).toList(),
         ),
+      ],
+    );
+  }
+}
+
+/// แถวข้อมูล "ป้ายกำกับ: ค่า" ที่จัดคอลัมน์ป้ายให้ตรงกัน
+class InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final double labelWidth;
+
+  const InfoRow({
+    super.key,
+    required this.label,
+    required this.value,
+    this.labelWidth = 96,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: labelWidth,
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ไอคอนสำหรับ BottomNavigationBar ที่มี badge ตัวเลขเมื่อ [count] > 0
+class NavBadgeIcon extends StatelessWidget {
+  final int count;
+  final IconData icon;
+
+  const NavBadgeIcon({super.key, required this.count, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final iconWidget = Icon(icon);
+    if (count <= 0) return iconWidget;
+    return Badge(label: Text('$count'), child: iconWidget);
+  }
+}
+
+/// ข้อความแจ้งว่าส่วนย่อยส่วนหนึ่งของหน้าโหลดไม่สำเร็จ พร้อมปุ่มลองใหม่
+///
+/// ใช้แทนการแสดง error เต็มหน้า เมื่อหน้าประกอบด้วยหลายส่วนที่โหลดแยกกัน —
+/// ส่วนที่พังส่วนเดียวไม่ควรทำให้ทั้งหน้าว่าง
+class SectionErrorNote extends StatelessWidget {
+  final String message;
+  final VoidCallback? onRetry;
+
+  const SectionErrorNote({
+    super.key,
+    this.message = 'โหลดไม่สำเร็จ',
+    this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.error_outline, size: 16, color: AppColors.destructive),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            message,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.destructive,
+                ),
+          ),
+        ),
+        if (onRetry != null)
+          TextButton(
+            onPressed: onRetry,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.ring,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('ลองใหม่', style: TextStyle(fontSize: 12)),
+          ),
       ],
     );
   }

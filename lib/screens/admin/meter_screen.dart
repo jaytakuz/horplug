@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../viewmodels/meter_view_model.dart';
+import '../../utils/formatters.dart';
 
 class MeterScreen extends StatelessWidget {
   final int dormitoryId;
@@ -550,7 +551,7 @@ class _MeterViewState extends State<_MeterView>
     final isOverflow = record.isOverflow;
     final units = record.unitsUsed;
     final cost = record.amount;
-    final currentText = record.currentReading != null ? record.currentReading!.toStringAsFixed(0) : '-';
+    final currentText = record.currentReading != null ? formatMeterReading(record.currentReading!) : '-';
 
     final Color avatarBg;
     final Color avatarTextColor;
@@ -594,7 +595,7 @@ class _MeterViewState extends State<_MeterView>
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'เดิม: ${record.previousReading.toStringAsFixed(0)}  →  ปัจจุบัน: $currentText',
+                          'เดิม: ${formatMeterReading(record.previousReading)}  →  ปัจจุบัน: $currentText',
                           style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
                         ),
                       ],
@@ -613,7 +614,7 @@ class _MeterViewState extends State<_MeterView>
                                 child: Icon(Icons.refresh, size: 12, color: AppColors.warning),
                               ),
                             Text(
-                              '${units.toStringAsFixed(1)} หน่วย',
+                              '${formatUnits(units)} หน่วย',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: isOverflow ? AppColors.warning : AppColors.mutedForeground,
@@ -623,7 +624,7 @@ class _MeterViewState extends State<_MeterView>
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '฿${cost.toStringAsFixed(0)}',
+                          formatBaht(cost),
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
@@ -655,7 +656,7 @@ class _MeterViewState extends State<_MeterView>
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(child: _buildInfoBox('มิเตอร์เดิม', record.previousReading.toStringAsFixed(0))),
+                      Expanded(child: _buildInfoBox('มิเตอร์เดิม', formatMeterReading(record.previousReading))),
                       const SizedBox(width: 16),
                       Expanded(
                         child: TextField(
@@ -706,7 +707,7 @@ class _MeterViewState extends State<_MeterView>
                             child: Text(
                               'มิเตอร์ครบรอบ (9999→0000): '
                               '(10000 − ${record.previousReading.toStringAsFixed(0)}) + ${record.currentReading!.toStringAsFixed(0)} '
-                              '= ${units.toStringAsFixed(1)} หน่วย',
+                              '= ${formatUnits(units)} หน่วย',
                               style: const TextStyle(fontSize: 11, color: AppColors.warning),
                             ),
                           ),

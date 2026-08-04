@@ -9,6 +9,7 @@ import '../../viewmodels/action_result.dart';
 import '../../viewmodels/rooms_view_model.dart';
 import '../../widgets/reusable_widgets.dart';
 import 'maintenance_history_screen.dart';
+import '../../utils/formatters.dart';
 
 class RoomsScreen extends StatelessWidget {
   final int dormitoryId;
@@ -1105,17 +1106,17 @@ class _RoomsViewState extends State<_RoomsView> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'ราคาเฉลี่ย: ฿${(rooms.isEmpty ? 0 : rooms.fold<double>(0, (prev, room) => prev + room.price) / rooms.length).toStringAsFixed(0)}/เดือน',
+                          'ราคาเฉลี่ย: ${formatBaht(rooms.isEmpty ? 0 : rooms.fold<double>(0, (prev, room) => prev + room.price) / rooms.length)}/เดือน',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'ราคาสูงสุด: ฿${(rooms.isEmpty ? 0 : rooms.map((r) => r.price).reduce((a, b) => a > b ? a : b)).toStringAsFixed(0)}/เดือน',
+                          'ราคาสูงสุด: ${formatBaht(rooms.isEmpty ? 0 : rooms.map((r) => r.price).reduce((a, b) => a > b ? a : b))}/เดือน',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'ราคาต่ำสุด: ฿${(rooms.isEmpty ? 0 : rooms.map((r) => r.price).reduce((a, b) => a < b ? a : b)).toStringAsFixed(0)}/เดือน',
+                          'ราคาต่ำสุด: ${formatBaht(rooms.isEmpty ? 0 : rooms.map((r) => r.price).reduce((a, b) => a < b ? a : b))}/เดือน',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
@@ -1381,7 +1382,7 @@ class _RoomCard extends StatelessWidget {
 
     return Tooltip(
       message:
-          'ห้อง ${room.id}\nชั้น ${room.floor}\n${roomStatusText(room.status)}\nราคา ฿${room.price.toStringAsFixed(0)}/เดือน',
+          'ห้อง ${room.id}\nชั้น ${room.floor}\n${roomStatusText(room.status)}\nราคา ${formatBaht(room.price)}/เดือน',
       waitDuration: const Duration(milliseconds: 350),
       child: PaperCard(
         onTap: () => _showRoomDetailDialog(context),
@@ -1516,7 +1517,7 @@ class _RoomCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '฿${room.price.toStringAsFixed(0)}/เดือน',
+                        '${formatBaht(room.price)}/เดือน',
                         style: Theme.of(context)
                             .textTheme
                             .titleMedium
@@ -1637,7 +1638,7 @@ class _RoomCard extends StatelessWidget {
                     ),
                   ),
                   _detailRow('ชั้น', room.floor),
-                  _detailRow('ราคา', '฿${room.price.toStringAsFixed(0)}/เดือน'),
+                  _detailRow('ราคา', '${formatBaht(room.price)}/เดือน'),
                   _detailRow('สถานะ', roomStatusText(room.status)),
                   if (room.status == RoomStatus.occupied) ...[
                     const SizedBox(height: 8),
@@ -2130,7 +2131,7 @@ class _RoomCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'ราคาปัจจุบัน: ฿${room.price.toStringAsFixed(0)}/เดือน',
+                  'ราคาปัจจุบัน: ${formatBaht(room.price)}/เดือน',
                   style: Theme.of(dialogContext).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 16),
@@ -2169,7 +2170,7 @@ class _RoomCard extends StatelessWidget {
                             ),
                       ),
                       Text(
-                        '฿${newPrice.toStringAsFixed(0)}/เดือน',
+                        '${formatBaht(newPrice)}/เดือน',
                         style: Theme.of(dialogContext)
                             .textTheme
                             .bodyMedium

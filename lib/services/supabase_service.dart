@@ -9,14 +9,19 @@ class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
 
   /// ดึงข้อมูลห้องพักทั้งหมด
-  Future<List<Room>> fetchRooms({int? dormitoryId}) async {
-    final baseQuery = client
+  ///
+  /// [roomDbId] ใช้จำกัดผลลัพธ์ให้เหลือห้องเดียว — ฝั่งผู้เช่าเรียกผ่านตัวนี้
+  /// ทำให้ fetchElectricityRecords / fetchWaterRecords / fetchInvoices ที่เรียก
+  /// fetchRooms อยู่แล้ว กลายเป็น "เฉพาะห้องของฉัน" ได้โดยไม่ต้องเขียน query ซ้ำ
+  Future<List<Room>> fetchRooms({int? dormitoryId, int? roomDbId}) async {
+    var baseQuery = client
         .from('rooms')
         .select('id, room_number, floor, base_price, status, current_tenant_id');
 
-    final data = await (dormitoryId != null
-            ? baseQuery.eq('dorm_id', dormitoryId)
-            : baseQuery)
+    if (dormitoryId != null) baseQuery = baseQuery.eq('dorm_id', dormitoryId);
+    if (roomDbId != null) baseQuery = baseQuery.eq('id', roomDbId);
+
+    final data = await baseQuery
         .order('floor', ascending: true)
         .order('room_number', ascending: true);
 
@@ -68,6 +73,12 @@ class SupabaseService {
     }).toList();
   }
 
+  /// ดึงห้องเดียวตาม id — ใช้ในฝั่งผู้เช่าที่เห็นเฉพาะห้องตัวเอง
+  Future<Room?> fetchRoom({required int roomDbId}) async {
+    final rooms = await fetchRooms(roomDbId: roomDbId);
+    return rooms.isEmpty ? null : rooms.first;
+  }
+
   /// สตรีมแจ้งเตือนเมื่อข้อมูลห้องของหอพักนี้เปลี่ยน — ใช้เป็นสัญญาณให้โหลด
   /// ใหม่เท่านั้น (ไม่ใช้ payload ตรงๆ) เพื่อให้ยังใช้ fetchRooms() เดิมที่มี
   /// การ enrich ชื่อผู้เช่าอยู่แล้ว โดยไม่ต้องเขียน mapping ซ้ำ
@@ -81,10 +92,11 @@ class SupabaseService {
 
   Future<List<ElectricityRecord>> fetchElectricityRecords({
     int? dormitoryId,
+    int? roomDbId,
     required int month,
     required int year,
   }) async {
-    final rooms = await fetchRooms(dormitoryId: dormitoryId);
+    final rooms = await fetchRooms(dormitoryId: dormitoryId, roomDbId: roomDbId);
     if (rooms.isEmpty) return [];
 
     final roomIds = rooms.map((room) => room.dbId).toList();
@@ -171,10 +183,11 @@ class SupabaseService {
 
   Future<List<WaterRecord>> fetchWaterRecords({
     int? dormitoryId,
+    int? roomDbId,
     required int month,
     required int year,
   }) async {
-    final rooms = await fetchRooms(dormitoryId: dormitoryId);
+    final rooms = await fetchRooms(dormitoryId: dormitoryId, roomDbId: roomDbId);
     if (rooms.isEmpty) return [];
 
     final roomIds = rooms.map((room) => room.dbId).toList();
@@ -230,10 +243,11 @@ class SupabaseService {
 
   Future<List<Invoice>> fetchInvoices({
     int? dormitoryId,
+    int? roomDbId,
     required int month,
     required int year,
   }) async {
-    final rooms = await fetchRooms(dormitoryId: dormitoryId);
+    final rooms = await fetchRooms(dormitoryId: dormitoryId, roomDbId: roomDbId);
     final roomIds = rooms.map((room) => room.dbId).toList();
     if (roomIds.isEmpty) return [];
 
@@ -308,6 +322,133 @@ class SupabaseService {
       feeByRoom[roomId] = (feeByRoom[roomId] ?? 0) + _parseDouble(row['cleaning_fee']);
     }
     return feeByRoom;
+  }
+
+  // --- ระบบ Billing ฝั่งผู้เช่า ---
+
+  /// บิลของห้องเดียวในงวดที่ระบุ
+  ///
+  /// คืน null เมื่อยังไม่มีมิเตอร์/ค่าบริการในงวดนั้น — ให้ถือว่า "ยังไม่ออกบิล"
+  /// ไม่ใช่ error
+  Future<Invoice?> fetchInvoiceForRoom({
+    required int roomDbId,
+    required int month,
+    required int year,
+  }) async {
+    final invoices =
+        await fetchInvoices(roomDbId: roomDbId, month: month, year: year);
+    return invoices.isEmpty ? null : invoices.first;
+  }
+
+  /// ประวัติบิลย้อนหลังของห้องเดียว เรียงจากงวดล่าสุดไปเก่า
+  ///
+  /// ใช้ query รวม 4 ครั้ง (ห้อง + ไฟ + น้ำ + ค่าทำความสะอาด) ไม่ใช่ 4×N
+  /// เหมือนการวนเรียก fetchInvoices ทีละเดือน
+  Future<List<Invoice>> fetchInvoiceHistoryForRoom({
+    required int roomDbId,
+    int monthCount = 6,
+  }) async {
+    final room = await fetchRoom(roomDbId: roomDbId);
+    if (room == null) return [];
+
+    final elecs = await client
+        .from('electricity_record')
+        .select()
+        .eq('room_id', roomDbId)
+        .order('billing_year', ascending: false)
+        .order('billing_month', ascending: false)
+        .limit(monthCount);
+    final waters = await client
+        .from('water_meter')
+        .select()
+        .eq('room_id', roomDbId)
+        .order('billing_year', ascending: false)
+        .order('billing_month', ascending: false)
+        .limit(monthCount);
+
+    final elecData = (elecs as List).cast<Map<String, dynamic>>();
+    final waterData = (waters as List).cast<Map<String, dynamic>>();
+
+    final now = DateTime.now();
+    final since = DateTime(now.year, now.month - monthCount + 1, 1);
+    final cleaningByPeriod =
+        await _fetchCleaningFeesByPeriodForRoom(roomId: roomDbId, since: since);
+
+    // รวมงวดจากทั้งสามแหล่ง — บางเดือนอาจมีเฉพาะค่าน้ำ หรือเฉพาะค่าทำความสะอาด
+    final periods = <String>{
+      ...elecData.map((r) => '${r['billing_year']}-${r['billing_month']}'),
+      ...waterData.map((r) => '${r['billing_year']}-${r['billing_month']}'),
+      ...cleaningByPeriod.keys,
+    };
+
+    final invoices = <Invoice>[];
+    for (final period in periods) {
+      final parts = period.split('-');
+      final year = int.tryParse(parts[0]);
+      final month = int.tryParse(parts[1]);
+      if (year == null || month == null) continue;
+
+      final e = elecData.firstWhere(
+        (r) => r['billing_year'] == year && r['billing_month'] == month,
+        orElse: () => {},
+      );
+      final w = waterData.firstWhere(
+        (r) => r['billing_year'] == year && r['billing_month'] == month,
+        orElse: () => {},
+      );
+      final cleaningFee = cleaningByPeriod[period] ?? 0.0;
+
+      final elecUnits = e.isNotEmpty
+          ? (_parseDouble(e['current_reading']) -
+              _parseDouble(e['previous_reading']))
+          : 0.0;
+
+      invoices.add(Invoice(
+        id: 'INV-$roomDbId-$month-$year',
+        roomNumber: room.id,
+        tenantName: room.tenantName ?? '-',
+        waterUnits: w.isNotEmpty ? 1.0 : 0.0,
+        electricityUnits: elecUnits,
+        roomPrice: room.price,
+        waterCost: w.isNotEmpty ? _parseDouble(w['amount']) : 0.0,
+        electricityCost: e.isNotEmpty ? _parseDouble(e['amount']) : 0.0,
+        cleaningFee: cleaningFee,
+        status: InvoiceStatus.unpaid,
+        date: DateTime(year, month, 1),
+      ));
+    }
+
+    invoices.sort((a, b) => b.date.compareTo(a.date));
+    return invoices.take(monthCount).toList();
+  }
+
+  /// ค่าทำความสะอาดที่ "เสร็จสิ้น" ของห้องเดียว แยกตามงวด key `<year>-<month>`
+  ///
+  /// ต่างจาก _fetchCleaningFeesByRoom ตรงที่อันนั้นเป็นทั้งหอ/งวดเดียว
+  /// ส่วนอันนี้คือห้องเดียว/หลายงวด
+  Future<Map<String, double>> _fetchCleaningFeesByPeriodForRoom({
+    required int roomId,
+    required DateTime since,
+  }) async {
+    final data = await client
+        .from('maintenance_requests')
+        .select('completed_at, cleaning_fee')
+        .eq('room_id', roomId)
+        .eq('request_type', 'Cleaning')
+        .eq('status', 'Completed')
+        .gte('completed_at', since.toIso8601String());
+
+    final feeByPeriod = <String, double>{};
+    for (final row in (data as List).cast<Map<String, dynamic>>()) {
+      final completedAt = row['completed_at'] as String?;
+      if (completedAt == null) continue;
+      final date = DateTime.tryParse(completedAt);
+      if (date == null) continue;
+
+      final key = '${date.year}-${date.month}';
+      feeByPeriod[key] = (feeByPeriod[key] ?? 0) + _parseDouble(row['cleaning_fee']);
+    }
+    return feeByPeriod;
   }
 
   // --- Helpers & Others ---
@@ -527,6 +668,102 @@ class SupabaseService {
   Future<int> countUnreadMessages({required int dormitoryId}) async {
     final previews = await fetchChatPreviews(dormitoryId: dormitoryId);
     return previews.fold<int>(0, (sum, preview) => sum + preview.unreadCount);
+  }
+
+  /// จำนวนข้อความจากเจ้าของหอที่ผู้เช่ายังไม่ได้อ่านในห้องนี้
+  ///
+  /// countUnreadMessages() เดิมใช้ RPC fetch_chat_previews ซึ่งรับ dorm_id และ
+  /// เป็นมุมมองของเจ้าของหอ — ผู้เช่าจึงต้องมีตัวนับของตัวเอง
+  Future<int> countUnreadMessagesForRoom({
+    required int roomId,
+    required String userId,
+  }) async {
+    final read = await client
+        .from('message_reads')
+        .select('last_read_at')
+        .eq('room_id', roomId)
+        .eq('user_id', userId)
+        .maybeSingle();
+    final lastReadAt = read?['last_read_at'] as String?;
+
+    var query = client
+        .from('messages')
+        .select('id')
+        .eq('room_id', roomId)
+        .eq('is_from_owner', true);
+    if (lastReadAt != null) query = query.gt('created_at', lastReadAt);
+
+    return ((await query) as List).length;
+  }
+
+  /// ข้อความล่าสุดของห้อง — ใช้แสดง preview บนแดชบอร์ดผู้เช่า
+  ///
+  /// จงใจเป็น one-shot ไม่ใช่ stream: แชทมี realtime subscription อยู่แล้วหนึ่งตัว
+  /// การเพิ่มอีกตัวบนแดชบอร์ดจะเปิด subscription ค้างไว้ทั้ง session โดยไม่จำเป็น
+  Future<ChatMessage?> fetchLatestMessage({
+    required int roomId,
+    required String ownerName,
+    required String tenantName,
+  }) async {
+    final data = await client
+        .from('messages')
+        .select()
+        .eq('room_id', roomId)
+        .order('created_at', ascending: false)
+        .limit(1);
+
+    final rows = (data as List).cast<Map<String, dynamic>>();
+    if (rows.isEmpty) return null;
+
+    final signedUrlByPath = await _resolveAttachmentUrls(rows);
+    final path = rows.first['attachment_url'] as String?;
+
+    return _mapMessageRow(
+      rows.first,
+      ownerName: ownerName,
+      tenantName: tenantName,
+      resolvedAttachmentUrl: path != null ? signedUrlByPath[path] : null,
+    );
+  }
+
+  /// ข้อมูลหอพัก + ช่องทางติดต่อเจ้าของหอ
+  ///
+  /// ต้องรัน database/rls_tenant_access.sql ก่อน ไม่เช่นนั้น embed ของ
+  /// landlord_profiles จะว่าง (policy เดิมให้อ่านได้เฉพาะเจ้าของแถวเอง)
+  Future<DormitoryInfo?> fetchDormitoryInfo({required int dormitoryId}) async {
+    final row = await client
+        .from('dormitories')
+        .select('id, name, base_water_rate, base_electricity_rate, '
+            'landlord_profiles(first_name, last_name, phone, email)')
+        .eq('id', dormitoryId)
+        .maybeSingle();
+    if (row == null) return null;
+
+    // PostgREST คืน List สำหรับ one-to-many และ Map สำหรับ many-to-one
+    // จึงรองรับทั้งสองแบบเหมือนที่ auth_service ทำ
+    final embedded = row['landlord_profiles'];
+    Map<String, dynamic>? landlord;
+    if (embedded is List && embedded.isNotEmpty) {
+      landlord = (embedded.first as Map).cast<String, dynamic>();
+    } else if (embedded is Map) {
+      landlord = embedded.cast<String, dynamic>();
+    }
+
+    final fullName = [
+      landlord?['first_name'] as String?,
+      landlord?['last_name'] as String?,
+    ].where((value) => value != null && value.trim().isNotEmpty).join(' ').trim();
+
+    return DormitoryInfo(
+      id: row['id'] as int,
+      name: row['name'] as String? ?? '-',
+      landlordName: fullName.isEmpty ? null : fullName,
+      landlordPhone: landlord?['phone'] as String?,
+      landlordEmail: landlord?['email'] as String?,
+      baseWaterRate: _parseDouble(row['base_water_rate'], fallback: 100.0),
+      baseElectricityRate:
+          _parseDouble(row['base_electricity_rate'], fallback: 8.0),
+    );
   }
 
   Future<void> markRoomRead({required int roomId, required String userId}) async {

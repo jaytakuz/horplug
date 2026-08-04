@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/supabase_service.dart';
 import 'action_result.dart';
+import 'error_message.dart';
 
 class DashboardViewModel extends ChangeNotifier {
   DashboardViewModel({
@@ -53,26 +54,6 @@ class DashboardViewModel extends ChangeNotifier {
 
   List<Room> roomsOnFloor(String floor) =>
       rooms.where((room) => room.floor == floor).toList();
-
-  String formatErrorMessage(Object error) {
-    final message = error.toString().trim();
-    final normalized = message.startsWith('Exception: ')
-        ? message.substring('Exception: '.length).trim()
-        : message;
-    final lowerCaseMessage = normalized.toLowerCase();
-
-    if (lowerCaseMessage.contains('failed host lookup') ||
-        lowerCaseMessage.contains('socketexception') ||
-        lowerCaseMessage.contains('clientexception') ||
-        lowerCaseMessage.contains('connection refused') ||
-        lowerCaseMessage.contains('network is unreachable') ||
-        lowerCaseMessage.contains('connection timed out') ||
-        lowerCaseMessage.contains('timed out')) {
-      return 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
-    }
-
-    return normalized;
-  }
 
   Future<void> loadRooms() async {
     isLoading = true;

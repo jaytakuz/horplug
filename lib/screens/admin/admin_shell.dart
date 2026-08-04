@@ -58,6 +58,10 @@ class _AdminShellView extends StatelessWidget {
 
   void _onItemTapped(
       BuildContext context, AdminShellViewModel viewModel, int index) {
+    // IndexedStack ไม่ dispose TextField ของหน้าแชท ถ้าไม่ unfocus แป้นพิมพ์
+    // จะค้างทับแท็บที่สลับไป
+    FocusManager.instance.primaryFocus?.unfocus();
+
     switch (index) {
       case 0:
         context.go('/landlord');
@@ -160,12 +164,12 @@ class _AdminShellView extends StatelessWidget {
                       activeIcon: Icon(Icons.receipt_long),
                       label: 'บิล'),
                   BottomNavigationBarItem(
-                    icon: _ChatNavIcon(
-                      unreadCount: viewModel.unreadMessageCount,
+                    icon: NavBadgeIcon(
+                      count: viewModel.unreadMessageCount,
                       icon: Icons.chat_bubble_outline,
                     ),
-                    activeIcon: _ChatNavIcon(
-                      unreadCount: viewModel.unreadMessageCount,
+                    activeIcon: NavBadgeIcon(
+                      count: viewModel.unreadMessageCount,
                       icon: Icons.chat_bubble,
                     ),
                     label: 'แชท',
@@ -192,23 +196,6 @@ class _AdminShellView extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ChatNavIcon extends StatelessWidget {
-  const _ChatNavIcon({required this.unreadCount, required this.icon});
-
-  final int unreadCount;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final iconWidget = Icon(icon);
-    if (unreadCount <= 0) return iconWidget;
-    return Badge(
-      label: Text('$unreadCount'),
-      child: iconWidget,
     );
   }
 }

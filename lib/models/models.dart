@@ -317,6 +317,84 @@ class TenantJoinRequest {
   });
 }
 
+/// ข้อมูลหอพัก + ช่องทางติดต่อเจ้าของหอ (ใช้ในหน้าโปรไฟล์ผู้เช่า)
+class DormitoryInfo {
+  final int id;
+  final String name;
+  final String? landlordName;
+  final String? landlordPhone;
+  final String? landlordEmail;
+  final double baseWaterRate;
+  final double baseElectricityRate;
+
+  const DormitoryInfo({
+    required this.id,
+    required this.name,
+    this.landlordName,
+    this.landlordPhone,
+    this.landlordEmail,
+    this.baseWaterRate = 0,
+    this.baseElectricityRate = 0,
+  });
+
+  bool get hasContact =>
+      (landlordName != null && landlordName!.trim().isNotEmpty) ||
+      (landlordPhone != null && landlordPhone!.trim().isNotEmpty) ||
+      (landlordEmail != null && landlordEmail!.trim().isNotEmpty);
+}
+
+/// บิลหนึ่งใบในมุมมองของผู้เช่า
+///
+/// [invoice] คือรายการค่าใช้จ่ายจริงที่คำนวณจากมิเตอร์ ส่วน [status] /
+/// [dueDate] / [paidAt] / [slipUrl] ยังเป็นค่าจำลอง เพราะยังไม่มีตาราง
+/// invoices — ฟีเจอร์ถัดไป "Invoice Generation" จะมาแทนที่เฉพาะส่วนนี้
+/// โดยที่ UI ไม่ต้องแก้ (ดู lib/services/tenant_billing_source.dart)
+class TenantBill {
+  final Invoice invoice;
+  final InvoiceStatus status;
+  final DateTime? dueDate;
+  final DateTime? paidAt;
+  final String? slipUrl;
+
+  const TenantBill({
+    required this.invoice,
+    required this.status,
+    this.dueDate,
+    this.paidAt,
+    this.slipUrl,
+  });
+
+  String get id => invoice.id;
+  DateTime get period => invoice.date;
+  double get total => invoice.total;
+
+  TenantBill copyWith({
+    InvoiceStatus? status,
+    DateTime? dueDate,
+    DateTime? paidAt,
+    String? slipUrl,
+  }) {
+    return TenantBill(
+      invoice: invoice,
+      status: status ?? this.status,
+      dueDate: dueDate ?? this.dueDate,
+      paidAt: paidAt ?? this.paidAt,
+      slipUrl: slipUrl ?? this.slipUrl,
+    );
+  }
+}
+
+/// ช่องทางรับชำระเงินของหอพัก (ยังเป็นค่าจำลอง)
+class PaymentChannel {
+  final String promptPayId;
+  final String accountName;
+
+  const PaymentChannel({
+    required this.promptPayId,
+    required this.accountName,
+  });
+}
+
 enum MaintenanceRequestType { repair, cleaning }
 
 enum MaintenanceStatus { pending, inProgress, completed }
