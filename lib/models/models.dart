@@ -1,6 +1,18 @@
 enum RoomStatus { occupied, vacant, maintenance }
 
-enum InvoiceStatus { unpaid, pending, paid }
+enum InvoiceStatus { unpaid, pending, paid, voided }
+
+/// เหตุผลที่ห้องหนึ่งออกบิลในงวดนี้ไม่ได้
+enum SkipReason { noTenant, noMeterReading, alreadyIssued }
+
+/// ค่ามิเตอร์ที่คำนวณเสร็จแล้วหนึ่งชนิด — แยกออกมาเพื่อให้ buildDraft
+/// รับข้อมูลที่มีชนิดชัดเจนแทน Map ดิบจาก PostgREST
+class MeterCharge {
+  final double units;
+  final double amount;
+
+  const MeterCharge({required this.units, required this.amount});
+}
 
 enum MessageType {
   text,
@@ -152,6 +164,44 @@ class Invoice {
   });
 
   double get total => roomPrice + waterCost + electricityCost + cleaningFee;
+}
+
+/// ร่างบิลที่คำนวณสดจากมิเตอร์ ยังไม่มีตัวตนในฐานข้อมูล
+///
+/// แยกจาก [Invoice] ที่เป็นแถวจริง เพื่อให้ compiler ปฏิเสธการเผลอเอาตัวเลข
+/// ที่คำนวณสดไปแสดงหรือไปพิมพ์ลง PDF แทนตัวเลขที่ตรึงไว้
+class InvoiceDraft {
+  final int roomDbId;
+  final String roomNumber;
+  final String? tenantId;
+  final String tenantName;
+  final int billingMonth;
+  final int billingYear;
+  final double roomPrice;
+  final double electricityUnits;
+  final double electricityCost;
+  final double waterCost;
+  final double cleaningFee;
+  final SkipReason? skipReason;
+
+  const InvoiceDraft({
+    required this.roomDbId,
+    required this.roomNumber,
+    this.tenantId,
+    required this.tenantName,
+    required this.billingMonth,
+    required this.billingYear,
+    this.roomPrice = 0,
+    this.electricityUnits = 0,
+    this.electricityCost = 0,
+    this.waterCost = 0,
+    this.cleaningFee = 0,
+    this.skipReason,
+  });
+
+  bool get canIssue => skipReason == null;
+
+  double get total => roomPrice + electricityCost + waterCost + cleaningFee;
 }
 
 enum UtilityType { electricity, water }

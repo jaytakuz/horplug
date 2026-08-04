@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
+import 'invoice_calculator.dart';
 
 const _chatImageBucket = 'chat-image';
 
@@ -264,30 +265,38 @@ class SupabaseService {
 
     final invoices = <Invoice>[];
     for (final room in rooms) {
-      // A room under maintenance still has a tenant and still needs a bill —
-      // only truly vacant (no tenant) rooms should be excluded.
-      if (room.currentTenantId == null) continue;
+      final e = elecData.firstWhere((r) => r['room_id'] == room.dbId,
+          orElse: () => {});
+      final w = waterData.firstWhere((r) => r['room_id'] == room.dbId,
+          orElse: () => {});
 
-      final e = elecData.firstWhere((r) => r['room_id'] == room.dbId, orElse: () => {});
-      final w = waterData.firstWhere((r) => r['room_id'] == room.dbId, orElse: () => {});
-      final cleaningFee = cleaningFeeByRoom[room.dbId] ?? 0.0;
+      final draft = buildDraft(
+        room: room,
+        billingMonth: month,
+        billingYear: year,
+        electricity: e.isEmpty
+            ? null
+            : MeterCharge(
+                units: _parseDouble(e['current_reading']) -
+                    _parseDouble(e['previous_reading']),
+                amount: _parseDouble(e['amount']),
+              ),
+        waterAmount: w.isEmpty ? null : _parseDouble(w['amount']),
+        cleaningFee: cleaningFeeByRoom[room.dbId] ?? 0.0,
+      );
 
-      if (e.isEmpty && w.isEmpty && cleaningFee <= 0) continue;
-
-      final elecUnits = e.isNotEmpty ? (_parseDouble(e['current_reading']) - _parseDouble(e['previous_reading'])) : 0.0;
-      final elecCost = e.isNotEmpty ? _parseDouble(e['amount']) : 0.0;
-      final waterCost = w.isNotEmpty ? _parseDouble(w['amount']) : 0.0;
+      if (!draft.canIssue) continue;
 
       invoices.add(Invoice(
         id: 'INV-${room.dbId}-$month-$year',
-        roomNumber: room.id,
-        tenantName: room.tenantName ?? '-',
+        roomNumber: draft.roomNumber,
+        tenantName: draft.tenantName,
         waterUnits: w.isNotEmpty ? 1.0 : 0.0,
-        electricityUnits: elecUnits,
-        roomPrice: room.price,
-        waterCost: waterCost,
-        electricityCost: elecCost,
-        cleaningFee: cleaningFee,
+        electricityUnits: draft.electricityUnits,
+        roomPrice: draft.roomPrice,
+        waterCost: draft.waterCost,
+        electricityCost: draft.electricityCost,
+        cleaningFee: draft.cleaningFee,
         status: InvoiceStatus.unpaid,
         date: DateTime(year, month, 1),
       ));

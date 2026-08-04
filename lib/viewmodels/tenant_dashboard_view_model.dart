@@ -79,6 +79,8 @@ String billStatusLabel(InvoiceStatus status) {
       return 'รอตรวจสลิป';
     case InvoiceStatus.paid:
       return 'ชำระแล้ว';
+    case InvoiceStatus.voided:
+      return 'ยกเลิกแล้ว';
   }
 }
 
@@ -90,6 +92,8 @@ BadgeVariant billStatusVariant(InvoiceStatus status) {
       return BadgeVariant.warning;
     case InvoiceStatus.paid:
       return BadgeVariant.success;
+    case InvoiceStatus.voided:
+      return BadgeVariant.muted;
   }
 }
 

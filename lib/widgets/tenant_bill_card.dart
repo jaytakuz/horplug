@@ -131,6 +131,21 @@ class TenantBillCard extends StatelessWidget {
             ),
           ],
         );
+      case InvoiceStatus.voided:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.block, size: 16, color: AppColors.mutedForeground),
+            const SizedBox(width: 6),
+            Text(
+              'ยกเลิกแล้ว',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.mutedForeground),
+            ),
+          ],
+        );
     }
   }
 }

@@ -399,6 +399,20 @@ class _BillHeroCard extends StatelessWidget {
             ),
           ],
         );
+      case InvoiceStatus.voided:
+        return Row(
+          children: [
+            const Icon(Icons.block, size: 16, color: AppColors.mutedForeground),
+            const SizedBox(width: 8),
+            Text(
+              'ยกเลิกแล้ว',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: AppColors.mutedForeground),
+            ),
+          ],
+        );
     }
   }
 }
