@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/supabase_service.dart';
 import 'error_message.dart';
+import 'safe_notifier.dart';
 
 String roomStatusLabel(RoomStatus status) {
   switch (status) {
@@ -15,7 +16,7 @@ String roomStatusLabel(RoomStatus status) {
   }
 }
 
-class TenantProfileViewModel extends ChangeNotifier {
+class TenantProfileViewModel extends ChangeNotifier with SafeNotifier {
   TenantProfileViewModel({
     required this.roomId,
     required this.dormitoryId,

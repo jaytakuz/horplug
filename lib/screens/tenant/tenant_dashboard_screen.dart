@@ -530,8 +530,12 @@ class _MaintenanceSummary extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('แจ้งซ่อม/ทำความสะอาด',
-                  style: Theme.of(context).textTheme.titleMedium),
+              Expanded(
+                child: Text('แจ้งซ่อม/ทำความสะอาด',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
               TextButton(
                 onPressed: () => context.go('/tenant/maintenance'),
                 style: TextButton.styleFrom(

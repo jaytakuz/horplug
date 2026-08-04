@@ -8,6 +8,7 @@ import '../services/tenant_billing_source.dart';
 import '../widgets/reusable_widgets.dart';
 import 'action_result.dart';
 import 'error_message.dart';
+import 'safe_notifier.dart';
 
 // ── Pure helpers ────────────────────────────────────────────────────────────
 // อยู่นอกคลาสเพราะ SupabaseService สร้าง client ตอน field initializer ทำให้
@@ -94,7 +95,7 @@ BadgeVariant billStatusVariant(InvoiceStatus status) {
 
 // ── ViewModel ───────────────────────────────────────────────────────────────
 
-class TenantDashboardViewModel extends ChangeNotifier {
+class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
   TenantDashboardViewModel({
     required this.roomId,
     this.dormitoryId,

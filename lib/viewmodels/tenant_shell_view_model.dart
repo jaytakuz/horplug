@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 import '../services/supabase_service.dart';
+import 'safe_notifier.dart';
 
-class TenantShellViewModel extends ChangeNotifier {
+class TenantShellViewModel extends ChangeNotifier with SafeNotifier {
   TenantShellViewModel({
     required this.roomId,
     required this.tenantId,

@@ -84,16 +84,27 @@ class _TenantShellViewState extends State<_TenantShellView> {
   /// ซึ่งไม่ผ่าน _onItemTapped เลย
   void _syncUnreadForIndex(int activeIndex) {
     if (activeIndex == _lastIndex) return;
+    final previousIndex = _lastIndex;
     _lastIndex = activeIndex;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final viewModel = context.read<TenantShellViewModel>();
+
       if (activeIndex == _chatIndex) {
-        viewModel.markChatRead();
-      } else {
-        viewModel.refreshUnreadCount();
+        await viewModel.markChatRead();
+        return;
       }
+
+      // เพิ่งออกจากแท็บแชท: ข้อความที่เข้ามาระหว่างที่ผู้ใช้นั่งอ่านอยู่ยังมี
+      // created_at ใหม่กว่า last_read_at จึงถูกนับเป็น "ยังไม่อ่าน" ทั้งที่
+      // เห็นไปแล้ว ต้อง mark ปิดยอดก่อนแล้วค่อยนับใหม่
+      if (previousIndex == _chatIndex) {
+        await viewModel.markChatRead();
+        if (!mounted) return;
+      }
+
+      await viewModel.refreshUnreadCount();
     });
   }
 

@@ -57,21 +57,26 @@ class TenantBillCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('ยอดรวมสุทธิ',
-                      style: Theme.of(context).textTheme.labelSmall),
-                  const SizedBox(height: 2),
-                  Text(
-                    formatBaht(bill.total),
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontSize: 20),
-                  ),
-                ],
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('ยอดรวมสุทธิ',
+                        style: Theme.of(context).textTheme.labelSmall),
+                    const SizedBox(height: 2),
+                    Text(
+                      formatBaht(bill.total),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontSize: 20),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 12),
               _buildAction(context),
             ],
           ),

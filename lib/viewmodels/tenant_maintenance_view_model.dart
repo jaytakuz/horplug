@@ -5,6 +5,7 @@ import '../services/supabase_service.dart';
 import 'action_result.dart';
 import 'error_message.dart';
 import 'maintenance_view_model.dart';
+import 'safe_notifier.dart';
 
 /// ตัวเลือกตัวกรองสถานะ — 'ทั้งหมด' บวกกับ label ของทุกสถานะ
 const tenantMaintenanceFilters = [
@@ -25,7 +26,7 @@ List<MaintenanceRequest> filterMaintenanceRequests(
       .toList();
 }
 
-class TenantMaintenanceViewModel extends ChangeNotifier {
+class TenantMaintenanceViewModel extends ChangeNotifier with SafeNotifier {
   TenantMaintenanceViewModel({
     required this.roomId,
     required this.tenantId,

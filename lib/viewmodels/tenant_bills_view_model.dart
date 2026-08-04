@@ -7,6 +7,7 @@ import '../services/tenant_billing_source.dart';
 import 'action_result.dart';
 import 'error_message.dart';
 import 'tenant_dashboard_view_model.dart' show billStatusLabel;
+import 'safe_notifier.dart';
 
 const tenantBillFilters = [
   'ทั้งหมด',
@@ -28,7 +29,7 @@ double totalPaidInYear(List<TenantBill> bills, int year) => bills
     .where((bill) => bill.status == InvoiceStatus.paid && bill.period.year == year)
     .fold<double>(0, (sum, bill) => sum + bill.total);
 
-class TenantBillsViewModel extends ChangeNotifier {
+class TenantBillsViewModel extends ChangeNotifier with SafeNotifier {
   TenantBillsViewModel({
     required this.roomId,
     required this.dormitoryId,

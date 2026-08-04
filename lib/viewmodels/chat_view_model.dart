@@ -90,7 +90,11 @@ class ChatViewModel extends ChangeNotifier {
     notifyListeners();
 
     _subscribeToMessages(chat.roomDbId, chat.tenantName);
-    _service.markRoomRead(roomId: chat.roomDbId, userId: ownerId);
+    // ไม่ await เพราะไม่ควรหน่วงการเปิดแชท แต่ต้องกลืน error เอง ไม่งั้น
+    // ถ้า upsert ล้ม (ออฟไลน์ / RLS) จะกลายเป็น unhandled async exception
+    _service
+        .markRoomRead(roomId: chat.roomDbId, userId: ownerId)
+        .catchError((_) {});
   }
 
   void _subscribeToMessages(int roomId, String tenantName) {

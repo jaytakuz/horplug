@@ -6,8 +6,10 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
 import '../services/supabase_service.dart';
+import 'error_message.dart';
+import 'safe_notifier.dart';
 
-class TenantChatViewModel extends ChangeNotifier {
+class TenantChatViewModel extends ChangeNotifier with SafeNotifier {
   TenantChatViewModel({
     required this.roomId,
     required this.tenantId,
@@ -28,6 +30,11 @@ class TenantChatViewModel extends ChangeNotifier {
   bool isUploadingImage = false;
   bool isRequestingMaintenance = false;
   String? errorMessage;
+
+  /// error จากการ "ส่ง" (ต่างจาก errorMessage ที่เป็น error ของการโหลดแชท)
+  /// View อ่านค่านี้ไปขึ้น SnackBar แล้วเรียก clearSendError()
+  String? sendErrorMessage;
+
   List<ChatMessage> conversation = [];
   bool hasMoreMessages = true;
   bool isLoadingMore = false;
@@ -43,7 +50,12 @@ class TenantChatViewModel extends ChangeNotifier {
     notifyListeners();
 
     _subscribeToMessages();
-    _service.markRoomRead(roomId: roomId, userId: tenantId);
+    // จงใจไม่ markRoomRead ที่นี่ — IndexedStack ใน TenantShell build ทุกแท็บ
+    // ตั้งแต่เฟรมแรก start() จึงทำงานทันทีที่เปิดแอปแม้ผู้ใช้ยังไม่เคยเข้า
+    // แท็บแชท ถ้า mark ตรงนี้ last_read_at จะถูกดันไปเป็นเวลาเปิดแอปเสมอ
+    // ทำให้ badge นับได้ 0 ตลอดและข้อความที่เข้ามาตอนแอปปิดไม่เคยแจ้งเตือน
+    // ให้ TenantShellViewModel.markChatRead() เป็นเจ้าของเรื่องนี้คนเดียว
+    // (เรียกเมื่ออยู่แท็บแชทจริง)
   }
 
   void _subscribeToMessages() {
@@ -94,6 +106,11 @@ class TenantChatViewModel extends ChangeNotifier {
         isFromOwner: false,
         body: trimmed,
       );
+      errorMessage = null;
+    } catch (error) {
+      // เดิม finally เปล่าทำให้ error หลุดออกไปเป็น unhandled async exception
+      // (ผู้เรียกไม่ await) ผู้ใช้เห็นแค่ข้อความที่พิมพ์หายไปเฉยๆ
+      sendErrorMessage = 'ส่งข้อความไม่สำเร็จ: ${formatErrorMessage(error)}';
     } finally {
       isSending = false;
       notifyListeners();
@@ -123,6 +140,8 @@ class TenantChatViewModel extends ChangeNotifier {
         type: MessageType.image,
         attachmentUrl: path,
       );
+    } catch (error) {
+      sendErrorMessage = 'ส่งรูปไม่สำเร็จ: ${formatErrorMessage(error)}';
     } finally {
       isUploadingImage = false;
       notifyListeners();
@@ -144,10 +163,18 @@ class TenantChatViewModel extends ChangeNotifier {
         description: trimmed,
         requestType: type,
       );
+    } catch (error) {
+      sendErrorMessage = 'ส่งคำขอไม่สำเร็จ: ${formatErrorMessage(error)}';
     } finally {
       isRequestingMaintenance = false;
       notifyListeners();
     }
+  }
+
+  void clearSendError() {
+    if (sendErrorMessage == null) return;
+    sendErrorMessage = null;
+    notifyListeners();
   }
 
   @override

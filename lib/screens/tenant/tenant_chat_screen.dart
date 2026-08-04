@@ -69,6 +69,17 @@ class _TenantChatView extends StatelessWidget {
     final viewModel = context.watch<TenantChatViewModel>();
     final profile = AuthScope.of(context).profile;
 
+    // การส่งที่ล้มเหลวเคยเงียบสนิท ผู้ใช้เห็นแค่ข้อความที่พิมพ์หายไป
+    final sendError = viewModel.sendErrorMessage;
+    if (sendError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(sendError)));
+        viewModel.clearSendError();
+      });
+    }
+
     final body = viewModel.isLoading
           ? const Center(child: CircularProgressIndicator())
           : viewModel.errorMessage != null

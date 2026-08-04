@@ -155,48 +155,10 @@ class MaintenanceRequestCard extends StatelessWidget {
   }
 
   Future<void> _showEditFeeDialog(BuildContext context) async {
-    final controller = TextEditingController(
-      text: request.cleaningFee > 0
-          ? request.cleaningFee.toStringAsFixed(0)
-          : '',
+    final fee = await showDialog<double>(
+      context: context,
+      builder: (_) => _CleaningFeeDialog(initialFee: request.cleaningFee),
     );
-
-    final double? fee;
-    try {
-      fee = await showDialog<double>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          backgroundColor: AppColors.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: const Text('ค่าทำความสะอาด'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              prefixText: '฿ ',
-              hintText: '0',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('ยกเลิก'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final parsed = double.tryParse(controller.text.trim()) ?? 0;
-                Navigator.of(dialogContext).pop(parsed);
-              },
-              child: const Text('บันทึก'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      controller.dispose();
-    }
 
     if (fee != null) {
       await onEditCleaningFee?.call(fee);
@@ -206,5 +168,73 @@ class MaintenanceRequestCard extends StatelessWidget {
   String _formatDate(DateTime dateTime) {
     final local = dateTime.toLocal();
     return '${local.day}/${local.month}/${local.year}';
+  }
+}
+
+/// เนื้อหา dialog เป็น StatefulWidget เพื่อให้ตัวมันเองเป็นเจ้าของ
+/// TextEditingController
+///
+/// ห้าม dispose controller ทันทีหลัง showDialog คืนค่า: ตอนนั้น dialog
+/// เพิ่งเริ่ม animate ปิด TextField ข้างในยัง rebuild อยู่ จึงเกิด
+/// "A TextEditingController was used after being disposed"
+/// การ dispose ใน State.dispose() จะเกิดตอน widget ถูกถอดออกจริง
+/// ซึ่งคือหลัง animation จบแล้ว
+class _CleaningFeeDialog extends StatefulWidget {
+  const _CleaningFeeDialog({required this.initialFee});
+
+  final double initialFee;
+
+  @override
+  State<_CleaningFeeDialog> createState() => _CleaningFeeDialogState();
+}
+
+class _CleaningFeeDialogState extends State<_CleaningFeeDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // ค่าตั้งต้นต้องไม่มีตัวคั่นหลักพัน ไม่งั้น double.tryParse จะพัง
+    _controller = TextEditingController(
+      text: widget.initialFee > 0 ? widget.initialFee.toStringAsFixed(0) : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: const Text('ค่าทำความสะอาด'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: const InputDecoration(
+          prefixText: '฿ ',
+          hintText: '0',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('ยกเลิก'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final parsed = double.tryParse(_controller.text.trim()) ?? 0;
+            Navigator.of(context).pop(parsed);
+          },
+          child: const Text('บันทึก'),
+        ),
+      ],
+    );
   }
 }

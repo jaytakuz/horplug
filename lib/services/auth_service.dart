@@ -122,7 +122,7 @@ class AuthService {
         final list = dormitoriesRaw.cast<Map<String, dynamic>>();
         dormitory = list.isEmpty ? null : list.first;
       } else if (dormitoriesRaw is Map) {
-        dormitory = Map<String, dynamic>.from(dormitoriesRaw as Map);
+        dormitory = Map<String, dynamic>.from(dormitoriesRaw);
       }
 
       return UserProfile(
