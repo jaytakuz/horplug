@@ -17,7 +17,7 @@ import '../utils/formatters.dart';
 /// คืน true เมื่อส่งสลิปสำเร็จ เพื่อให้หน้าที่เรียกรีเฟรชตัวเอง
 Future<bool> showPaymentSheet(
   BuildContext context, {
-  required TenantBill bill,
+  required Invoice bill,
   required PaymentChannel? channel,
   required Future<ActionResult> Function(File slip) onSubmit,
 }) async {
@@ -41,7 +41,7 @@ class _PaymentSheet extends StatefulWidget {
     required this.onSubmit,
   });
 
-  final TenantBill bill;
+  final Invoice bill;
   final PaymentChannel? channel;
   final Future<ActionResult> Function(File slip) onSubmit;
 
@@ -117,7 +117,9 @@ class _PaymentSheetState extends State<_PaymentSheet> {
   @override
   Widget build(BuildContext context) {
     final period = widget.bill.period;
-    final promptPayId = widget.channel?.promptPayId ?? '0XX-XXX-XXXX';
+    // PaymentChannel ไม่มี promptPayId แล้ว — หน้าตาของแผ่นนี้จะทำจริงใน Task 5
+    final bankName = widget.channel?.bankName ?? '-';
+    final accountNo = widget.channel?.accountNo ?? '0XX-XXX-XXXX';
 
     return SafeArea(
       child: Padding(
@@ -183,21 +185,20 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                 Center(child: _buildQrPlaceholder(context)),
                 const SizedBox(height: 12),
                 Center(
-                  child: Text('พร้อมเพย์ $promptPayId',
+                  child: Text('$bankName $accountNo',
                       style: Theme.of(context).textTheme.bodyLarge),
                 ),
                 Center(
                   child: TextButton.icon(
                     onPressed: () async {
-                      await Clipboard.setData(
-                          ClipboardData(text: promptPayId));
+                      await Clipboard.setData(ClipboardData(text: accountNo));
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('คัดลอกเลขพร้อมเพย์แล้ว')),
+                        const SnackBar(content: Text('คัดลอกเลขบัญชีแล้ว')),
                       );
                     },
                     icon: const Icon(Icons.copy, size: 16),
-                    label: const Text('คัดลอกเลขพร้อมเพย์'),
+                    label: const Text('คัดลอกเลขบัญชี'),
                     style: TextButton.styleFrom(
                         foregroundColor: AppColors.ring),
                   ),

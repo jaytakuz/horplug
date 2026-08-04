@@ -150,7 +150,8 @@ class _BillingViewState extends State<_BillingView> {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
-        children: ['ทั้งหมด', 'ค้างชำระ', 'รอตรวจสลิป', 'ชำระแล้ว'].map((filter) {
+        children: ['ทั้งหมด', 'ค้างชำระ', 'รอตรวจสลิป', 'ชำระแล้ว', 'ยกเลิกแล้ว']
+            .map((filter) {
           final isActive = viewModel.selectedFilter == filter;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -173,20 +174,48 @@ class _BillingViewState extends State<_BillingView> {
     );
   }
 
+  /// รายการว่างมีสองความหมายที่ต่างกันคนละเรื่อง — งวดนี้ยังไม่มีบิลเลย
+  /// กับตัวกรองที่เลือกไม่ตรงกับบิลใบไหน อย่างหลังไม่ควรชวนให้ออกบิลใหม่
+  /// ทั้งที่บิลอีกยี่สิบใบอยู่ห่างไปแค่ชิปเดียว
   Widget _buildEmptyState(BillingViewModel viewModel) {
+    if (viewModel.invoices.isNotEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'ไม่มีบิลในตัวกรองนี้',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.mutedForeground),
+          ),
+        ),
+      );
+    }
+
+    final hasDrafts = viewModel.readyToIssueCount > 0;
+
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.receipt_outlined, size: 64, color: AppColors.mutedForeground),
-          const SizedBox(height: 16),
-          const Text('ไม่พบข้อมูลบิลในเดือนที่เลือก', style: TextStyle(color: AppColors.mutedForeground)),
-          const SizedBox(height: 8),
-          const Text('กรุณาบันทึกมิเตอร์ในเมนู "มิเตอร์" ก่อน',
-            style: TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
-          const SizedBox(height: 16),
-          TextButton(onPressed: viewModel.loadInvoices, child: const Text('ลองโหลดใหม่อีกครั้ง')),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(hasDrafts ? Icons.playlist_add_check : Icons.speed_outlined,
+                size: 64, color: AppColors.mutedForeground),
+            const SizedBox(height: 16),
+            Text(
+              hasDrafts
+                  ? 'มิเตอร์พร้อมแล้ว ${viewModel.readyToIssueCount} ห้อง ยังไม่ได้ออกบิลงวดนี้'
+                  : 'ยังไม่ได้จดมิเตอร์งวดนี้',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.mutedForeground),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: viewModel.loadInvoices,
+              child: const Text('โหลดใหม่อีกครั้ง'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -212,6 +241,9 @@ class _InvoiceCard extends StatelessWidget {
     } else if (invoice.status == InvoiceStatus.pending) {
       variant = BadgeVariant.warning;
       statusText = 'รอตรวจสลิป';
+    } else if (invoice.isVoided) {
+      variant = BadgeVariant.muted;
+      statusText = 'ยกเลิกแล้ว';
     }
 
     return PaperCard(
@@ -225,6 +257,12 @@ class _InvoiceCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
               StatusBadge(label: statusText, variant: variant),
             ],
+          ),
+          Text(
+            invoice.revision > 1
+                ? '${invoice.invoiceNo} · แก้ไขครั้งที่ ${invoice.revision}'
+                : invoice.invoiceNo,
+            style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground),
           ),
           const SizedBox(height: 12),
           _buildItemRow('🏠 ค่าห้อง', formatBaht(invoice.roomPrice)),

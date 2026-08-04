@@ -1,17 +1,20 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
-import '../services/supabase_service.dart';
+import '../services/invoice_service.dart';
 
 class BillingViewModel extends ChangeNotifier {
-  BillingViewModel({required this.dormitoryId, SupabaseService? service})
-      : _service = service ?? SupabaseService();
+  BillingViewModel({required this.dormitoryId, InvoiceService? service})
+      : _service = service ?? InvoiceService();
 
   final int dormitoryId;
-  final SupabaseService _service;
+  final InvoiceService _service;
 
   bool isLoading = true;
   List<Invoice> invoices = [];
+
+  /// จำนวนห้องที่มิเตอร์พร้อมแล้วแต่ยังไม่ได้ออกบิล — ใช้แยกสาเหตุรายการว่าง
+  int readyToIssueCount = 0;
   String selectedFilter = 'ทั้งหมด';
   int selectedMonth = DateTime.now().month;
   int selectedYear = DateTime.now().year;
@@ -21,13 +24,17 @@ class BillingViewModel extends ChangeNotifier {
   List<Invoice> get filteredInvoices {
     switch (selectedFilter) {
       case 'ค้างชำระ':
-        return invoices.where((inv) => inv.status == InvoiceStatus.unpaid).toList();
+        return invoices.where((i) => i.status == InvoiceStatus.unpaid).toList();
       case 'รอตรวจสลิป':
-        return invoices.where((inv) => inv.status == InvoiceStatus.pending).toList();
+        return invoices.where((i) => i.status == InvoiceStatus.pending).toList();
       case 'ชำระแล้ว':
-        return invoices.where((inv) => inv.status == InvoiceStatus.paid).toList();
+        return invoices.where((i) => i.status == InvoiceStatus.paid).toList();
+      case 'ยกเลิกแล้ว':
+        return invoices.where((i) => i.isVoided).toList();
       default:
-        return invoices;
+        // ใบที่ยกเลิกไม่โผล่ในรายการปกติ ไม่งั้นงวดที่ออกใบแทนจะดูเหมือน
+        // ค้างชำระสองใบ
+        return invoices.where((i) => !i.isVoided).toList();
     }
   }
 
@@ -45,11 +52,16 @@ class BillingViewModel extends ChangeNotifier {
         month: selectedMonth,
         year: selectedYear,
       );
-      isLoading = false;
-      notifyListeners();
+      final preview = await _service.previewDrafts(
+        dormitoryId: dormitoryId,
+        month: selectedMonth,
+        year: selectedYear,
+      );
+      readyToIssueCount = preview.drafts.length;
     } catch (e) {
-      isLoading = false;
       _pendingError = 'โหลดข้อมูลบิลไม่สำเร็จ: $e';
+    } finally {
+      isLoading = false;
       notifyListeners();
     }
   }

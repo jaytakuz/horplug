@@ -108,7 +108,7 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
     SupabaseService? service,
     TenantBillingSource? billingSource,
   })  : _service = service ?? SupabaseService(),
-        _billingSource = billingSource ?? MockTenantBillingSource();
+        _billingSource = billingSource ?? SupabaseTenantBillingSource();
 
   final int? roomId;
   final int? dormitoryId;
@@ -133,12 +133,11 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
   String? maintenanceErrorMessage;
   String? chatErrorMessage;
 
-  TenantBill? currentBill;
+  Invoice? currentBill;
   PaymentChannel? paymentChannel;
 
   /// การใช้ไฟเดือนนี้เทียบเดือนก่อน — null เมื่อมีประวัติไม่ถึง 2 เดือน
   UtilityTrend? electricityTrend;
-  bool get hasMeterRecord => currentBill != null;
 
   List<MaintenanceRequest> openRequests = [];
   ChatMessage? latestMessage;
@@ -202,8 +201,10 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
     }
 
     // แนวโน้มการใช้ไฟดึงแยก เพื่อให้บิลเดือนนี้ยังแสดงได้แม้ประวัติล้ม
+    // หน่วยไฟมาจากบิลที่ออกแล้ว ไม่ใช่มิเตอร์สด ตัวเลขที่ผู้เช่าเห็นจึงตรงกับ
+    // ตัวเลขที่ถูกเรียกเก็บจริงเสมอ
     try {
-      final history = await _service.fetchInvoiceHistoryForRoom(
+      final history = await _billingSource.fetchBillHistory(
         roomDbId: room,
         monthCount: 2,
       );
@@ -246,12 +247,12 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
   }
 
   Future<ActionResult> submitSlip({
-    required String billId,
+    required Invoice bill,
     required File slip,
   }) async {
     try {
       final result =
-          await _billingSource.submitPaymentSlip(billId: billId, slip: slip);
+          await _billingSource.submitPaymentSlip(bill: bill, slip: slip);
       if (result.success) await load();
       return result;
     } catch (error) {

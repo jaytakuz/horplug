@@ -134,36 +134,103 @@ class Tenant {
   });
 }
 
+/// บิลหนึ่งใบที่ออกแล้ว — หนึ่งแถวในตาราง invoices
+///
+/// ตัวเลขทุกตัวถูกตรึงไว้ ณ วันออกบิล การแก้มิเตอร์ย้อนหลังจึงไม่กระทบบิลที่
+/// ออกไปแล้ว ร่างที่ยังไม่ออกใช้ [InvoiceDraft] คนละชนิดกัน
 class Invoice {
-  final String id;
+  final int dbId;
+  final String invoiceNo;
+  final int roomDbId;
   final String roomNumber;
+  final String? tenantId;
   final String tenantName;
-  final double waterUnits;
-  final double electricityUnits;
-  final double roomPrice;
-  final double waterCost;
-  final double electricityCost;
-  final double cleaningFee;
-  final InvoiceStatus status;
-  final DateTime date;
-  final bool hasSlip;
+  final int billingMonth;
+  final int billingYear;
 
-  Invoice({
-    required this.id,
+  final double roomPrice;
+  final double electricityUnits;
+  final double electricityCost;
+  final double waterCost;
+  final double cleaningFee;
+  final double total;
+
+  final InvoiceStatus status;
+  final DateTime dueDate;
+  final DateTime issuedAt;
+  final String? slipUrl;
+  final DateTime? slipSubmittedAt;
+  final String? rejectionReason;
+  final DateTime? paidAt;
+  final int revision;
+  final String? voidReason;
+
+  const Invoice({
+    required this.dbId,
+    required this.invoiceNo,
+    required this.roomDbId,
     required this.roomNumber,
+    this.tenantId,
     required this.tenantName,
-    required this.waterUnits,
-    required this.electricityUnits,
-    required this.roomPrice,
-    required this.waterCost,
-    required this.electricityCost,
+    required this.billingMonth,
+    required this.billingYear,
+    this.roomPrice = 0,
+    this.electricityUnits = 0,
+    this.electricityCost = 0,
+    this.waterCost = 0,
     this.cleaningFee = 0,
+    required this.total,
     required this.status,
-    required this.date,
-    this.hasSlip = false,
+    required this.dueDate,
+    required this.issuedAt,
+    this.slipUrl,
+    this.slipSubmittedAt,
+    this.rejectionReason,
+    this.paidAt,
+    this.revision = 1,
+    this.voidReason,
   });
 
-  double get total => roomPrice + waterCost + electricityCost + cleaningFee;
+  /// งวดของบิล (วันที่ 1 ของเดือนนั้น) — ใช้เรียงและแสดงชื่อเดือน
+  DateTime get period => DateTime(billingYear, billingMonth, 1);
+
+  bool get hasSlip => slipUrl != null;
+  bool get isVoided => status == InvoiceStatus.voided;
+
+  Invoice copyWith({
+    InvoiceStatus? status,
+    String? slipUrl,
+    DateTime? slipSubmittedAt,
+    String? rejectionReason,
+    DateTime? paidAt,
+    String? voidReason,
+  }) {
+    return Invoice(
+      dbId: dbId,
+      invoiceNo: invoiceNo,
+      roomDbId: roomDbId,
+      roomNumber: roomNumber,
+      tenantId: tenantId,
+      tenantName: tenantName,
+      billingMonth: billingMonth,
+      billingYear: billingYear,
+      roomPrice: roomPrice,
+      electricityUnits: electricityUnits,
+      electricityCost: electricityCost,
+      waterCost: waterCost,
+      cleaningFee: cleaningFee,
+      total: total,
+      status: status ?? this.status,
+      dueDate: dueDate,
+      issuedAt: issuedAt,
+      slipUrl: slipUrl ?? this.slipUrl,
+      slipSubmittedAt: slipSubmittedAt ?? this.slipSubmittedAt,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      paidAt: paidAt ?? this.paidAt,
+      revision: revision,
+      voidReason: voidReason ?? this.voidReason,
+    );
+  }
 }
 
 /// ร่างบิลที่คำนวณสดจากมิเตอร์ ยังไม่มีตัวตนในฐานข้อมูล
@@ -393,55 +460,22 @@ class DormitoryInfo {
       (landlordEmail != null && landlordEmail!.trim().isNotEmpty);
 }
 
-/// บิลหนึ่งใบในมุมมองของผู้เช่า
+/// ช่องทางรับชำระเงินของหอพัก
 ///
-/// [invoice] คือรายการค่าใช้จ่ายจริงที่คำนวณจากมิเตอร์ ส่วน [status] /
-/// [dueDate] / [paidAt] / [slipUrl] ยังเป็นค่าจำลอง เพราะยังไม่มีตาราง
-/// invoices — ฟีเจอร์ถัดไป "Invoice Generation" จะมาแทนที่เฉพาะส่วนนี้
-/// โดยที่ UI ไม่ต้องแก้ (ดู lib/services/tenant_billing_source.dart)
-class TenantBill {
-  final Invoice invoice;
-  final InvoiceStatus status;
-  final DateTime? dueDate;
-  final DateTime? paidAt;
-  final String? slipUrl;
-
-  const TenantBill({
-    required this.invoice,
-    required this.status,
-    this.dueDate,
-    this.paidAt,
-    this.slipUrl,
-  });
-
-  String get id => invoice.id;
-  DateTime get period => invoice.date;
-  double get total => invoice.total;
-
-  TenantBill copyWith({
-    InvoiceStatus? status,
-    DateTime? dueDate,
-    DateTime? paidAt,
-    String? slipUrl,
-  }) {
-    return TenantBill(
-      invoice: invoice,
-      status: status ?? this.status,
-      dueDate: dueDate ?? this.dueDate,
-      paidAt: paidAt ?? this.paidAt,
-      slipUrl: slipUrl ?? this.slipUrl,
-    );
-  }
-}
-
-/// ช่องทางรับชำระเงินของหอพัก (ยังเป็นค่าจำลอง)
+/// เฟสนี้ QR เป็นภาพนิ่งใน assets จึงไม่มีจำนวนเงินฝังอยู่ เมื่อเปลี่ยนไปใช้
+/// QR ที่สร้างสดพร้อมจำนวนเงิน ให้เปลี่ยนเฉพาะที่มาของ [qrAssetPath]
+/// ผู้เรียกทั้งหมดไม่ต้องแก้
 class PaymentChannel {
-  final String promptPayId;
+  final String bankName;
+  final String accountNo;
   final String accountName;
+  final String qrAssetPath;
 
   const PaymentChannel({
-    required this.promptPayId,
+    required this.bankName,
+    required this.accountNo,
     required this.accountName,
+    required this.qrAssetPath,
   });
 }
 

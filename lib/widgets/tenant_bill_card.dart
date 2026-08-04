@@ -15,12 +15,11 @@ class TenantBillCard extends StatelessWidget {
     this.onPay,
   });
 
-  final TenantBill bill;
+  final Invoice bill;
   final VoidCallback? onPay;
 
   @override
   Widget build(BuildContext context) {
-    final invoice = bill.invoice;
     final period = bill.period;
 
     return PaperCard(
@@ -42,16 +41,21 @@ class TenantBillCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _LineItem(label: '🏠 ค่าห้อง', amount: invoice.roomPrice),
-          _LineItem(
-            label:
-                '⚡ ค่าไฟ ${formatUnits(invoice.electricityUnits)} หน่วย',
-            amount: invoice.electricityCost,
+          Text(
+            bill.revision > 1
+                ? '${bill.invoiceNo} · แก้ไขครั้งที่ ${bill.revision}'
+                : bill.invoiceNo,
+            style: Theme.of(context).textTheme.labelSmall,
           ),
-          _LineItem(label: '💧 ค่าน้ำ', amount: invoice.waterCost),
-          if (invoice.cleaningFee > 0)
-            _LineItem(label: '🧹 ค่าทำความสะอาด', amount: invoice.cleaningFee),
+          const SizedBox(height: 12),
+          _LineItem(label: '🏠 ค่าห้อง', amount: bill.roomPrice),
+          _LineItem(
+            label: '⚡ ค่าไฟ ${formatUnits(bill.electricityUnits)} หน่วย',
+            amount: bill.electricityCost,
+          ),
+          _LineItem(label: '💧 ค่าน้ำ', amount: bill.waterCost),
+          if (bill.cleaningFee > 0)
+            _LineItem(label: '🧹 ค่าทำความสะอาด', amount: bill.cleaningFee),
           const Divider(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -80,10 +84,30 @@ class TenantBillCard extends StatelessWidget {
               _buildAction(context),
             ],
           ),
-          if (bill.dueDate != null && bill.status == InvoiceStatus.unpaid) ...[
+          // ผู้เช่าต้องอ่านเหตุผลที่สลิปถูกปฏิเสธก่อนจ่ายรอบสอง
+          if (bill.rejectionReason != null &&
+              bill.status == InvoiceStatus.unpaid) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.destructiveBg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'สลิปถูกปฏิเสธ: ${bill.rejectionReason}',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: AppColors.destructive),
+              ),
+            ),
+          ],
+          if (bill.status == InvoiceStatus.unpaid) ...[
             const SizedBox(height: 8),
             Text(
-              'ครบกำหนด ${bill.dueDate!.day} ${thaiMonthName(bill.dueDate!.month)} ${bill.dueDate!.year}',
+              'ครบกำหนด ${bill.dueDate.day} ${thaiMonthName(bill.dueDate.month)} ${bill.dueDate.year}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

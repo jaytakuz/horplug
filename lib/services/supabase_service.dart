@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
-import 'invoice_calculator.dart';
 
 const _chatImageBucket = 'chat-image';
 
@@ -12,8 +11,8 @@ class SupabaseService {
   /// ดึงข้อมูลห้องพักทั้งหมด
   ///
   /// [roomDbId] ใช้จำกัดผลลัพธ์ให้เหลือห้องเดียว — ฝั่งผู้เช่าเรียกผ่านตัวนี้
-  /// ทำให้ fetchElectricityRecords / fetchWaterRecords / fetchInvoices ที่เรียก
-  /// fetchRooms อยู่แล้ว กลายเป็น "เฉพาะห้องของฉัน" ได้โดยไม่ต้องเขียน query ซ้ำ
+  /// ทำให้ fetchElectricityRecords / fetchWaterRecords ที่เรียก fetchRooms
+  /// อยู่แล้ว กลายเป็น "เฉพาะห้องของฉัน" ได้โดยไม่ต้องเขียน query ซ้ำ
   Future<List<Room>> fetchRooms({int? dormitoryId, int? roomDbId}) async {
     var baseQuery = client
         .from('rooms')
@@ -238,226 +237,6 @@ class SupabaseService {
     if (withoutId.isNotEmpty) {
       await client.from('water_meter').upsert(withoutId, onConflict: 'room_id,billing_month,billing_year');
     }
-  }
-
-  // --- ระบบ Billing ---
-
-  Future<List<Invoice>> fetchInvoices({
-    int? dormitoryId,
-    int? roomDbId,
-    required int month,
-    required int year,
-  }) async {
-    final rooms = await fetchRooms(dormitoryId: dormitoryId, roomDbId: roomDbId);
-    final roomIds = rooms.map((room) => room.dbId).toList();
-    if (roomIds.isEmpty) return [];
-
-    final elecs = await client.from('electricity_record').select().inFilter('room_id', roomIds).eq('billing_month', month).eq('billing_year', year);
-    final waters = await client.from('water_meter').select().inFilter('room_id', roomIds).eq('billing_month', month).eq('billing_year', year);
-
-    final elecData = (elecs as List).cast<Map<String, dynamic>>();
-    final waterData = (waters as List).cast<Map<String, dynamic>>();
-    final cleaningFeeByRoom = await _fetchCleaningFeesByRoom(
-      roomIds: roomIds,
-      month: month,
-      year: year,
-    );
-
-    final invoices = <Invoice>[];
-    for (final room in rooms) {
-      final e = elecData.firstWhere((r) => r['room_id'] == room.dbId,
-          orElse: () => {});
-      final w = waterData.firstWhere((r) => r['room_id'] == room.dbId,
-          orElse: () => {});
-
-      final draft = buildDraft(
-        room: room,
-        billingMonth: month,
-        billingYear: year,
-        electricity: e.isEmpty
-            ? null
-            : MeterCharge(
-                units: _parseDouble(e['current_reading']) -
-                    _parseDouble(e['previous_reading']),
-                amount: _parseDouble(e['amount']),
-              ),
-        waterAmount: w.isEmpty ? null : _parseDouble(w['amount']),
-        cleaningFee: cleaningFeeByRoom[room.dbId] ?? 0.0,
-      );
-
-      if (!draft.canIssue) continue;
-
-      invoices.add(Invoice(
-        id: 'INV-${room.dbId}-$month-$year',
-        roomNumber: draft.roomNumber,
-        tenantName: draft.tenantName,
-        waterUnits: w.isNotEmpty ? 1.0 : 0.0,
-        electricityUnits: draft.electricityUnits,
-        roomPrice: draft.roomPrice,
-        waterCost: draft.waterCost,
-        electricityCost: draft.electricityCost,
-        cleaningFee: draft.cleaningFee,
-        status: InvoiceStatus.unpaid,
-        date: DateTime(year, month, 1),
-      ));
-    }
-    return invoices;
-  }
-
-  /// รวมค่าทำความสะอาดจากคำขอที่ "เสร็จสิ้น" ในเดือน/ปีนั้นๆ (ตาม completed_at)
-  /// แยกตามห้อง เพื่อรวมเข้าบิลของห้องนั้นในงวดที่งานเสร็จจริง
-  Future<Map<int, double>> _fetchCleaningFeesByRoom({
-    required List<int> roomIds,
-    required int month,
-    required int year,
-  }) async {
-    if (roomIds.isEmpty) return {};
-
-    final periodStart = DateTime(year, month, 1);
-    final periodEnd = DateTime(month == 12 ? year + 1 : year, month == 12 ? 1 : month + 1, 1);
-
-    final data = await client
-        .from('maintenance_requests')
-        .select('room_id, cleaning_fee')
-        .inFilter('room_id', roomIds)
-        .eq('request_type', 'Cleaning')
-        .eq('status', 'Completed')
-        .gte('completed_at', periodStart.toIso8601String())
-        .lt('completed_at', periodEnd.toIso8601String());
-
-    final feeByRoom = <int, double>{};
-    for (final row in (data as List).cast<Map<String, dynamic>>()) {
-      final roomId = row['room_id'] as int;
-      feeByRoom[roomId] = (feeByRoom[roomId] ?? 0) + _parseDouble(row['cleaning_fee']);
-    }
-    return feeByRoom;
-  }
-
-  // --- ระบบ Billing ฝั่งผู้เช่า ---
-
-  /// บิลของห้องเดียวในงวดที่ระบุ
-  ///
-  /// คืน null เมื่อยังไม่มีมิเตอร์/ค่าบริการในงวดนั้น — ให้ถือว่า "ยังไม่ออกบิล"
-  /// ไม่ใช่ error
-  Future<Invoice?> fetchInvoiceForRoom({
-    required int roomDbId,
-    required int month,
-    required int year,
-  }) async {
-    final invoices =
-        await fetchInvoices(roomDbId: roomDbId, month: month, year: year);
-    return invoices.isEmpty ? null : invoices.first;
-  }
-
-  /// ประวัติบิลย้อนหลังของห้องเดียว เรียงจากงวดล่าสุดไปเก่า
-  ///
-  /// ใช้ query รวม 4 ครั้ง (ห้อง + ไฟ + น้ำ + ค่าทำความสะอาด) ไม่ใช่ 4×N
-  /// เหมือนการวนเรียก fetchInvoices ทีละเดือน
-  Future<List<Invoice>> fetchInvoiceHistoryForRoom({
-    required int roomDbId,
-    int monthCount = 6,
-  }) async {
-    final room = await fetchRoom(roomDbId: roomDbId);
-    if (room == null) return [];
-
-    final elecs = await client
-        .from('electricity_record')
-        .select()
-        .eq('room_id', roomDbId)
-        .order('billing_year', ascending: false)
-        .order('billing_month', ascending: false)
-        .limit(monthCount);
-    final waters = await client
-        .from('water_meter')
-        .select()
-        .eq('room_id', roomDbId)
-        .order('billing_year', ascending: false)
-        .order('billing_month', ascending: false)
-        .limit(monthCount);
-
-    final elecData = (elecs as List).cast<Map<String, dynamic>>();
-    final waterData = (waters as List).cast<Map<String, dynamic>>();
-
-    final now = DateTime.now();
-    final since = DateTime(now.year, now.month - monthCount + 1, 1);
-    final cleaningByPeriod =
-        await _fetchCleaningFeesByPeriodForRoom(roomId: roomDbId, since: since);
-
-    // รวมงวดจากทั้งสามแหล่ง — บางเดือนอาจมีเฉพาะค่าน้ำ หรือเฉพาะค่าทำความสะอาด
-    final periods = <String>{
-      ...elecData.map((r) => '${r['billing_year']}-${r['billing_month']}'),
-      ...waterData.map((r) => '${r['billing_year']}-${r['billing_month']}'),
-      ...cleaningByPeriod.keys,
-    };
-
-    final invoices = <Invoice>[];
-    for (final period in periods) {
-      final parts = period.split('-');
-      final year = int.tryParse(parts[0]);
-      final month = int.tryParse(parts[1]);
-      if (year == null || month == null) continue;
-
-      final e = elecData.firstWhere(
-        (r) => r['billing_year'] == year && r['billing_month'] == month,
-        orElse: () => {},
-      );
-      final w = waterData.firstWhere(
-        (r) => r['billing_year'] == year && r['billing_month'] == month,
-        orElse: () => {},
-      );
-      final cleaningFee = cleaningByPeriod[period] ?? 0.0;
-
-      final elecUnits = e.isNotEmpty
-          ? (_parseDouble(e['current_reading']) -
-              _parseDouble(e['previous_reading']))
-          : 0.0;
-
-      invoices.add(Invoice(
-        id: 'INV-$roomDbId-$month-$year',
-        roomNumber: room.id,
-        tenantName: room.tenantName ?? '-',
-        waterUnits: w.isNotEmpty ? 1.0 : 0.0,
-        electricityUnits: elecUnits,
-        roomPrice: room.price,
-        waterCost: w.isNotEmpty ? _parseDouble(w['amount']) : 0.0,
-        electricityCost: e.isNotEmpty ? _parseDouble(e['amount']) : 0.0,
-        cleaningFee: cleaningFee,
-        status: InvoiceStatus.unpaid,
-        date: DateTime(year, month, 1),
-      ));
-    }
-
-    invoices.sort((a, b) => b.date.compareTo(a.date));
-    return invoices.take(monthCount).toList();
-  }
-
-  /// ค่าทำความสะอาดที่ "เสร็จสิ้น" ของห้องเดียว แยกตามงวด key `<year>-<month>`
-  ///
-  /// ต่างจาก _fetchCleaningFeesByRoom ตรงที่อันนั้นเป็นทั้งหอ/งวดเดียว
-  /// ส่วนอันนี้คือห้องเดียว/หลายงวด
-  Future<Map<String, double>> _fetchCleaningFeesByPeriodForRoom({
-    required int roomId,
-    required DateTime since,
-  }) async {
-    final data = await client
-        .from('maintenance_requests')
-        .select('completed_at, cleaning_fee')
-        .eq('room_id', roomId)
-        .eq('request_type', 'Cleaning')
-        .eq('status', 'Completed')
-        .gte('completed_at', since.toIso8601String());
-
-    final feeByPeriod = <String, double>{};
-    for (final row in (data as List).cast<Map<String, dynamic>>()) {
-      final completedAt = row['completed_at'] as String?;
-      if (completedAt == null) continue;
-      final date = DateTime.tryParse(completedAt);
-      if (date == null) continue;
-
-      final key = '${date.year}-${date.month}';
-      feeByPeriod[key] = (feeByPeriod[key] ?? 0) + _parseDouble(row['cleaning_fee']);
-    }
-    return feeByPeriod;
   }
 
   // --- Helpers & Others ---
@@ -942,7 +721,8 @@ class SupabaseService {
   }
 
   /// กำหนดค่าบริการทำความสะอาด (เฉพาะคำขอประเภท Cleaning) — ยอดนี้จะถูกรวม
-  /// เข้าบิลของห้องในเดือนที่คำขอนี้ "เสร็จสิ้น" โดยอัตโนมัติผ่าน fetchInvoices
+  /// เข้าร่างบิลของห้องในเดือนที่คำขอนี้ "เสร็จสิ้น" ผ่าน
+  /// InvoiceService.previewDrafts
   Future<void> updateCleaningFee({
     required int requestId,
     required double fee,

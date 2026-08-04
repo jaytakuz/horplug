@@ -52,8 +52,7 @@ InvoiceDraft buildDraft({
 /// ครบกำหนดชำระวันที่ 5 ของเดือนถัดจากงวด
 ///
 /// DateTime รับ month = 13 แล้วขึ้นปีใหม่ให้เอง งวดธันวาคมจึงได้ 5 มกราคม
-/// ปีถัดไปโดยไม่ต้องเขียนเงื่อนไขแยก (ตรรกะเดียวกับ MockPaymentLedger.dueDateFor
-/// ที่จะถูกลบใน Task 3)
+/// ปีถัดไปโดยไม่ต้องเขียนเงื่อนไขแยก
 DateTime dueDateFor(int year, int month) => DateTime(year, month + 1, 5);
 
 /// เลขที่บิล — `INV-{YYYYMM}-{เลขห้อง}` และต่อท้าย `-R{n}` เมื่อเป็นใบที่ออกใหม่

@@ -291,12 +291,12 @@ class _BillHeroCard extends StatelessWidget {
 
   final TenantDashboardViewModel viewModel;
 
-  Future<void> _pay(BuildContext context, TenantBill bill) async {
+  Future<void> _pay(BuildContext context, Invoice bill) async {
     await showPaymentSheet(
       context,
       bill: bill,
       channel: viewModel.paymentChannel,
-      onSubmit: (slip) => viewModel.submitSlip(billId: bill.id, slip: slip),
+      onSubmit: (slip) => viewModel.submitSlip(bill: bill, slip: slip),
     );
   }
 
@@ -348,11 +348,10 @@ class _BillHeroCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               )
             else ...[
-              if (bill.dueDate != null)
-                Text(
-                  'ครบกำหนด ${bill.dueDate!.day} ${thaiMonthName(bill.dueDate!.month)} ${bill.dueDate!.year}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+              Text(
+                'ครบกำหนด ${bill.dueDate.day} ${thaiMonthName(bill.dueDate.month)} ${bill.dueDate.year}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               const SizedBox(height: 12),
               _buildAction(context, bill),
             ],
@@ -362,7 +361,7 @@ class _BillHeroCard extends StatelessWidget {
     );
   }
 
-  Widget _buildAction(BuildContext context, TenantBill bill) {
+  Widget _buildAction(BuildContext context, Invoice bill) {
     switch (bill.status) {
       case InvoiceStatus.unpaid:
         return PrimaryButton(
@@ -426,7 +425,7 @@ class _UsageSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final invoice = viewModel.currentBill?.invoice;
+    final invoice = viewModel.currentBill;
     final hasRecord = invoice != null;
 
     return Column(
@@ -440,9 +439,11 @@ class _UsageSection extends StatelessWidget {
                 value: hasRecord
                     ? formatBaht(invoice.electricityCost)
                     : '—',
+                // ตัวเลขมาจากบิลที่ออกแล้ว ไม่ใช่มิเตอร์สด — งวดที่จดมิเตอร์แล้ว
+                // แต่ยังไม่ออกบิลจึงยังว่างอยู่ ข้อความต้องไม่โทษการจดมิเตอร์
                 subtitle: hasRecord
                     ? '${formatUnits(invoice.electricityUnits)} หน่วย'
-                    : 'ยังไม่ได้จดมิเตอร์',
+                    : 'รอเจ้าของหอออกบิล',
                 icon: Icons.bolt,
                 variant: BadgeVariant.warning,
               ),
@@ -454,7 +455,7 @@ class _UsageSection extends StatelessWidget {
                 value:
                     hasRecord ? formatBaht(invoice.waterCost) : '—',
                 subtitle:
-                    hasRecord ? 'เหมาจ่ายรายเดือน' : 'ยังไม่ได้จดมิเตอร์',
+                    hasRecord ? 'เหมาจ่ายรายเดือน' : 'รอเจ้าของหอออกบิล',
                 icon: Icons.water_drop,
                 variant: BadgeVariant.primary,
               ),

@@ -34,13 +34,13 @@ class _TenantBillsView extends StatelessWidget {
   Future<void> _handlePay(
     BuildContext context,
     TenantBillsViewModel viewModel,
-    TenantBill bill,
+    Invoice bill,
   ) async {
     await showPaymentSheet(
       context,
       bill: bill,
       channel: viewModel.paymentChannel,
-      onSubmit: (slip) => viewModel.submitSlip(billId: bill.id, slip: slip),
+      onSubmit: (slip) => viewModel.submitSlip(bill: bill, slip: slip),
     );
   }
 

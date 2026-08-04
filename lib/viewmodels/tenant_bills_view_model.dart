@@ -16,16 +16,16 @@ const tenantBillFilters = [
   'ชำระแล้ว',
 ];
 
-List<TenantBill> filterBills(List<TenantBill> bills, String filter) {
+List<Invoice> filterBills(List<Invoice> bills, String filter) {
   if (filter == 'ทั้งหมด') return bills;
   return bills.where((bill) => billStatusLabel(bill.status) == filter).toList();
 }
 
-double totalOutstanding(List<TenantBill> bills) => bills
+double totalOutstanding(List<Invoice> bills) => bills
     .where((bill) => bill.status == InvoiceStatus.unpaid)
     .fold<double>(0, (sum, bill) => sum + bill.total);
 
-double totalPaidInYear(List<TenantBill> bills, int year) => bills
+double totalPaidInYear(List<Invoice> bills, int year) => bills
     .where((bill) => bill.status == InvoiceStatus.paid && bill.period.year == year)
     .fold<double>(0, (sum, bill) => sum + bill.total);
 
@@ -34,7 +34,7 @@ class TenantBillsViewModel extends ChangeNotifier with SafeNotifier {
     required this.roomId,
     required this.dormitoryId,
     TenantBillingSource? source,
-  }) : _source = source ?? MockTenantBillingSource();
+  }) : _source = source ?? SupabaseTenantBillingSource();
 
   final int? roomId;
   final int? dormitoryId;
@@ -45,11 +45,11 @@ class TenantBillsViewModel extends ChangeNotifier with SafeNotifier {
   bool _hasLoadedOnce = false;
   bool isSubmittingSlip = false;
   String? errorMessage;
-  List<TenantBill> bills = [];
+  List<Invoice> bills = [];
   PaymentChannel? paymentChannel;
   String selectedFilter = 'ทั้งหมด';
 
-  List<TenantBill> get filteredBills => filterBills(bills, selectedFilter);
+  List<Invoice> get filteredBills => filterBills(bills, selectedFilter);
   double get outstanding => totalOutstanding(bills);
   double get paidThisYear => totalPaidInYear(bills, DateTime.now().year);
 
@@ -91,15 +91,14 @@ class TenantBillsViewModel extends ChangeNotifier with SafeNotifier {
   }
 
   Future<ActionResult> submitSlip({
-    required String billId,
+    required Invoice bill,
     required File slip,
   }) async {
     isSubmittingSlip = true;
     notifyListeners();
 
     try {
-      final result =
-          await _source.submitPaymentSlip(billId: billId, slip: slip);
+      final result = await _source.submitPaymentSlip(bill: bill, slip: slip);
       if (result.success) await load();
       return result;
     } catch (error) {
