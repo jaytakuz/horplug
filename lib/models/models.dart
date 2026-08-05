@@ -6,7 +6,10 @@ enum MessageType {
   text,
   maintenanceRequest,
   parcelNotification,
-  maintenanceUpdate
+  maintenanceUpdate,
+  image,
+  cleaningRequest,
+  cleaningUpdate,
 }
 
 enum AppRole { landlord, tenant }
@@ -128,6 +131,7 @@ class Invoice {
   final double roomPrice;
   final double waterCost;
   final double electricityCost;
+  final double cleaningFee;
   final InvoiceStatus status;
   final DateTime date;
   final bool hasSlip;
@@ -141,12 +145,13 @@ class Invoice {
     required this.roomPrice,
     required this.waterCost,
     required this.electricityCost,
+    this.cleaningFee = 0,
     required this.status,
     required this.date,
     this.hasSlip = false,
   });
 
-  double get total => roomPrice + waterCost + electricityCost;
+  double get total => roomPrice + waterCost + electricityCost + cleaningFee;
 }
 
 enum UtilityType { electricity, water }
@@ -253,6 +258,8 @@ class ChatMessage {
   final DateTime timestamp;
   final bool isFromOwner;
   final MessageType type;
+  final String? attachmentUrl;
+  final int? maintenanceRequestId;
 
   ChatMessage({
     required this.id,
@@ -261,22 +268,26 @@ class ChatMessage {
     required this.timestamp,
     required this.isFromOwner,
     this.type = MessageType.text,
+    this.attachmentUrl,
+    this.maintenanceRequestId,
   });
 }
 
 class ChatPreview {
+  final int roomDbId;
   final String roomNumber;
+  final String floor;
   final String tenantName;
   final String lastMessage;
   final int unreadCount;
-  final bool hasPendingMaintenance;
 
   ChatPreview({
+    required this.roomDbId,
     required this.roomNumber,
+    required this.floor,
     required this.tenantName,
     required this.lastMessage,
     required this.unreadCount,
-    this.hasPendingMaintenance = false,
   });
 }
 
@@ -303,5 +314,117 @@ class TenantJoinRequest {
     this.roomNumber,
     required this.status,
     required this.createdAt,
+  });
+}
+
+/// ข้อมูลหอพัก + ช่องทางติดต่อเจ้าของหอ (ใช้ในหน้าโปรไฟล์ผู้เช่า)
+class DormitoryInfo {
+  final int id;
+  final String name;
+  final String? landlordName;
+  final String? landlordPhone;
+  final String? landlordEmail;
+  final double baseWaterRate;
+  final double baseElectricityRate;
+
+  const DormitoryInfo({
+    required this.id,
+    required this.name,
+    this.landlordName,
+    this.landlordPhone,
+    this.landlordEmail,
+    this.baseWaterRate = 0,
+    this.baseElectricityRate = 0,
+  });
+
+  bool get hasContact =>
+      (landlordName != null && landlordName!.trim().isNotEmpty) ||
+      (landlordPhone != null && landlordPhone!.trim().isNotEmpty) ||
+      (landlordEmail != null && landlordEmail!.trim().isNotEmpty);
+}
+
+/// บิลหนึ่งใบในมุมมองของผู้เช่า
+///
+/// [invoice] คือรายการค่าใช้จ่ายจริงที่คำนวณจากมิเตอร์ ส่วน [status] /
+/// [dueDate] / [paidAt] / [slipUrl] ยังเป็นค่าจำลอง เพราะยังไม่มีตาราง
+/// invoices — ฟีเจอร์ถัดไป "Invoice Generation" จะมาแทนที่เฉพาะส่วนนี้
+/// โดยที่ UI ไม่ต้องแก้ (ดู lib/services/tenant_billing_source.dart)
+class TenantBill {
+  final Invoice invoice;
+  final InvoiceStatus status;
+  final DateTime? dueDate;
+  final DateTime? paidAt;
+  final String? slipUrl;
+
+  const TenantBill({
+    required this.invoice,
+    required this.status,
+    this.dueDate,
+    this.paidAt,
+    this.slipUrl,
+  });
+
+  String get id => invoice.id;
+  DateTime get period => invoice.date;
+  double get total => invoice.total;
+
+  TenantBill copyWith({
+    InvoiceStatus? status,
+    DateTime? dueDate,
+    DateTime? paidAt,
+    String? slipUrl,
+  }) {
+    return TenantBill(
+      invoice: invoice,
+      status: status ?? this.status,
+      dueDate: dueDate ?? this.dueDate,
+      paidAt: paidAt ?? this.paidAt,
+      slipUrl: slipUrl ?? this.slipUrl,
+    );
+  }
+}
+
+/// ช่องทางรับชำระเงินของหอพัก (ยังเป็นค่าจำลอง)
+class PaymentChannel {
+  final String promptPayId;
+  final String accountName;
+
+  const PaymentChannel({
+    required this.promptPayId,
+    required this.accountName,
+  });
+}
+
+enum MaintenanceRequestType { repair, cleaning }
+
+enum MaintenanceStatus { pending, inProgress, completed }
+
+class MaintenanceRequest {
+  final int id;
+  final int roomId;
+  final String roomNumber;
+  final String tenantId;
+  final String tenantName;
+  final MaintenanceRequestType requestType;
+  final String description;
+  final String? imageUrl;
+  final MaintenanceStatus status;
+  final DateTime requestedAt;
+  final DateTime? completedAt;
+  final double cleaningFee;
+
+  const MaintenanceRequest({
+    required this.id,
+    required this.roomId,
+    required this.roomNumber,
+    required this.tenantId,
+    required this.tenantName,
+    required this.requestType,
+    required this.description,
+    this.imageUrl,
+    required this.status,
+    required this.requestedAt,
+    this.completedAt,
+    this.cleaningFee = 0,
   });
 }

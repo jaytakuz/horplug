@@ -1,18 +1,27 @@
+import 'dart:io';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
+
+const _chatImageBucket = 'chat-image';
 
 class SupabaseService {
   final SupabaseClient client = Supabase.instance.client;
 
   /// ดึงข้อมูลห้องพักทั้งหมด
-  Future<List<Room>> fetchRooms({int? dormitoryId}) async {
-    final baseQuery = client
+  ///
+  /// [roomDbId] ใช้จำกัดผลลัพธ์ให้เหลือห้องเดียว — ฝั่งผู้เช่าเรียกผ่านตัวนี้
+  /// ทำให้ fetchElectricityRecords / fetchWaterRecords / fetchInvoices ที่เรียก
+  /// fetchRooms อยู่แล้ว กลายเป็น "เฉพาะห้องของฉัน" ได้โดยไม่ต้องเขียน query ซ้ำ
+  Future<List<Room>> fetchRooms({int? dormitoryId, int? roomDbId}) async {
+    var baseQuery = client
         .from('rooms')
         .select('id, room_number, floor, base_price, status, current_tenant_id');
 
-    final data = await (dormitoryId != null
-            ? baseQuery.eq('dorm_id', dormitoryId)
-            : baseQuery)
+    if (dormitoryId != null) baseQuery = baseQuery.eq('dorm_id', dormitoryId);
+    if (roomDbId != null) baseQuery = baseQuery.eq('id', roomDbId);
+
+    final data = await baseQuery
         .order('floor', ascending: true)
         .order('room_number', ascending: true);
 
@@ -64,14 +73,30 @@ class SupabaseService {
     }).toList();
   }
 
+  /// ดึงห้องเดียวตาม id — ใช้ในฝั่งผู้เช่าที่เห็นเฉพาะห้องตัวเอง
+  Future<Room?> fetchRoom({required int roomDbId}) async {
+    final rooms = await fetchRooms(roomDbId: roomDbId);
+    return rooms.isEmpty ? null : rooms.first;
+  }
+
+  /// สตรีมแจ้งเตือนเมื่อข้อมูลห้องของหอพักนี้เปลี่ยน — ใช้เป็นสัญญาณให้โหลด
+  /// ใหม่เท่านั้น (ไม่ใช้ payload ตรงๆ) เพื่อให้ยังใช้ fetchRooms() เดิมที่มี
+  /// การ enrich ชื่อผู้เช่าอยู่แล้ว โดยไม่ต้องเขียน mapping ซ้ำ
+  Stream<List<Map<String, dynamic>>> watchRoomChanges({
+    required int dormitoryId,
+  }) {
+    return client.from('rooms').stream(primaryKey: ['id']).eq('dorm_id', dormitoryId);
+  }
+
   // --- ระบบไฟฟ้า (ตาราง electricity_record) ---
 
   Future<List<ElectricityRecord>> fetchElectricityRecords({
     int? dormitoryId,
+    int? roomDbId,
     required int month,
     required int year,
   }) async {
-    final rooms = await fetchRooms(dormitoryId: dormitoryId);
+    final rooms = await fetchRooms(dormitoryId: dormitoryId, roomDbId: roomDbId);
     if (rooms.isEmpty) return [];
 
     final roomIds = rooms.map((room) => room.dbId).toList();
@@ -158,10 +183,11 @@ class SupabaseService {
 
   Future<List<WaterRecord>> fetchWaterRecords({
     int? dormitoryId,
+    int? roomDbId,
     required int month,
     required int year,
   }) async {
-    final rooms = await fetchRooms(dormitoryId: dormitoryId);
+    final rooms = await fetchRooms(dormitoryId: dormitoryId, roomDbId: roomDbId);
     if (rooms.isEmpty) return [];
 
     final roomIds = rooms.map((room) => room.dbId).toList();
@@ -217,10 +243,11 @@ class SupabaseService {
 
   Future<List<Invoice>> fetchInvoices({
     int? dormitoryId,
+    int? roomDbId,
     required int month,
     required int year,
   }) async {
-    final rooms = await fetchRooms(dormitoryId: dormitoryId);
+    final rooms = await fetchRooms(dormitoryId: dormitoryId, roomDbId: roomDbId);
     final roomIds = rooms.map((room) => room.dbId).toList();
     if (roomIds.isEmpty) return [];
 
@@ -229,15 +256,23 @@ class SupabaseService {
 
     final elecData = (elecs as List).cast<Map<String, dynamic>>();
     final waterData = (waters as List).cast<Map<String, dynamic>>();
+    final cleaningFeeByRoom = await _fetchCleaningFeesByRoom(
+      roomIds: roomIds,
+      month: month,
+      year: year,
+    );
 
     final invoices = <Invoice>[];
     for (final room in rooms) {
-      if (room.status != RoomStatus.occupied) continue;
+      // A room under maintenance still has a tenant and still needs a bill —
+      // only truly vacant (no tenant) rooms should be excluded.
+      if (room.currentTenantId == null) continue;
 
       final e = elecData.firstWhere((r) => r['room_id'] == room.dbId, orElse: () => {});
       final w = waterData.firstWhere((r) => r['room_id'] == room.dbId, orElse: () => {});
+      final cleaningFee = cleaningFeeByRoom[room.dbId] ?? 0.0;
 
-      if (e.isEmpty && w.isEmpty) continue;
+      if (e.isEmpty && w.isEmpty && cleaningFee <= 0) continue;
 
       final elecUnits = e.isNotEmpty ? (_parseDouble(e['current_reading']) - _parseDouble(e['previous_reading'])) : 0.0;
       final elecCost = e.isNotEmpty ? _parseDouble(e['amount']) : 0.0;
@@ -252,11 +287,168 @@ class SupabaseService {
         roomPrice: room.price,
         waterCost: waterCost,
         electricityCost: elecCost,
+        cleaningFee: cleaningFee,
         status: InvoiceStatus.unpaid,
         date: DateTime(year, month, 1),
       ));
     }
     return invoices;
+  }
+
+  /// รวมค่าทำความสะอาดจากคำขอที่ "เสร็จสิ้น" ในเดือน/ปีนั้นๆ (ตาม completed_at)
+  /// แยกตามห้อง เพื่อรวมเข้าบิลของห้องนั้นในงวดที่งานเสร็จจริง
+  Future<Map<int, double>> _fetchCleaningFeesByRoom({
+    required List<int> roomIds,
+    required int month,
+    required int year,
+  }) async {
+    if (roomIds.isEmpty) return {};
+
+    final periodStart = DateTime(year, month, 1);
+    final periodEnd = DateTime(month == 12 ? year + 1 : year, month == 12 ? 1 : month + 1, 1);
+
+    final data = await client
+        .from('maintenance_requests')
+        .select('room_id, cleaning_fee')
+        .inFilter('room_id', roomIds)
+        .eq('request_type', 'Cleaning')
+        .eq('status', 'Completed')
+        .gte('completed_at', periodStart.toIso8601String())
+        .lt('completed_at', periodEnd.toIso8601String());
+
+    final feeByRoom = <int, double>{};
+    for (final row in (data as List).cast<Map<String, dynamic>>()) {
+      final roomId = row['room_id'] as int;
+      feeByRoom[roomId] = (feeByRoom[roomId] ?? 0) + _parseDouble(row['cleaning_fee']);
+    }
+    return feeByRoom;
+  }
+
+  // --- ระบบ Billing ฝั่งผู้เช่า ---
+
+  /// บิลของห้องเดียวในงวดที่ระบุ
+  ///
+  /// คืน null เมื่อยังไม่มีมิเตอร์/ค่าบริการในงวดนั้น — ให้ถือว่า "ยังไม่ออกบิล"
+  /// ไม่ใช่ error
+  Future<Invoice?> fetchInvoiceForRoom({
+    required int roomDbId,
+    required int month,
+    required int year,
+  }) async {
+    final invoices =
+        await fetchInvoices(roomDbId: roomDbId, month: month, year: year);
+    return invoices.isEmpty ? null : invoices.first;
+  }
+
+  /// ประวัติบิลย้อนหลังของห้องเดียว เรียงจากงวดล่าสุดไปเก่า
+  ///
+  /// ใช้ query รวม 4 ครั้ง (ห้อง + ไฟ + น้ำ + ค่าทำความสะอาด) ไม่ใช่ 4×N
+  /// เหมือนการวนเรียก fetchInvoices ทีละเดือน
+  Future<List<Invoice>> fetchInvoiceHistoryForRoom({
+    required int roomDbId,
+    int monthCount = 6,
+  }) async {
+    final room = await fetchRoom(roomDbId: roomDbId);
+    if (room == null) return [];
+
+    final elecs = await client
+        .from('electricity_record')
+        .select()
+        .eq('room_id', roomDbId)
+        .order('billing_year', ascending: false)
+        .order('billing_month', ascending: false)
+        .limit(monthCount);
+    final waters = await client
+        .from('water_meter')
+        .select()
+        .eq('room_id', roomDbId)
+        .order('billing_year', ascending: false)
+        .order('billing_month', ascending: false)
+        .limit(monthCount);
+
+    final elecData = (elecs as List).cast<Map<String, dynamic>>();
+    final waterData = (waters as List).cast<Map<String, dynamic>>();
+
+    final now = DateTime.now();
+    final since = DateTime(now.year, now.month - monthCount + 1, 1);
+    final cleaningByPeriod =
+        await _fetchCleaningFeesByPeriodForRoom(roomId: roomDbId, since: since);
+
+    // รวมงวดจากทั้งสามแหล่ง — บางเดือนอาจมีเฉพาะค่าน้ำ หรือเฉพาะค่าทำความสะอาด
+    final periods = <String>{
+      ...elecData.map((r) => '${r['billing_year']}-${r['billing_month']}'),
+      ...waterData.map((r) => '${r['billing_year']}-${r['billing_month']}'),
+      ...cleaningByPeriod.keys,
+    };
+
+    final invoices = <Invoice>[];
+    for (final period in periods) {
+      final parts = period.split('-');
+      final year = int.tryParse(parts[0]);
+      final month = int.tryParse(parts[1]);
+      if (year == null || month == null) continue;
+
+      final e = elecData.firstWhere(
+        (r) => r['billing_year'] == year && r['billing_month'] == month,
+        orElse: () => {},
+      );
+      final w = waterData.firstWhere(
+        (r) => r['billing_year'] == year && r['billing_month'] == month,
+        orElse: () => {},
+      );
+      final cleaningFee = cleaningByPeriod[period] ?? 0.0;
+
+      final elecUnits = e.isNotEmpty
+          ? (_parseDouble(e['current_reading']) -
+              _parseDouble(e['previous_reading']))
+          : 0.0;
+
+      invoices.add(Invoice(
+        id: 'INV-$roomDbId-$month-$year',
+        roomNumber: room.id,
+        tenantName: room.tenantName ?? '-',
+        waterUnits: w.isNotEmpty ? 1.0 : 0.0,
+        electricityUnits: elecUnits,
+        roomPrice: room.price,
+        waterCost: w.isNotEmpty ? _parseDouble(w['amount']) : 0.0,
+        electricityCost: e.isNotEmpty ? _parseDouble(e['amount']) : 0.0,
+        cleaningFee: cleaningFee,
+        status: InvoiceStatus.unpaid,
+        date: DateTime(year, month, 1),
+      ));
+    }
+
+    invoices.sort((a, b) => b.date.compareTo(a.date));
+    return invoices.take(monthCount).toList();
+  }
+
+  /// ค่าทำความสะอาดที่ "เสร็จสิ้น" ของห้องเดียว แยกตามงวด key `<year>-<month>`
+  ///
+  /// ต่างจาก _fetchCleaningFeesByRoom ตรงที่อันนั้นเป็นทั้งหอ/งวดเดียว
+  /// ส่วนอันนี้คือห้องเดียว/หลายงวด
+  Future<Map<String, double>> _fetchCleaningFeesByPeriodForRoom({
+    required int roomId,
+    required DateTime since,
+  }) async {
+    final data = await client
+        .from('maintenance_requests')
+        .select('completed_at, cleaning_fee')
+        .eq('room_id', roomId)
+        .eq('request_type', 'Cleaning')
+        .eq('status', 'Completed')
+        .gte('completed_at', since.toIso8601String());
+
+    final feeByPeriod = <String, double>{};
+    for (final row in (data as List).cast<Map<String, dynamic>>()) {
+      final completedAt = row['completed_at'] as String?;
+      if (completedAt == null) continue;
+      final date = DateTime.tryParse(completedAt);
+      if (date == null) continue;
+
+      final key = '${date.year}-${date.month}';
+      feeByPeriod[key] = (feeByPeriod[key] ?? 0) + _parseDouble(row['cleaning_fee']);
+    }
+    return feeByPeriod;
   }
 
   // --- Helpers & Others ---
@@ -326,5 +518,455 @@ class SupabaseService {
 
   Future<void> respondToTenantJoinRequest({required int requestId, required bool accept}) async {
     await client.rpc('respond_to_tenant_join_request', params: {'p_request_id': requestId, 'p_accept': accept});
+  }
+
+  // --- ระบบแชท (ตาราง messages) ---
+
+  MessageType _mapMessageType(String? value) {
+    return MessageType.values.firstWhere(
+      (type) => type.name == value,
+      orElse: () => MessageType.text,
+    );
+  }
+
+  ChatMessage _mapMessageRow(
+    Map<String, dynamic> row, {
+    required String ownerName,
+    required String tenantName,
+    String? resolvedAttachmentUrl,
+  }) {
+    final isFromOwner = row['is_from_owner'] as bool;
+    return ChatMessage(
+      id: row['id'].toString(),
+      senderName: isFromOwner ? ownerName : tenantName,
+      text: row['body'] as String,
+      timestamp: DateTime.parse(row['created_at'] as String),
+      isFromOwner: isFromOwner,
+      type: _mapMessageType(row['message_type'] as String?),
+      attachmentUrl: resolvedAttachmentUrl,
+      maintenanceRequestId: row['maintenance_request_id'] as int?,
+    );
+  }
+
+  /// แปลง storage path ในคอลัมน์ attachment_url ให้เป็น signed URL ที่แสดงผลได้
+  /// (bucket เป็น private) — สร้างเป็น batch เดียวเพื่อลดจำนวน round-trip
+  Future<Map<String, String>> _resolveAttachmentUrls(
+      List<Map<String, dynamic>> rows) async {
+    final paths = rows
+        .map((row) => row['attachment_url'] as String?)
+        .whereType<String>()
+        .toSet()
+        .toList();
+    if (paths.isEmpty) return {};
+
+    final signed =
+        await client.storage.from(_chatImageBucket).createSignedUrls(paths, 3600);
+
+    final result = <String, String>{};
+    for (final entry in signed) {
+      if (entry.signedUrl.isNotEmpty) {
+        result[entry.path] = entry.signedUrl;
+      }
+    }
+    return result;
+  }
+
+  /// รายการห้องที่มีผู้พักอาศัย พร้อมข้อความล่าสุดและจำนวนที่ยังไม่ได้อ่าน
+  ///
+  /// Computed entirely server-side via the fetch_chat_previews RPC — only one
+  /// small row per room crosses the network, not full message history.
+  Future<List<ChatPreview>> fetchChatPreviews({required int dormitoryId}) async {
+    final data = await client
+        .rpc('fetch_chat_previews', params: {'p_dorm_id': dormitoryId});
+    final rows = (data as List).cast<Map<String, dynamic>>();
+
+    return rows.map((row) {
+      return ChatPreview(
+        roomDbId: row['room_id'] as int,
+        roomNumber: row['room_number'] as String,
+        floor: row['floor'].toString(),
+        tenantName: row['tenant_name'] as String? ?? '-',
+        lastMessage: row['last_message'] as String? ?? '',
+        unreadCount: (row['unread_count'] as num).toInt(),
+      );
+    }).toList();
+  }
+
+  /// ติดตามข้อความล่าสุด [limit] รายการของห้องแบบ realtime — เพิ่ม limit
+  /// เพื่อ "โหลดข้อความเก่าเพิ่ม" แทนที่จะดึงประวัติทั้งหมดทุกครั้ง
+  Stream<List<ChatMessage>> watchMessages({
+    required int roomId,
+    required String ownerName,
+    required String tenantName,
+    int limit = 50,
+  }) {
+    return client
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('room_id', roomId)
+        .order('created_at', ascending: false)
+        .limit(limit)
+        .asyncMap((rows) async {
+      final signedUrlByPath = await _resolveAttachmentUrls(rows);
+
+      final messages = rows.map((row) {
+        final path = row['attachment_url'] as String?;
+        return _mapMessageRow(
+          row,
+          ownerName: ownerName,
+          tenantName: tenantName,
+          resolvedAttachmentUrl: path != null ? signedUrlByPath[path] : null,
+        );
+      }).toList();
+
+      // `.order()`/`.limit()` apply cleanly to the initial snapshot only;
+      // realtime INSERT events get merged in arrival order, so re-sort
+      // ascending here for chronological (oldest-first) display.
+      messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      return messages;
+    });
+  }
+
+  /// อัปโหลดรูปภาพไปยัง Storage bucket ส่วนตัว คืนค่าเป็น storage path
+  /// (ไม่ใช่ URL) — path นี้จะถูกเก็บใน messages.attachment_url แล้วแปลงเป็น
+  /// signed URL ตอนอ่านข้อความ เพราะ bucket เป็น private
+  Future<String> uploadChatImage({
+    required int roomId,
+    required File imageFile,
+  }) async {
+    final extension = imageFile.path.split('.').last;
+    final path =
+        '$roomId/${DateTime.now().microsecondsSinceEpoch}.$extension';
+    await client.storage.from(_chatImageBucket).upload(path, imageFile);
+    return path;
+  }
+
+  Future<void> sendMessage({
+    required int roomId,
+    required String senderId,
+    required bool isFromOwner,
+    required String body,
+    MessageType type = MessageType.text,
+    String? attachmentUrl,
+    int? maintenanceRequestId,
+  }) async {
+    await client.from('messages').insert({
+      'room_id': roomId,
+      'sender_id': senderId,
+      'is_from_owner': isFromOwner,
+      'body': body,
+      'message_type': type.name,
+      if (attachmentUrl != null) 'attachment_url': attachmentUrl,
+      if (maintenanceRequestId != null)
+        'maintenance_request_id': maintenanceRequestId,
+    });
+  }
+
+  /// จำนวนข้อความที่ยังไม่ได้อ่านรวมทุกห้อง (ใช้กับ badge หน้าแดชบอร์ด)
+  /// Total unread messages across a dormitory (badges) — reuses the same
+  /// server-side aggregate as fetchChatPreviews instead of a bespoke query.
+  Future<int> countUnreadMessages({required int dormitoryId}) async {
+    final previews = await fetchChatPreviews(dormitoryId: dormitoryId);
+    return previews.fold<int>(0, (sum, preview) => sum + preview.unreadCount);
+  }
+
+  /// จำนวนข้อความจากเจ้าของหอที่ผู้เช่ายังไม่ได้อ่านในห้องนี้
+  ///
+  /// countUnreadMessages() เดิมใช้ RPC fetch_chat_previews ซึ่งรับ dorm_id และ
+  /// เป็นมุมมองของเจ้าของหอ — ผู้เช่าจึงต้องมีตัวนับของตัวเอง
+  Future<int> countUnreadMessagesForRoom({
+    required int roomId,
+    required String userId,
+  }) async {
+    final read = await client
+        .from('message_reads')
+        .select('last_read_at')
+        .eq('room_id', roomId)
+        .eq('user_id', userId)
+        .maybeSingle();
+    final lastReadAt = read?['last_read_at'] as String?;
+
+    var query = client
+        .from('messages')
+        .select('id')
+        .eq('room_id', roomId)
+        .eq('is_from_owner', true);
+    if (lastReadAt != null) query = query.gt('created_at', lastReadAt);
+
+    return ((await query) as List).length;
+  }
+
+  /// ข้อความล่าสุดของห้อง — ใช้แสดง preview บนแดชบอร์ดผู้เช่า
+  ///
+  /// จงใจเป็น one-shot ไม่ใช่ stream: แชทมี realtime subscription อยู่แล้วหนึ่งตัว
+  /// การเพิ่มอีกตัวบนแดชบอร์ดจะเปิด subscription ค้างไว้ทั้ง session โดยไม่จำเป็น
+  Future<ChatMessage?> fetchLatestMessage({
+    required int roomId,
+    required String ownerName,
+    required String tenantName,
+  }) async {
+    final data = await client
+        .from('messages')
+        .select()
+        .eq('room_id', roomId)
+        .order('created_at', ascending: false)
+        .limit(1);
+
+    final rows = (data as List).cast<Map<String, dynamic>>();
+    if (rows.isEmpty) return null;
+
+    final signedUrlByPath = await _resolveAttachmentUrls(rows);
+    final path = rows.first['attachment_url'] as String?;
+
+    return _mapMessageRow(
+      rows.first,
+      ownerName: ownerName,
+      tenantName: tenantName,
+      resolvedAttachmentUrl: path != null ? signedUrlByPath[path] : null,
+    );
+  }
+
+  /// ข้อมูลหอพัก + ช่องทางติดต่อเจ้าของหอ
+  ///
+  /// ต้องรัน database/rls_tenant_access.sql ก่อน ไม่เช่นนั้น embed ของ
+  /// landlord_profiles จะว่าง (policy เดิมให้อ่านได้เฉพาะเจ้าของแถวเอง)
+  Future<DormitoryInfo?> fetchDormitoryInfo({required int dormitoryId}) async {
+    final row = await client
+        .from('dormitories')
+        .select('id, name, base_water_rate, base_electricity_rate, '
+            'landlord_profiles(first_name, last_name, phone, email)')
+        .eq('id', dormitoryId)
+        .maybeSingle();
+    if (row == null) return null;
+
+    // PostgREST คืน List สำหรับ one-to-many และ Map สำหรับ many-to-one
+    // จึงรองรับทั้งสองแบบเหมือนที่ auth_service ทำ
+    final embedded = row['landlord_profiles'];
+    Map<String, dynamic>? landlord;
+    if (embedded is List && embedded.isNotEmpty) {
+      landlord = (embedded.first as Map).cast<String, dynamic>();
+    } else if (embedded is Map) {
+      landlord = embedded.cast<String, dynamic>();
+    }
+
+    final fullName = [
+      landlord?['first_name'] as String?,
+      landlord?['last_name'] as String?,
+    ].where((value) => value != null && value.trim().isNotEmpty).join(' ').trim();
+
+    return DormitoryInfo(
+      id: row['id'] as int,
+      name: row['name'] as String? ?? '-',
+      landlordName: fullName.isEmpty ? null : fullName,
+      landlordPhone: landlord?['phone'] as String?,
+      landlordEmail: landlord?['email'] as String?,
+      baseWaterRate: _parseDouble(row['base_water_rate'], fallback: 100.0),
+      baseElectricityRate:
+          _parseDouble(row['base_electricity_rate'], fallback: 8.0),
+    );
+  }
+
+  Future<void> markRoomRead({required int roomId, required String userId}) async {
+    await client.from('message_reads').upsert(
+      {
+        'room_id': roomId,
+        'user_id': userId,
+        'last_read_at': DateTime.now().toUtc().toIso8601String(),
+      },
+      onConflict: 'room_id,user_id',
+    );
+  }
+
+  // --- ระบบแจ้งซ่อม (ตาราง maintenance_requests) ---
+
+  MaintenanceRequestType _mapRequestType(String? value) {
+    return value == 'Cleaning'
+        ? MaintenanceRequestType.cleaning
+        : MaintenanceRequestType.repair;
+  }
+
+  String _requestTypeToDb(MaintenanceRequestType type) {
+    switch (type) {
+      case MaintenanceRequestType.cleaning:
+        return 'Cleaning';
+      case MaintenanceRequestType.repair:
+        return 'Repair';
+    }
+  }
+
+  MaintenanceStatus _mapMaintenanceStatus(String? value) {
+    switch (value) {
+      case 'In-Progress':
+        return MaintenanceStatus.inProgress;
+      case 'Completed':
+        return MaintenanceStatus.completed;
+      default:
+        return MaintenanceStatus.pending;
+    }
+  }
+
+  String _maintenanceStatusToDb(MaintenanceStatus status) {
+    switch (status) {
+      case MaintenanceStatus.pending:
+        return 'Pending';
+      case MaintenanceStatus.inProgress:
+        return 'In-Progress';
+      case MaintenanceStatus.completed:
+        return 'Completed';
+    }
+  }
+
+  String _maintenanceStatusLabel(MaintenanceStatus status) {
+    switch (status) {
+      case MaintenanceStatus.pending:
+        return 'รอดำเนินการ';
+      case MaintenanceStatus.inProgress:
+        return 'กำลังดำเนินการ';
+      case MaintenanceStatus.completed:
+        return 'เสร็จสิ้น';
+    }
+  }
+
+  MaintenanceRequest _mapMaintenanceRequestRow(Map<String, dynamic> row) {
+    final tenant = row['tenant_profiles'] as Map<String, dynamic>?;
+    final room = row['rooms'] as Map<String, dynamic>?;
+    final tenantName = [tenant?['first_name'], tenant?['last_name']]
+        .where((value) => value != null && (value as String).trim().isNotEmpty)
+        .join(' ')
+        .trim();
+
+    return MaintenanceRequest(
+      id: row['id'] as int,
+      roomId: row['room_id'] as int,
+      roomNumber: room?['room_number'] as String? ?? '-',
+      tenantId: row['tenant_id'] as String,
+      tenantName: tenantName.isEmpty ? '-' : tenantName,
+      requestType: _mapRequestType(row['request_type'] as String?),
+      description: row['description'] as String,
+      imageUrl: row['image_url'] as String?,
+      status: _mapMaintenanceStatus(row['status'] as String?),
+      requestedAt: DateTime.parse(row['requested_at'] as String),
+      completedAt: row['completed_at'] != null
+          ? DateTime.parse(row['completed_at'] as String)
+          : null,
+      cleaningFee: _parseDouble(row['cleaning_fee']),
+    );
+  }
+
+  /// ประวัติการแจ้งซ่อมของห้อง เรียงจากล่าสุดไปเก่าสุด
+  Future<List<MaintenanceRequest>> fetchMaintenanceRequests({
+    required int roomId,
+  }) async {
+    final data = await client
+        .from('maintenance_requests')
+        .select(
+            'id, room_id, tenant_id, request_type, description, image_url, status, requested_at, completed_at, cleaning_fee, tenant_profiles(first_name, last_name), rooms(room_number)')
+        .eq('room_id', roomId)
+        .order('requested_at', ascending: false);
+
+    return (data as List)
+        .cast<Map<String, dynamic>>()
+        .map(_mapMaintenanceRequestRow)
+        .toList();
+  }
+
+  /// สร้างคำขอแจ้งซ่อม พร้อมส่งข้อความแจ้งในแชทให้เจ้าของหอในคราวเดียว
+  Future<void> createMaintenanceRequest({
+    required int roomId,
+    required String tenantId,
+    required String description,
+    MaintenanceRequestType requestType = MaintenanceRequestType.repair,
+  }) async {
+    final row = await client
+        .from('maintenance_requests')
+        .insert({
+          'room_id': roomId,
+          'tenant_id': tenantId,
+          'request_type': _requestTypeToDb(requestType),
+          'description': description,
+        })
+        .select('id')
+        .single();
+
+    final requestId = row['id'] as int;
+
+    await sendMessage(
+      roomId: roomId,
+      senderId: tenantId,
+      isFromOwner: false,
+      body: description,
+      type: requestType == MaintenanceRequestType.cleaning
+          ? MessageType.cleaningRequest
+          : MessageType.maintenanceRequest,
+      maintenanceRequestId: requestId,
+    );
+  }
+
+  /// อัปเดตสถานะคำขอแจ้งซ่อม พร้อมส่งข้อความแจ้งในแชทให้ผู้เช่าในคราวเดียว
+  Future<void> updateMaintenanceStatus({
+    required int requestId,
+    required int roomId,
+    required String landlordId,
+    required MaintenanceStatus status,
+    required MaintenanceRequestType requestType,
+  }) async {
+    final updates = <String, dynamic>{
+      'status': _maintenanceStatusToDb(status),
+    };
+    if (status == MaintenanceStatus.completed) {
+      updates['completed_at'] = DateTime.now().toUtc().toIso8601String();
+    }
+
+    await client.from('maintenance_requests').update(updates).eq('id', requestId);
+    await _syncRoomStatusForMaintenance(roomId: roomId, status: status);
+
+    final isCleaning = requestType == MaintenanceRequestType.cleaning;
+    await sendMessage(
+      roomId: roomId,
+      senderId: landlordId,
+      isFromOwner: true,
+      body:
+          '${isCleaning ? "อัปเดตสถานะทำความสะอาด" : "อัปเดตสถานะแจ้งซ่อม"}: ${_maintenanceStatusLabel(status)}',
+      type: isCleaning ? MessageType.cleaningUpdate : MessageType.maintenanceUpdate,
+      maintenanceRequestId: requestId,
+    );
+  }
+
+  /// กำหนดค่าบริการทำความสะอาด (เฉพาะคำขอประเภท Cleaning) — ยอดนี้จะถูกรวม
+  /// เข้าบิลของห้องในเดือนที่คำขอนี้ "เสร็จสิ้น" โดยอัตโนมัติผ่าน fetchInvoices
+  Future<void> updateCleaningFee({
+    required int requestId,
+    required double fee,
+  }) async {
+    await client
+        .from('maintenance_requests')
+        .update({'cleaning_fee': fee}).eq('id', requestId);
+  }
+
+  /// ห้องที่มีแจ้งซ่อมค้างอยู่ (รอดำเนินการ/กำลังดำเนินการ) จะถูกตั้งเป็น
+  /// 'maintenance' อัตโนมัติ และกลับเป็น 'occupied' เมื่อเสร็จสิ้น — แต่จะกลับ
+  /// เฉพาะตอนไม่มีแจ้งซ่อมอื่นของห้องเดียวกันที่ยังไม่เสร็จค้างอยู่แล้วเท่านั้น
+  Future<void> _syncRoomStatusForMaintenance({
+    required int roomId,
+    required MaintenanceStatus status,
+  }) async {
+    if (status == MaintenanceStatus.pending ||
+        status == MaintenanceStatus.inProgress) {
+      await client.from('rooms').update({'status': 'maintenance'}).eq('id', roomId);
+      return;
+    }
+
+    if (status == MaintenanceStatus.completed) {
+      final remaining = await client
+          .from('maintenance_requests')
+          .select('id')
+          .eq('room_id', roomId)
+          .neq('status', 'Completed')
+          .limit(1);
+
+      if ((remaining as List).isEmpty) {
+        await client.from('rooms').update({'status': 'occupied'}).eq('id', roomId);
+      }
+    }
   }
 }

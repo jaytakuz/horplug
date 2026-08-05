@@ -1,31 +1,39 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/reusable_widgets.dart';
-import '../../models/models.dart';
-import '../../mock/mock_data.dart';
+import 'package:provider/provider.dart';
 
-class LeaseScreen extends StatefulWidget {
+import '../../theme/app_theme.dart';
+import '../../viewmodels/lease_view_model.dart';
+import '../../widgets/reusable_widgets.dart';
+import '../../utils/formatters.dart';
+
+class LeaseScreen extends StatelessWidget {
   const LeaseScreen({super.key});
 
   @override
-  State<LeaseScreen> createState() => _LeaseScreenState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => LeaseViewModel(),
+      child: const _LeaseView(),
+    );
+  }
 }
 
-class _LeaseScreenState extends State<LeaseScreen> {
-  bool isPreview = false;
-  String? selectedRoom;
+class _LeaseView extends StatelessWidget {
+  const _LeaseView();
 
   @override
   Widget build(BuildContext context) {
+    final viewModel = context.watch<LeaseViewModel>();
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: isPreview ? _buildPreviewView() : _buildFormView(),
+      child: viewModel.isPreview
+          ? _buildPreviewView(context, viewModel)
+          : _buildFormView(context, viewModel),
     );
   }
 
-  Widget _buildFormView() {
-    final vacantRooms =
-        MockData.rooms.where((r) => r.status == RoomStatus.vacant).toList();
+  Widget _buildFormView(BuildContext context, LeaseViewModel viewModel) {
+    final vacantRooms = viewModel.vacantRooms;
 
     return PaperCard(
       child: Column(
@@ -47,7 +55,7 @@ class _LeaseScreenState extends State<LeaseScreen> {
                 .map((r) =>
                     DropdownMenuItem(value: r.id, child: Text('ห้อง ${r.id}')))
                 .toList(),
-            onChanged: (val) => setState(() => selectedRoom = val),
+            onChanged: viewModel.selectRoom,
             hint: const Text('เลือกห้องว่าง'),
           ),
           const SizedBox(height: 16),
@@ -78,11 +86,7 @@ class _LeaseScreenState extends State<LeaseScreen> {
           PrimaryButton(
             label: 'สร้างสัญญา',
             fullWidth: true,
-            onPressed: vacantRooms.isEmpty
-                ? null
-                : () {
-                    setState(() => isPreview = true);
-                  },
+            onPressed: vacantRooms.isEmpty ? null : viewModel.showPreview,
           ),
           if (vacantRooms.isEmpty)
             const Padding(
@@ -95,7 +99,7 @@ class _LeaseScreenState extends State<LeaseScreen> {
     );
   }
 
-  Widget _buildPreviewView() {
+  Widget _buildPreviewView(BuildContext context, LeaseViewModel viewModel) {
     return Column(
       children: [
         PaperCard(
@@ -109,11 +113,11 @@ class _LeaseScreenState extends State<LeaseScreen> {
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 16),
-              _buildLeaseRow('ห้อง', selectedRoom ?? '305'),
+              _buildLeaseRow('ห้อง', viewModel.selectedRoom ?? '305'),
               _buildLeaseRow('ผู้พักอาศัย', 'คุณแจ็ค (ตัวอย่าง)'),
               _buildLeaseRow('เบอร์โทร', '081-XXX-XXXX'),
-              _buildLeaseRow('ค่าเช่า', '฿4,000 / เดือน'),
-              _buildLeaseRow('เงินประกัน', '฿8,000'),
+              _buildLeaseRow('ค่าเช่า', '${formatBaht(4000)}/เดือน'),
+              _buildLeaseRow('เงินประกัน', formatBaht(8000)),
               _buildLeaseRow('วันเริ่มสัญญา', '1 มีนาคม 2569'),
               const SizedBox(height: 32),
               const Divider(),
@@ -129,7 +133,7 @@ class _LeaseScreenState extends State<LeaseScreen> {
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: () => setState(() => isPreview = false),
+                onPressed: viewModel.backToForm,
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   side: const BorderSide(color: AppColors.primary),
@@ -145,9 +149,9 @@ class _LeaseScreenState extends State<LeaseScreen> {
               child: PrimaryButton(
                 label: 'ยืนยันสัญญา',
                 onPressed: () {
+                  viewModel.confirmLease();
                   ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('สร้างสัญญาสำเร็จ!')));
-                  setState(() => isPreview = false);
                 },
               ),
             ),

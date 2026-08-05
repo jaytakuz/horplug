@@ -3,7 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'controllers/auth_controller.dart';
+import 'viewmodels/auth_view_model.dart';
 import 'models/models.dart';
 import 'screens/admin/admin_shell.dart';
 import 'screens/admin/billing_screen.dart';
@@ -17,7 +17,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/splash_screen.dart';
-import 'screens/tenant/tenant_home_screen.dart';
+import 'screens/tenant/tenant_shell.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -42,7 +42,7 @@ Future<void> main() async {
     ),
   );
 
-  final authController = AuthController();
+  final authController = AuthViewModel();
   await authController.initialize();
 
   runApp(HorPlugApp(authController: authController));
@@ -54,7 +54,7 @@ class HorPlugApp extends StatelessWidget {
     required this.authController,
   });
 
-  final AuthController authController;
+  final AuthViewModel authController;
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +70,7 @@ class HorPlugApp extends StatelessWidget {
   }
 }
 
-GoRouter _buildRouter(AuthController authController) {
+GoRouter _buildRouter(AuthViewModel authController) {
   return GoRouter(
     initialLocation: '/',
     refreshListenable: authController,
@@ -179,9 +179,33 @@ GoRouter _buildRouter(AuthController authController) {
           ),
         ],
       ),
-      GoRoute(
-        path: '/tenant',
-        builder: (context, state) => const TenantHomeScreen(),
+      // ฝั่งผู้เช่าใช้ ShellRoute แบบเดียวกับ AdminShell: shell ถือ IndexedStack
+      // ของทุกแท็บเอง จึงจงใจทิ้ง `child` และให้ builder ของแต่ละ route คืน
+      // widget ว่าง แทนที่จะสร้างหน้าซ้ำสองครั้ง
+      ShellRoute(
+        builder: (context, state, child) => const TenantShell(),
+        routes: [
+          GoRoute(
+            path: '/tenant',
+            builder: (context, state) => const SizedBox.shrink(),
+          ),
+          GoRoute(
+            path: '/tenant/bills',
+            builder: (context, state) => const SizedBox.shrink(),
+          ),
+          GoRoute(
+            path: '/tenant/maintenance',
+            builder: (context, state) => const SizedBox.shrink(),
+          ),
+          GoRoute(
+            path: '/tenant/chat',
+            builder: (context, state) => const SizedBox.shrink(),
+          ),
+          GoRoute(
+            path: '/tenant/profile',
+            builder: (context, state) => const SizedBox.shrink(),
+          ),
+        ],
       ),
     ],
   );

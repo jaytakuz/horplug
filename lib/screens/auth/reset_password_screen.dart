@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../controllers/auth_controller.dart';
+import '../../viewmodels/auth_view_model.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../controllers/auth_controller.dart';
+import '../../viewmodels/auth_view_model.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';

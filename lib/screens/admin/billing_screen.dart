@@ -1,63 +1,61 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
-import '../../services/supabase_service.dart';
+import '../../viewmodels/billing_view_model.dart';
+import '../../utils/formatters.dart';
 
-class BillingScreen extends StatefulWidget {
+class BillingScreen extends StatelessWidget {
   final int dormitoryId;
   const BillingScreen({super.key, required this.dormitoryId});
 
   @override
-  State<BillingScreen> createState() => _BillingScreenState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => BillingViewModel(dormitoryId: dormitoryId)..loadInvoices(),
+      child: const _BillingView(),
+    );
+  }
 }
 
-class _BillingScreenState extends State<BillingScreen> {
-  final SupabaseService _service = SupabaseService();
-  String selectedFilter = 'ทั้งหมด';
-  bool _isLoading = true;
-  List<Invoice> _invoices = [];
-  int _selectedMonth = DateTime.now().month;
-  int _selectedYear = DateTime.now().year;
+class _BillingView extends StatefulWidget {
+  const _BillingView();
 
   @override
-  void initState() {
-    super.initState();
-    _loadInvoices();
+  State<_BillingView> createState() => _BillingViewState();
+}
+
+class _BillingViewState extends State<_BillingView> {
+  BillingViewModel? _viewModel;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final viewModel = context.read<BillingViewModel>();
+    if (!identical(_viewModel, viewModel)) {
+      _viewModel?.removeListener(_onViewModelChanged);
+      _viewModel = viewModel..addListener(_onViewModelChanged);
+    }
   }
 
-  Future<void> _loadInvoices() async {
-    if (!mounted) return;
-    setState(() => _isLoading = true);
-    try {
-      final invoices = await _service.fetchInvoices(
-        dormitoryId: widget.dormitoryId,
-        month: _selectedMonth,
-        year: _selectedYear,
-      );
-      if (!mounted) return;
-      setState(() {
-        _invoices = invoices;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('โหลดข้อมูลบิลไม่สำเร็จ: $e')),
-      );
+  void _onViewModelChanged() {
+    final error = _viewModel?.consumeError();
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
     }
   }
 
   @override
+  void dispose() {
+    _viewModel?.removeListener(_onViewModelChanged);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final filteredInvoices = _invoices.where((inv) {
-      if (selectedFilter == 'ทั้งหมด') return true;
-      if (selectedFilter == 'ค้างชำระ') return inv.status == InvoiceStatus.unpaid;
-      if (selectedFilter == 'รอตรวจสลิป') return inv.status == InvoiceStatus.pending;
-      if (selectedFilter == 'ชำระแล้ว') return inv.status == InvoiceStatus.paid;
-      return true;
-    }).toList();
+    final viewModel = context.watch<BillingViewModel>();
+    final filteredInvoices = viewModel.filteredInvoices;
 
     return Column(
       children: [
@@ -70,25 +68,25 @@ class _BillingScreenState extends State<BillingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('จัดการบิลรายเดือน', style: Theme.of(context).textTheme.titleMedium),
-                  Text('${_getMonthName(_selectedMonth)} $_selectedYear', 
+                  Text('${_getMonthName(viewModel.selectedMonth)} ${viewModel.selectedYear}',
                     style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
                 ],
               ),
               PrimaryButton(
                 label: 'ออกบิลใหม่',
                 icon: Icons.add_chart,
-                onPressed: _loadInvoices,
+                onPressed: viewModel.loadInvoices,
               ),
             ],
           ),
         ),
-        _buildPeriodSelector(),
-        _buildFilters(),
+        _buildPeriodSelector(viewModel),
+        _buildFilters(viewModel),
         Expanded(
-          child: _isLoading
+          child: viewModel.isLoading
               ? const Center(child: CircularProgressIndicator())
               : filteredInvoices.isEmpty
-                  ? _buildEmptyState()
+                  ? _buildEmptyState(viewModel)
                   : ListView.separated(
                       padding: const EdgeInsets.all(16),
                       itemCount: filteredInvoices.length,
@@ -102,49 +100,43 @@ class _BillingScreenState extends State<BillingScreen> {
     );
   }
 
-  Widget _buildPeriodSelector() {
+  Widget _buildPeriodSelector(BillingViewModel viewModel) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
           Expanded(
             child: DropdownButtonFormField<int>(
-              value: _selectedMonth,
+              initialValue: viewModel.selectedMonth,
               decoration: const InputDecoration(
                 contentPadding: EdgeInsets.symmetric(horizontal: 12),
                 labelText: 'เดือน',
                 border: OutlineInputBorder(),
               ),
               items: List.generate(12, (i) => DropdownMenuItem(
-                value: i + 1, 
+                value: i + 1,
                 child: Text(_getMonthName(i + 1))
               )),
               onChanged: (val) {
-                if (val != null) {
-                  setState(() => _selectedMonth = val);
-                  _loadInvoices();
-                }
+                if (val != null) viewModel.setPeriod(month: val);
               },
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: DropdownButtonFormField<int>(
-              value: _selectedYear,
+              initialValue: viewModel.selectedYear,
               decoration: const InputDecoration(
                 contentPadding: EdgeInsets.symmetric(horizontal: 12),
                 labelText: 'ปี',
                 border: OutlineInputBorder(),
               ),
               items: List.generate(5, (i) => DropdownMenuItem(
-                value: DateTime.now().year - 1 + i, 
+                value: DateTime.now().year - 1 + i,
                 child: Text('${DateTime.now().year - 1 + i}')
               )),
               onChanged: (val) {
-                if (val != null) {
-                  setState(() => _selectedYear = val);
-                  _loadInvoices();
-                }
+                if (val != null) viewModel.setPeriod(year: val);
               },
             ),
           ),
@@ -153,23 +145,23 @@ class _BillingScreenState extends State<BillingScreen> {
     );
   }
 
-  Widget _buildFilters() {
+  Widget _buildFilters(BillingViewModel viewModel) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: ['ทั้งหมด', 'ค้างชำระ', 'รอตรวจสลิป', 'ชำระแล้ว'].map((filter) {
-          final isActive = selectedFilter == filter;
+          final isActive = viewModel.selectedFilter == filter;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: FilterChip(
               label: Text(filter),
               selected: isActive,
-              onSelected: (val) => setState(() => selectedFilter = filter),
+              onSelected: (val) => viewModel.setFilter(filter),
               backgroundColor: AppColors.card,
               selectedColor: AppColors.primary,
               labelStyle: TextStyle(
-                color: isActive ? Colors.white : AppColors.primary, 
+                color: isActive ? Colors.white : AppColors.primary,
                 fontSize: 12
               ),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
@@ -181,7 +173,7 @@ class _BillingScreenState extends State<BillingScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BillingViewModel viewModel) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -190,10 +182,10 @@ class _BillingScreenState extends State<BillingScreen> {
           const SizedBox(height: 16),
           const Text('ไม่พบข้อมูลบิลในเดือนที่เลือก', style: TextStyle(color: AppColors.mutedForeground)),
           const SizedBox(height: 8),
-          const Text('กรุณาบันทึกมิเตอร์ในเมนู "มิเตอร์" ก่อน', 
+          const Text('กรุณาบันทึกมิเตอร์ในเมนู "มิเตอร์" ก่อน',
             style: TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
           const SizedBox(height: 16),
-          TextButton(onPressed: _loadInvoices, child: const Text('ลองโหลดใหม่อีกครั้ง')),
+          TextButton(onPressed: viewModel.loadInvoices, child: const Text('ลองโหลดใหม่อีกครั้ง')),
         ],
       ),
     );
@@ -235,9 +227,11 @@ class _InvoiceCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          _buildItemRow('🏠 ค่าห้อง', '฿${invoice.roomPrice.toStringAsFixed(0)}'),
-          _buildItemRow('⚡ ไฟ ${invoice.electricityUnits.toStringAsFixed(1)} หน่วย', '฿${invoice.electricityCost.toStringAsFixed(0)}'),
-          _buildItemRow('💧 ค่าน้ำ', '฿${invoice.waterCost.toStringAsFixed(0)}'),
+          _buildItemRow('🏠 ค่าห้อง', formatBaht(invoice.roomPrice)),
+          _buildItemRow('⚡ ไฟ ${formatUnits(invoice.electricityUnits)} หน่วย', formatBaht(invoice.electricityCost)),
+          _buildItemRow('💧 ค่าน้ำ', formatBaht(invoice.waterCost)),
+          if (invoice.cleaningFee > 0)
+            _buildItemRow('🧹 ค่าทำความสะอาด', formatBaht(invoice.cleaningFee)),
           const Divider(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -246,7 +240,7 @@ class _InvoiceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('ยอดรวมสุทธิ', style: TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
-                  Text('฿${invoice.total.toStringAsFixed(0)}',
+                  Text(formatBaht(invoice.total),
                       style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ],
               ),
