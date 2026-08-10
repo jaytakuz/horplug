@@ -613,7 +613,9 @@ class _OpenRequestRow extends StatelessWidget {
             label: maintenanceStatusLabel(request.status),
             variant: request.status == MaintenanceStatus.pending
                 ? BadgeVariant.warning
-                : BadgeVariant.primary,
+                : request.status == MaintenanceStatus.cancelled
+                    ? BadgeVariant.destructive
+                    : BadgeVariant.primary,
           ),
         ],
       ),

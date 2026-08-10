@@ -5,7 +5,6 @@ import '../models/models.dart';
 import '../theme/app_theme.dart';
 import 'maintenance_request_dialog.dart';
 
-
 class ChatConversationView extends StatefulWidget {
   const ChatConversationView({
     super.key,
@@ -54,7 +53,7 @@ class ChatConversationView extends StatefulWidget {
   /// Landlord-only: called when they pick a new status for a maintenance
   /// bubble. Omit to make maintenance bubbles non-interactive.
   final Future<void> Function(
-      int requestId, MaintenanceStatus status, MaintenanceRequestType type)?
+          int requestId, MaintenanceStatus status, MaintenanceRequestType type)?
       onUpdateMaintenanceStatus;
 
   @override
@@ -129,8 +128,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                 leading: const Icon(Icons.photo_camera_outlined,
                     color: AppColors.primary),
                 title: const Text('ถ่ายรูป'),
-                onTap: () =>
-                    Navigator.of(sheetContext).pop(ImageSource.camera),
+                onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
               ),
               const SizedBox(height: 8),
             ],
@@ -181,24 +179,32 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                 ),
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.pending_outlined, color: AppColors.warning),
+                leading: const Icon(Icons.pending_outlined,
+                    color: AppColors.warning),
                 title: const Text('รอดำเนินการ'),
                 onTap: () =>
                     Navigator.of(sheetContext).pop(MaintenanceStatus.pending),
               ),
               ListTile(
-                leading: const Icon(Icons.build_outlined, color: AppColors.primary),
+                leading:
+                    const Icon(Icons.build_outlined, color: AppColors.primary),
                 title: const Text('กำลังดำเนินการ'),
-                onTap: () =>
-                    Navigator.of(sheetContext).pop(MaintenanceStatus.inProgress),
+                onTap: () => Navigator.of(sheetContext)
+                    .pop(MaintenanceStatus.inProgress),
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.check_circle_outline, color: AppColors.success),
+                leading: const Icon(Icons.check_circle_outline,
+                    color: AppColors.success),
                 title: const Text('เสร็จสิ้น'),
                 onTap: () =>
                     Navigator.of(sheetContext).pop(MaintenanceStatus.completed),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cancel_outlined,
+                    color: AppColors.destructive),
+                title: const Text('ยกเลิก'),
+                onTap: () =>
+                    Navigator.of(sheetContext).pop(MaintenanceStatus.cancelled),
               ),
               const SizedBox(height: 8),
             ],
@@ -355,7 +361,8 @@ class _ChatConversationViewState extends State<ChatConversationView> {
             const SizedBox(height: 2),
             Text(
               '${localTimestamp.hour.toString().padLeft(2, '0')}:${localTimestamp.minute.toString().padLeft(2, '0')} น.',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 8),
+              style:
+                  Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 8),
             ),
           ],
         ),
@@ -406,13 +413,12 @@ class _ChatConversationViewState extends State<ChatConversationView> {
         children: [
           Row(
             children: [
-              Icon(
-                  isCleaning ? Icons.cleaning_services : Icons.build,
-                  size: 16,
-                  color: AppColors.warning),
+              Icon(isCleaning ? Icons.cleaning_services : Icons.build,
+                  size: 16, color: AppColors.warning),
               const SizedBox(width: 8),
               Text(isCleaning ? 'ขอทำความสะอาด' : 'แจ้งซ่อม',
-                  style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                  style:
+                      TextStyle(color: textColor, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 4),
@@ -428,17 +434,33 @@ class _ChatConversationViewState extends State<ChatConversationView> {
 
     if (message.type == MessageType.maintenanceUpdate ||
         message.type == MessageType.cleaningUpdate) {
+      final isCancelled = message.text.contains(': ยกเลิก');
+      final messageLines = message.text.split('\n');
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.check_circle, size: 16, color: AppColors.success),
+              Icon(
+                isCancelled ? Icons.cancel : Icons.check_circle,
+                size: 16,
+                color:
+                    isCancelled ? AppColors.destructive : AppColors.success,
+              ),
               const SizedBox(width: 8),
               Expanded(
-                  child: Text(message.text, style: TextStyle(color: textColor))),
+                child: Text(messageLines.first,
+                    style: TextStyle(color: textColor)),
+              ),
             ],
           ),
+          if (messageLines.length > 1) ...[
+            const SizedBox(height: 4),
+            Text(
+              messageLines.skip(1).join('\n'),
+              style: TextStyle(color: textColor),
+            ),
+          ],
           if (canUpdateMaintenance) ...[
             const SizedBox(height: 4),
             Text('แตะเพื่ออัปเดตสถานะ',
@@ -475,7 +497,8 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                           )
                         : const Icon(Icons.image_outlined,
                             color: AppColors.primary),
-                    onPressed: widget.isUploadingImage ? null : _handlePickImage,
+                    onPressed:
+                        widget.isUploadingImage ? null : _handlePickImage,
                   ),
                 if (widget.onRequestMaintenance != null) ...[
                   IconButton(
@@ -555,5 +578,4 @@ class _ChatConversationViewState extends State<ChatConversationView> {
       ),
     );
   }
-
 }

@@ -37,6 +37,16 @@ class _ChatView extends StatefulWidget {
 class _ChatViewState extends State<_ChatView> {
   final TextEditingController _searchController = TextEditingController();
 
+  String _formatMessageTime(DateTime timestamp) {
+    final local = timestamp.toLocal();
+    final difference = DateTime.now().difference(local);
+    if (difference.inMinutes < 1) return 'เมื่อสักครู่';
+    if (difference.inMinutes < 60) return '${difference.inMinutes} นาทีที่แล้ว';
+    if (difference.inHours < 24) return '${difference.inHours} ชม.ที่แล้ว';
+    if (difference.inDays < 7) return '${difference.inDays} วันที่แล้ว';
+    return '${local.day}/${local.month}/${local.year}';
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -128,6 +138,7 @@ class _ChatViewState extends State<_ChatView> {
                       return PaperCard(
                         onTap: () => viewModel.openChat(chat),
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Expanded(
                               child: Column(
@@ -159,28 +170,48 @@ class _ChatViewState extends State<_ChatView> {
                                     chat.lastMessage.isEmpty
                                         ? 'ยังไม่มีข้อความ'
                                         : chat.lastMessage,
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),
                             ),
-                            if (chat.unreadCount > 0)
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: const BoxDecoration(
-                                  color: AppColors.destructive,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Text(
-                                  '${chat.unreadCount}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                            if (chat.unreadCount > 0 || chat.lastMessageAt != null)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  if (chat.unreadCount > 0)
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.destructive,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Text(
+                                        '${chat.unreadCount}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  if (chat.unreadCount > 0 &&
+                                      chat.lastMessageAt != null)
+                                    const SizedBox(height: 4),
+                                  if (chat.lastMessageAt != null)
+                                    Text(
+                                      _formatMessageTime(chat.lastMessageAt!),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: AppColors.mutedForeground,
+                                          ),
+                                    ),
+                                ],
                               ),
                           ],
                         ),
@@ -298,7 +329,8 @@ class _ChatViewState extends State<_ChatView> {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: AppColors.primary),
+            icon: const Icon(Icons.arrow_back_ios_new,
+                size: 18, color: AppColors.primary),
             onPressed: viewModel.closeChat,
           ),
           CircleAvatar(
@@ -306,7 +338,10 @@ class _ChatViewState extends State<_ChatView> {
             backgroundColor: AppColors.primary.withValues(alpha: 0.1),
             child: Text(
               chat.roomNumber,
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary),
+              style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary),
             ),
           ),
           const SizedBox(width: 10),
@@ -316,11 +351,15 @@ class _ChatViewState extends State<_ChatView> {
               children: [
                 Text(
                   chat.tenantName,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: AppColors.primary),
                 ),
                 Text(
                   'ห้อง ${chat.roomNumber}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+                  style: const TextStyle(
+                      fontSize: 11, color: AppColors.mutedForeground),
                 ),
               ],
             ),

@@ -41,6 +41,9 @@ class MaintenanceRequestCard extends StatelessWidget {
       case MaintenanceStatus.completed:
         variant = BadgeVariant.success;
         break;
+      case MaintenanceStatus.cancelled:
+        variant = BadgeVariant.destructive;
+        break;
     }
 
     return PaperCard(

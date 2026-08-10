@@ -184,12 +184,14 @@ class ElectricityRecord {
   });
 
   // Returns true when meter wrapped around from 9999 → 0000
-  bool get isOverflow => currentReading != null && currentReading! < previousReading;
+  bool get isOverflow =>
+      currentReading != null && currentReading! < previousReading;
 
   // Handles 4-digit meter overflow: (10000 - prev) + current
   double get unitsUsed {
     if (currentReading == null) return 0;
-    if (currentReading! >= previousReading) return currentReading! - previousReading;
+    if (currentReading! >= previousReading)
+      return currentReading! - previousReading;
     return (10000 - previousReading) + currentReading!;
   }
 
@@ -279,6 +281,7 @@ class ChatPreview {
   final String floor;
   final String tenantName;
   final String lastMessage;
+  final DateTime? lastMessageAt;
   final int unreadCount;
 
   ChatPreview({
@@ -287,6 +290,7 @@ class ChatPreview {
     required this.floor,
     required this.tenantName,
     required this.lastMessage,
+    this.lastMessageAt,
     required this.unreadCount,
   });
 }
@@ -397,7 +401,7 @@ class PaymentChannel {
 
 enum MaintenanceRequestType { repair, cleaning }
 
-enum MaintenanceStatus { pending, inProgress, completed }
+enum MaintenanceStatus { pending, inProgress, completed, cancelled }
 
 class MaintenanceRequest {
   final int id;
