@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import 'invoice_chat_card.dart';
 import 'maintenance_request_dialog.dart';
 
 
@@ -21,6 +22,8 @@ class ChatConversationView extends StatefulWidget {
     this.onRequestMaintenance,
     this.isRequestingMaintenance = false,
     this.onUpdateMaintenanceStatus,
+    this.invoicesById = const {},
+    this.onOpenInvoice,
   });
 
   final List<ChatMessage> messages;
@@ -56,6 +59,13 @@ class ChatConversationView extends StatefulWidget {
   final Future<void> Function(
       int requestId, MaintenanceStatus status, MaintenanceRequestType type)?
       onUpdateMaintenanceStatus;
+
+  /// บิลของห้องนี้ map ด้วย id — ใช้ resolve สถานะสดของการ์ดบิลในแชท
+  final Map<int, Invoice> invoicesById;
+
+  /// เรียกเมื่อแตะการ์ดบิล — ฝั่งผู้เช่าเปิดแผ่นชำระเงิน ฝั่งเจ้าของหอเปิด
+  /// รายละเอียดบิล (Task 7) ส่ง null เพื่อทำให้การ์ดบิลแตะไม่ได้
+  final void Function(Invoice invoice)? onOpenInvoice;
 
   @override
   State<ChatConversationView> createState() => _ChatConversationViewState();
@@ -320,6 +330,11 @@ class _ChatConversationViewState extends State<ChatConversationView> {
         requestType != null &&
         message.maintenanceRequestId != null &&
         widget.onUpdateMaintenanceStatus != null;
+    final invoiceOfMessage = message.type == MessageType.invoice
+        ? widget.invoicesById[message.invoiceId]
+        : null;
+    final canOpenInvoice =
+        invoiceOfMessage != null && widget.onOpenInvoice != null;
 
     final bubble = Container(
       padding: isImage ? EdgeInsets.zero : const EdgeInsets.all(12),
@@ -351,7 +366,13 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                         message.maintenanceRequestId!, requestType),
                     child: bubble,
                   )
-                : bubble,
+                : canOpenInvoice
+                    ? GestureDetector(
+                        onTap: () =>
+                            widget.onOpenInvoice!(invoiceOfMessage),
+                        child: bubble,
+                      )
+                    : bubble,
             const SizedBox(height: 2),
             Text(
               '${localTimestamp.hour.toString().padLeft(2, '0')}:${localTimestamp.minute.toString().padLeft(2, '0')} น.',
@@ -445,6 +466,15 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                 style: TextStyle(color: hintColor, fontSize: 10)),
           ],
         ],
+      );
+    }
+
+    if (message.type == MessageType.invoice) {
+      return InvoiceChatCard(
+        invoice: widget.invoicesById[message.invoiceId],
+        fallbackText: message.text,
+        textColor: textColor,
+        onOpen: widget.onOpenInvoice == null ? null : () {},
       );
     }
 

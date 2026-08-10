@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/models.dart';
+import '../viewmodels/tenant_dashboard_view_model.dart' show thaiMonthName;
 import 'invoice_calculator.dart';
+import 'invoice_lifecycle.dart';
 import 'supabase_service.dart';
 
 const _slipBucket = 'payment-slip';
@@ -180,6 +182,102 @@ class InvoiceService {
     return InvoicePreview(drafts: drafts, skipped: skipped);
   }
 
+  /// ออกบิลทั้งชุดใน insert เดียว
+  ///
+  /// Postgres รับประกัน all-or-nothing ให้เอง จึงไม่มีสภาพ "ออกไป 7 จาก 12
+  /// ห้องแล้วค้าง" และการกดซ้อนกันจะชนที่ partial unique index เป็น 23505
+  /// แทนที่จะสร้างบิลซ้ำเงียบๆ
+  Future<List<Invoice>> issueInvoices({
+    required int dormitoryId,
+    required List<InvoiceDraft> drafts,
+  }) async {
+    if (drafts.isEmpty) return [];
+
+    final issuedBy = _client.auth.currentUser?.id;
+    if (issuedBy == null) throw Exception('ยังไม่ได้เข้าสู่ระบบ');
+
+    final rows = drafts.map((draft) {
+      final due = dueDateFor(draft.billingYear, draft.billingMonth);
+      return {
+        'invoice_no': invoiceNoFor(
+          year: draft.billingYear,
+          month: draft.billingMonth,
+          roomNumber: draft.roomNumber,
+        ),
+        'dorm_id': dormitoryId,
+        'room_id': draft.roomDbId,
+        'tenant_id': draft.tenantId,
+        'billing_month': draft.billingMonth,
+        'billing_year': draft.billingYear,
+        'room_price': draft.roomPrice,
+        'electricity_units': draft.electricityUnits,
+        'electricity_cost': draft.electricityCost,
+        'water_cost': draft.waterCost,
+        'cleaning_fee': draft.cleaningFee,
+        'due_date':
+            '${due.year}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}',
+        'issued_by': issuedBy,
+      };
+    }).toList();
+
+    final inserted = await _client.from('invoices').insert(rows).select(_columns);
+    return (inserted as List)
+        .cast<Map<String, dynamic>>()
+        .map(_invoiceFromRow)
+        .toList();
+  }
+
+  /// โพสต์การ์ดบิลเข้าห้องแชทของแต่ละบิล
+  ///
+  /// เป็น batch insert เดียวเช่นกัน ถ้าล้มก็ล้มทั้งชุด — บิลยังอยู่ ผู้เรียก
+  /// รายงานว่าแจ้งเตือนไม่สำเร็จแล้วให้กดส่งซ้ำ ไม่ rollback บิล เพราะบิลคือ
+  /// ของจริง ข้อความคือการแจ้งเตือนเกี่ยวกับมัน
+  Future<int> postIssueNotices({required List<Invoice> invoices}) async {
+    if (invoices.isEmpty) return 0;
+
+    final senderId = _client.auth.currentUser?.id;
+    if (senderId == null) throw Exception('ยังไม่ได้เข้าสู่ระบบ');
+
+    // ข้ามใบที่เคยแจ้งไปแล้ว เพื่อให้ปุ่มส่งซ้ำไม่สร้างข้อความซ้อน
+    final existing = await _client
+        .from('messages')
+        .select('invoice_id')
+        .inFilter('invoice_id', invoices.map((i) => i.dbId).toList())
+        .eq('message_type', MessageType.invoice.name);
+    final notified = (existing as List)
+        .cast<Map<String, dynamic>>()
+        .map((row) => row['invoice_id'] as int)
+        .toSet();
+
+    final rows = invoices
+        .where((invoice) => !notified.contains(invoice.dbId))
+        .map((invoice) => {
+              'room_id': invoice.roomDbId,
+              'sender_id': senderId,
+              'is_from_owner': true,
+              'body': 'ออกบิลค่าเช่างวด'
+                  '${thaiMonthName(invoice.billingMonth)} '
+                  '${invoice.billingYear} แล้ว',
+              'message_type': MessageType.invoice.name,
+              'invoice_id': invoice.dbId,
+            })
+        .toList();
+
+    if (rows.isEmpty) return 0;
+    await _client.from('messages').insert(rows);
+    return rows.length;
+  }
+
+  /// บิลของห้องหนึ่ง map ด้วย id — ให้การ์ดในแชทแสดงสถานะสด ไม่ใช่สถานะตอนส่ง
+  Future<Map<int, Invoice>> invoicesByIdForRoom({
+    required int roomDbId,
+    int monthCount = 24,
+  }) async {
+    final invoices =
+        await fetchForRoom(roomDbId: roomDbId, monthCount: monthCount);
+    return {for (final invoice in invoices) invoice.dbId: invoice};
+  }
+
   /// ค่าทำความสะอาดจากคำขอที่เสร็จสิ้นในงวดนั้น แยกตามห้อง
   Future<Map<int, double>> _fetchCleaningFeesByRoom({
     required List<int> roomIds,
@@ -246,6 +344,161 @@ class InvoiceService {
   /// signed URL อายุ 1 ชั่วโมง สร้างใหม่ทุกครั้งที่เปิดดู ไม่ cache ข้าม session
   Future<String> signedSlipUrl(String path) =>
       _client.storage.from(_slipBucket).createSignedUrl(path, 3600);
+
+  // ── เจ้าของหอตรวจสลิป ──────────────────────────────────────────────────
+
+  Future<void> approveSlip({required Invoice invoice}) async {
+    _assertTransition(invoice.status, InvoiceStatus.paid);
+
+    final approvedBy = _client.auth.currentUser?.id;
+    await _client.from('invoices').update({
+      'status': InvoiceStatus.paid.name,
+      // .toUtc() ก่อนแปลงเป็นสตริงเสมอ — DateTime.now() ไม่มี UTC เป็นค่า
+      // เครื่องท้องถิ่น (ICT = UTC+7) ไม่มี offset ต่อท้าย Postgres จึงตีความ
+      // ตาม session timezone ซึ่งบน Supabase คือ UTC แล้วเวลาที่บันทึกจะ
+      // เพี้ยนไปเจ็ดชั่วโมงจากที่กดจริง ต่างจาก issued_at/slip_submitted_at
+      // ที่มาจาก NOW() ฝั่งเซิร์ฟเวอร์อยู่แล้ว
+      'paid_at': DateTime.now().toUtc().toIso8601String(),
+      'approved_by': approvedBy,
+    }).eq('id', invoice.dbId);
+
+    await _postInvoiceNotice(
+      invoice: invoice,
+      body: 'รับชำระบิล ${invoice.invoiceNo} เรียบร้อยแล้ว ขอบคุณครับ',
+    );
+  }
+
+  /// ปฏิเสธพากลับไป unpaid ไม่ใช่สถานะที่ห้า เพราะสิ่งที่ผู้เช่าต้องทำ
+  /// เหมือนเดิมคือจ่ายใหม่ ต่างแค่มีเหตุผลให้อ่าน
+  Future<void> rejectSlip({
+    required Invoice invoice,
+    required String reason,
+  }) async {
+    _assertTransition(invoice.status, InvoiceStatus.unpaid);
+
+    // เก็บ path เดิมไว้ก่อน column จะถูกเซ็ตเป็น null — ไม่งั้นไฟล์ในบัคเก็ต
+    // payment-slip จะกำพร้าอยู่ถาวรเพราะไม่มีบิลไหนอ้างอิงมันอีกแล้ว
+    final oldSlipPath = invoice.slipUrl;
+    if (oldSlipPath != null) {
+      await discardSlip(oldSlipPath);
+    }
+
+    await _client.from('invoices').update({
+      'status': InvoiceStatus.unpaid.name,
+      'rejection_reason': reason,
+      'slip_url': null,
+      'slip_submitted_at': null,
+    }).eq('id', invoice.dbId);
+
+    await _postInvoiceNotice(
+      invoice: invoice,
+      body: 'สลิปของบิล ${invoice.invoiceNo} ไม่ผ่านการตรวจสอบ: $reason',
+    );
+  }
+
+  // ── ยกเลิกและออกใบแทน ──────────────────────────────────────────────────
+
+  Future<void> voidInvoice({
+    required Invoice invoice,
+    required String reason,
+  }) async {
+    _assertTransition(invoice.status, InvoiceStatus.voided);
+
+    await _client.from('invoices').update({
+      'status': InvoiceStatus.voided.name,
+      // .toUtc() — เหตุผลเดียวกับ paid_at ใน approveSlip ด้านบน
+      'voided_at': DateTime.now().toUtc().toIso8601String(),
+      'void_reason': reason,
+    }).eq('id', invoice.dbId);
+
+    await _postInvoiceNotice(
+      invoice: invoice,
+      body: 'บิล ${invoice.invoiceNo} ถูกยกเลิก: $reason',
+    );
+  }
+
+  /// ออกใบแทนจากมิเตอร์ปัจจุบัน — เรียกหลัง voidInvoice เท่านั้น
+  ///
+  /// partial unique index ปล่อยให้ใบใหม่เกิดได้เพราะใบเดิมไม่นับเป็น active
+  /// แล้ว revision + 1 ทำให้เลขที่บิลไม่ชนกัน และ replaces_invoice_id ทำให้
+  /// สลิปที่จ่ายใบเดิมไปแล้วยังตามรอยได้
+  Future<Invoice?> reissueInvoice({
+    required Invoice voided,
+    required int dormitoryId,
+  }) async {
+    final preview = await previewDrafts(
+      dormitoryId: dormitoryId,
+      month: voided.billingMonth,
+      year: voided.billingYear,
+    );
+
+    InvoiceDraft? draft;
+    for (final candidate in preview.drafts) {
+      if (candidate.roomDbId == voided.roomDbId) {
+        draft = candidate;
+        break;
+      }
+    }
+    if (draft == null) return null;
+
+    final issuedBy = _client.auth.currentUser?.id;
+    if (issuedBy == null) throw Exception('ยังไม่ได้เข้าสู่ระบบ');
+
+    final revision = voided.revision + 1;
+    final due = dueDateFor(draft.billingYear, draft.billingMonth);
+
+    final inserted = await _client.from('invoices').insert({
+      'invoice_no': invoiceNoFor(
+        year: draft.billingYear,
+        month: draft.billingMonth,
+        roomNumber: draft.roomNumber,
+        revision: revision,
+      ),
+      'dorm_id': dormitoryId,
+      'room_id': draft.roomDbId,
+      'tenant_id': draft.tenantId,
+      'billing_month': draft.billingMonth,
+      'billing_year': draft.billingYear,
+      'room_price': draft.roomPrice,
+      'electricity_units': draft.electricityUnits,
+      'electricity_cost': draft.electricityCost,
+      'water_cost': draft.waterCost,
+      'cleaning_fee': draft.cleaningFee,
+      'due_date':
+          '${due.year}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}',
+      'issued_by': issuedBy,
+      'revision': revision,
+      'replaces_invoice_id': voided.dbId,
+    }).select(_columns).single();
+
+    final invoice = _invoiceFromRow(inserted);
+    await postIssueNotices(invoices: [invoice]);
+    return invoice;
+  }
+
+  void _assertTransition(InvoiceStatus from, InvoiceStatus to) {
+    if (!canTransition(from, to)) {
+      throw Exception('บิลใบนี้เปลี่ยนสถานะแบบนั้นไม่ได้');
+    }
+  }
+
+  /// ข้อความธรรมดาที่ผูกกับบิล — ต่างจากการ์ดตอนออกบิลตรงที่ไม่ต้องเปิดดูอะไร
+  Future<void> _postInvoiceNotice({
+    required Invoice invoice,
+    required String body,
+  }) async {
+    final senderId = _client.auth.currentUser?.id;
+    if (senderId == null) return;
+
+    await _client.from('messages').insert({
+      'room_id': invoice.roomDbId,
+      'sender_id': senderId,
+      'is_from_owner': true,
+      'body': body,
+      'message_type': MessageType.text.name,
+      'invoice_id': invoice.dbId,
+    });
+  }
 }
 
 // ── แปลงแถว ───────────────────────────────────────────────────────────────

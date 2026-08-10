@@ -6,7 +6,9 @@ import '../models/models.dart';
 const _chatImageBucket = 'chat-image';
 
 class SupabaseService {
-  final SupabaseClient client = Supabase.instance.client;
+  // เป็น getter ไม่ใช่ field เพื่อให้คลาสลูก (เช่นตัวปลอมในเทสต์) สร้างตัวเองได้
+  // โดยไม่ไปแตะ Supabase.instance ซึ่ง assert เมื่อยังไม่ได้ initialize
+  SupabaseClient get client => Supabase.instance.client;
 
   /// ดึงข้อมูลห้องพักทั้งหมด
   ///
@@ -333,6 +335,7 @@ class SupabaseService {
       type: _mapMessageType(row['message_type'] as String?),
       attachmentUrl: resolvedAttachmentUrl,
       maintenanceRequestId: row['maintenance_request_id'] as int?,
+      invoiceId: row['invoice_id'] as int?,
     );
   }
 
@@ -437,6 +440,7 @@ class SupabaseService {
     MessageType type = MessageType.text,
     String? attachmentUrl,
     int? maintenanceRequestId,
+    int? invoiceId,
   }) async {
     await client.from('messages').insert({
       'room_id': roomId,
@@ -447,6 +451,7 @@ class SupabaseService {
       if (attachmentUrl != null) 'attachment_url': attachmentUrl,
       if (maintenanceRequestId != null)
         'maintenance_request_id': maintenanceRequestId,
+      if (invoiceId != null) 'invoice_id': invoiceId,
     });
   }
 

@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:horplug/models/models.dart';
-import 'package:horplug/services/tenant_billing_source.dart';
 import 'package:horplug/viewmodels/action_result.dart';
 import 'package:horplug/viewmodels/error_message.dart';
+import 'package:horplug/viewmodels/tenant_bills_view_model.dart';
 import 'package:horplug/viewmodels/tenant_dashboard_view_model.dart';
 
 /// Fake ของชั้นข้อมูลฝั่งผู้เช่า
@@ -47,7 +47,7 @@ class FakeTenantDashboardRepository {
       throw const SocketException('Failed host lookup');
     }
     final matches = _invoices.where(
-      (invoice) => invoice.date.month == month && invoice.date.year == year,
+      (invoice) => invoice.billingMonth == month && invoice.billingYear == year,
     );
     return matches.isEmpty ? null : matches.first;
   }
@@ -60,7 +60,7 @@ class FakeTenantDashboardRepository {
       throw const SocketException('Failed host lookup');
     }
     final sorted = List<Invoice>.from(_invoices)
-      ..sort((a, b) => b.date.compareTo(a.date));
+      ..sort((a, b) => b.period.compareTo(a.period));
     return sorted.take(monthCount).toList();
   }
 
@@ -107,6 +107,10 @@ class FakeTenantDashboardRepository {
   }
 }
 
+/// บิลหนึ่งใบแบบที่ InvoiceService คืนออกมา
+///
+/// [total] คำนวณจากผลบวกของรายการเหมือน generated column ในฐานข้อมูล เพื่อให้
+/// fixture ในเทสต์เป็นไปไม่ได้ที่จะมียอดรวมไม่ตรงกับรายการย่อย
 Invoice buildInvoice({
   required int roomDbId,
   required int month,
@@ -116,19 +120,25 @@ Invoice buildInvoice({
   double electricityUnits = 0,
   double waterCost = 0,
   double cleaningFee = 0,
+  InvoiceStatus status = InvoiceStatus.unpaid,
 }) {
   return Invoice(
-    id: 'INV-$roomDbId-$month-$year',
+    dbId: roomDbId * 10000 + year * 100 + month,
+    invoiceNo: 'INV-$year${month.toString().padLeft(2, '0')}-101',
+    roomDbId: roomDbId,
     roomNumber: '101',
     tenantName: 'Somchai Jaidee',
-    waterUnits: waterCost > 0 ? 1 : 0,
-    electricityUnits: electricityUnits,
+    billingMonth: month,
+    billingYear: year,
     roomPrice: roomPrice,
-    waterCost: waterCost,
+    electricityUnits: electricityUnits,
     electricityCost: electricityCost,
+    waterCost: waterCost,
     cleaningFee: cleaningFee,
-    status: InvoiceStatus.unpaid,
-    date: DateTime(year, month, 1),
+    total: roomPrice + electricityCost + waterCost + cleaningFee,
+    status: status,
+    dueDate: DateTime(year, month + 1, 5),
+    issuedAt: DateTime(year, month + 1, 1),
   );
 }
 
@@ -207,8 +217,8 @@ void main() {
         );
 
         expect(history, hasLength(2));
-        expect(history[0].date.month, 6);
-        expect(history[1].date.month, 5);
+        expect(history[0].billingMonth, 6);
+        expect(history[1].billingMonth, 5);
       });
 
       test('UTC-37-TC-02 returns an empty list for a room with no history',
@@ -359,81 +369,42 @@ void main() {
       });
     });
 
-    group('UTC-40 MockPaymentLedger', () {
-      test('UTC-40-TC-01 defaults the current period to unpaid', () {
-        final ledger = MockPaymentLedger();
-        final invoice = buildInvoice(roomDbId: 10, month: 6, year: 2026);
+    group('UTC-40 ยอดค้างชำระ', () {
+      test('UTC-40-TC-01 บิลที่ยกเลิกแล้วไม่ถูกนับเป็นยอดค้างชำระ', () {
+        final bills = [
+          buildInvoice(
+              roomDbId: 10, month: 7, year: 2026,
+              status: InvoiceStatus.voided),
+          buildInvoice(
+              roomDbId: 10, month: 8, year: 2026,
+              status: InvoiceStatus.unpaid),
+        ];
 
-        final status =
-            ledger.statusFor(invoice, now: DateTime(2026, 6, 21));
-
-        expect(status, InvoiceStatus.unpaid);
+        expect(totalOutstanding(bills), 2500);
       });
 
-      test('UTC-40-TC-02 defaults a past period to paid', () {
-        final ledger = MockPaymentLedger();
-        final invoice = buildInvoice(roomDbId: 10, month: 5, year: 2026);
+      test('UTC-40-TC-02 บิลที่รอตรวจสลิปไม่ถูกนับเป็นยอดค้าง เพราะจ่ายไปแล้ว',
+          () {
+        final bills = [
+          buildInvoice(
+              roomDbId: 10, month: 8, year: 2026,
+              status: InvoiceStatus.pending),
+        ];
 
-        final status =
-            ledger.statusFor(invoice, now: DateTime(2026, 6, 21));
-
-        expect(status, InvoiceStatus.paid);
+        expect(totalOutstanding(bills), 0);
       });
 
-      test('UTC-40-TC-03 markPending overrides the default status', () {
-        final ledger = MockPaymentLedger();
-        final invoice = buildInvoice(roomDbId: 10, month: 6, year: 2026);
+      test('UTC-40-TC-03 บิลที่ยกเลิกแล้วไม่ถูกนับเป็นยอดชำระสะสมของปี', () {
+        final bills = [
+          buildInvoice(
+              roomDbId: 10, month: 7, year: 2026,
+              status: InvoiceStatus.voided),
+          buildInvoice(
+              roomDbId: 10, month: 8, year: 2026,
+              status: InvoiceStatus.paid),
+        ];
 
-        ledger.markPending(invoice.id);
-
-        expect(
-          ledger.statusFor(invoice, now: DateTime(2026, 6, 21)),
-          InvoiceStatus.pending,
-        );
-      });
-
-      test('UTC-40-TC-04 dueDateFor rolls over into the next year', () {
-        final dueDate = MockPaymentLedger.dueDateFor(DateTime(2026, 12, 1));
-
-        expect(dueDate, DateTime(2027, 1, 5));
-      });
-    });
-
-    group('UTC-41 submitPaymentSlip', () {
-      test('UTC-41-TC-01 succeeds and flips the bill to pending', () async {
-        final ledger = MockPaymentLedger();
-        final source = MockTenantBillingSource(ledger: ledger);
-        final invoice = buildInvoice(roomDbId: 10, month: 6, year: 2026);
-
-        final result = await source.submitPaymentSlip(
-          billId: invoice.id,
-          slip: File('slip.jpg'),
-        );
-
-        expect(result.success, isTrue);
-        expect(result.message, 'ส่งสลิปแล้ว รอเจ้าของหอตรวจสอบ');
-        expect(
-          ledger.statusFor(invoice, now: DateTime(2026, 6, 21)),
-          InvoiceStatus.pending,
-        );
-      });
-
-      test('UTC-41-TC-02 a repeated submit for the same bill is idempotent',
-          () async {
-        final ledger = MockPaymentLedger();
-        final source = MockTenantBillingSource(ledger: ledger);
-        final invoice = buildInvoice(roomDbId: 10, month: 6, year: 2026);
-
-        await source.submitPaymentSlip(
-            billId: invoice.id, slip: File('slip.jpg'));
-        final second = await source.submitPaymentSlip(
-            billId: invoice.id, slip: File('slip.jpg'));
-
-        expect(second.success, isTrue);
-        expect(
-          ledger.statusFor(invoice, now: DateTime(2026, 6, 21)),
-          InvoiceStatus.pending,
-        );
+        expect(totalPaidInYear(bills, 2026), 2500);
       });
     });
 
@@ -478,6 +449,7 @@ void main() {
         expect(billStatusLabel(InvoiceStatus.unpaid), 'ค้างชำระ');
         expect(billStatusLabel(InvoiceStatus.pending), 'รอตรวจสลิป');
         expect(billStatusLabel(InvoiceStatus.paid), 'ชำระแล้ว');
+        expect(billStatusLabel(InvoiceStatus.voided), 'ยกเลิกแล้ว');
       });
 
       test('UTC-43-TC-02 returns Thai month names and guards bad input', () {

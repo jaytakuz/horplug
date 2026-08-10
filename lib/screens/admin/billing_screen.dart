@@ -3,8 +3,13 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
+import '../../viewmodels/auth_view_model.dart' show AuthScope;
 import '../../viewmodels/billing_view_model.dart';
+import '../../viewmodels/invoice_actions_view_model.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/issue_invoices_dialog.dart';
+import '../../widgets/invoice_detail_sheet.dart';
+import '../../widgets/slip_review_sheet.dart';
 
 class BillingScreen extends StatelessWidget {
   final int dormitoryId;
@@ -75,7 +80,15 @@ class _BillingViewState extends State<_BillingView> {
               PrimaryButton(
                 label: 'ออกบิลใหม่',
                 icon: Icons.add_chart,
-                onPressed: viewModel.loadInvoices,
+                onPressed: () async {
+                  final issued = await showIssueInvoicesDialog(
+                    context,
+                    dormitoryId: viewModel.dormitoryId,
+                    month: viewModel.selectedMonth,
+                    year: viewModel.selectedYear,
+                  );
+                  if (issued) await viewModel.loadInvoices();
+                },
               ),
             ],
           ),
@@ -210,10 +223,25 @@ class _BillingViewState extends State<_BillingView> {
               style: const TextStyle(color: AppColors.mutedForeground),
             ),
             const SizedBox(height: 16),
-            TextButton(
-              onPressed: viewModel.loadInvoices,
-              child: const Text('โหลดใหม่อีกครั้ง'),
-            ),
+            if (hasDrafts)
+              PrimaryButton(
+                label: 'ออกบิลใหม่',
+                icon: Icons.add_chart,
+                onPressed: () async {
+                  final issued = await showIssueInvoicesDialog(
+                    context,
+                    dormitoryId: viewModel.dormitoryId,
+                    month: viewModel.selectedMonth,
+                    year: viewModel.selectedYear,
+                  );
+                  if (issued) await viewModel.loadInvoices();
+                },
+              )
+            else
+              TextButton(
+                onPressed: viewModel.loadInvoices,
+                child: const Text('โหลดใหม่อีกครั้ง'),
+              ),
           ],
         ),
       ),
@@ -229,6 +257,41 @@ class _BillingViewState extends State<_BillingView> {
 class _InvoiceCard extends StatelessWidget {
   final Invoice invoice;
   const _InvoiceCard({required this.invoice});
+
+  /// เมนู ⋮ ไม่มี ViewModel ของตัวเองใน tree (ต่างจากแผ่นรายละเอียดที่มี
+  /// ChangeNotifierProvider ห่ออยู่) จึงสร้างตัวชั่วคราวแล้วคืนทิ้งเมื่อจบ
+  InvoiceActionsViewModel _actionsFor(BuildContext context) =>
+      InvoiceActionsViewModel(
+        invoice: invoice,
+        dormitoryId: context.read<BillingViewModel>().dormitoryId,
+      );
+
+  Future<void> _handleVoidMenu(BuildContext context) async {
+    final viewModel = context.read<BillingViewModel>();
+    final actions = _actionsFor(context);
+    try {
+      final changed = await runVoidInvoiceFlow(context, actions: actions);
+      if (changed && context.mounted) {
+        await viewModel.loadInvoices();
+      }
+    } finally {
+      actions.dispose();
+    }
+  }
+
+  Future<void> _handlePdfMenu(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final dormitoryName = AuthScope.of(context).dormitoryName ?? 'หอพัก';
+    final actions = _actionsFor(context);
+
+    try {
+      final result = await actions.sharePdf(dormitoryName: dormitoryName);
+      if (result.success) return;
+      messenger.showSnackBar(SnackBar(content: Text(result.message)));
+    } finally {
+      actions.dispose();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -247,15 +310,64 @@ class _InvoiceCard extends StatelessWidget {
     }
 
     return PaperCard(
+      onTap: () async {
+        final changed = await showInvoiceDetailSheet(
+          context,
+          invoice: invoice,
+          dormitoryId: context.read<BillingViewModel>().dormitoryId,
+        );
+        if (changed && context.mounted) {
+          await context.read<BillingViewModel>().loadInvoices();
+        }
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('ห้อง ${invoice.roomNumber}  ${invoice.tenantName}',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary)),
+              Expanded(
+                child: Text('ห้อง ${invoice.roomNumber}  ${invoice.tenantName}',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary),
+                  overflow: TextOverflow.ellipsis),
+              ),
               StatusBadge(label: statusText, variant: variant),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert,
+                    color: AppColors.mutedForeground, size: 20),
+                onSelected: (value) {
+                  if (value == 'void') _handleVoidMenu(context);
+                  if (value == 'pdf') _handlePdfMenu(context);
+                },
+                // "ยกเลิกบิล" หายไปเมื่อใบนี้ถูกยกเลิกแล้ว — ไม่มีอะไรให้ทำต่อ
+                // แต่ "บันทึก PDF" ยังอยู่เสมอ เพราะใบที่ยกเลิกแล้วนี่แหละที่
+                // ต้องส่งต่อได้ (มันมีลายน้ำ "ยกเลิก" บอกตัวเองอยู่)
+                itemBuilder: (context) => [
+                  if (!invoice.isVoided)
+                    const PopupMenuItem(
+                      value: 'void',
+                      child: Row(
+                        children: [
+                          Icon(Icons.cancel_outlined,
+                              size: 18, color: AppColors.destructive),
+                          SizedBox(width: 10),
+                          Text('ยกเลิกบิล'),
+                        ],
+                      ),
+                    ),
+                  const PopupMenuItem(
+                    value: 'pdf',
+                    child: Row(
+                      children: [
+                        Icon(Icons.picture_as_pdf_outlined,
+                            size: 18, color: AppColors.mutedForeground),
+                        SizedBox(width: 10),
+                        Text('บันทึก PDF'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
           Text(
@@ -284,7 +396,17 @@ class _InvoiceCard extends StatelessWidget {
               ),
               if (invoice.hasSlip)
                 OutlinedButton.icon(
-                  onPressed: () {},
+                  onPressed: () async {
+                    final changed = await showSlipReviewSheet(
+                      context,
+                      invoice: invoice,
+                      dormitoryId:
+                          context.read<BillingViewModel>().dormitoryId,
+                    );
+                    if (changed && context.mounted) {
+                      await context.read<BillingViewModel>().loadInvoices();
+                    }
+                  },
                   icon: const Icon(Icons.image_outlined, size: 16),
                   label: const Text('ดูสลิป'),
                 )

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
+import '../services/invoice_service.dart';
 import '../services/supabase_service.dart';
 
 class ChatViewModel extends ChangeNotifier {
@@ -13,7 +14,9 @@ class ChatViewModel extends ChangeNotifier {
     required this.ownerId,
     required this.ownerName,
     SupabaseService? service,
-  }) : _service = service ?? SupabaseService();
+    InvoiceService? invoiceService,
+  })  : _service = service ?? SupabaseService(),
+        _invoiceService = invoiceService ?? InvoiceService();
 
   static const int _pageSize = 10;
 
@@ -21,6 +24,7 @@ class ChatViewModel extends ChangeNotifier {
   final String ownerId;
   final String ownerName;
   final SupabaseService _service;
+  final InvoiceService _invoiceService;
 
   static const String allFloors = 'ทั้งหมด';
 
@@ -66,6 +70,26 @@ class ChatViewModel extends ChangeNotifier {
   int _messageLimit = _pageSize;
   StreamSubscription<List<ChatMessage>>? _messagesSubscription;
 
+  Map<int, Invoice> invoicesById = {};
+
+  // โหลดครั้งเดียวตอนเปิดแชท แล้ว resolve ตาม invoiceId — เพิ่ม query เดียว
+  // แลกกับการไม่มีการ์ดค้างที่ยังบอกว่าค้างชำระทั้งที่จ่ายไปแล้วเมื่อวาน
+  Future<void> _loadInvoices(int roomId) async {
+    try {
+      final resolved =
+          await _invoiceService.invoicesByIdForRoom(roomDbId: roomId);
+      // ห้องอาจถูกปิดหรือสลับไปห้องอื่นระหว่างรอผล — ผลที่มาช้าของห้องเก่า
+      // ต้องไม่ทับของห้องที่กำลังเปิดอยู่
+      if (selectedChat?.roomDbId != roomId) return;
+      invoicesById = resolved;
+    } catch (_) {
+      if (selectedChat?.roomDbId != roomId) return;
+      // การ์ดจะ fallback ไปแสดงข้อความสำรอง แชทต้องไม่พังเพราะบิลโหลดไม่ได้
+      invoicesById = {};
+    }
+    notifyListeners();
+  }
+
   Future<void> loadChatPreviews() async {
     isLoadingPreviews = true;
     previewsErrorMessage = null;
@@ -95,6 +119,19 @@ class ChatViewModel extends ChangeNotifier {
     _service
         .markRoomRead(roomId: chat.roomDbId, userId: ownerId)
         .catchError((_) {});
+    _loadInvoices(chat.roomDbId);
+  }
+
+  /// รีโหลดแผนที่บิลของห้องที่เปิดอยู่ตอนนี้
+  ///
+  /// _loadInvoices เดิมโหลดครั้งเดียวตอนเปิดแชท การ์ดบิลจึงค้างสถานะเก่าถ้า
+  /// เจ้าของหออนุมัติ ปฏิเสธ หรือยกเลิกบิลผ่านแผ่นรายละเอียดที่เปิดจากในแชท
+  /// ผู้เรียก (chat_screen.dart) เรียกเมธอดนี้ต่อเมื่อแผ่นนั้นรายงานว่ามีการ
+  /// เปลี่ยนสถานะจริง ไม่ทำอะไรถ้าไม่มีห้องเปิดอยู่แล้ว (เช่นผู้ใช้ปิดแชทไปก่อน)
+  Future<void> refreshInvoices() {
+    final chat = selectedChat;
+    if (chat == null) return Future.value();
+    return _loadInvoices(chat.roomDbId);
   }
 
   void _subscribeToMessages(int roomId, String tenantName) {
@@ -132,6 +169,7 @@ class ChatViewModel extends ChangeNotifier {
     _messagesSubscription = null;
     selectedChat = null;
     conversation = [];
+    invoicesById = {};
     notifyListeners();
     loadChatPreviews();
   }

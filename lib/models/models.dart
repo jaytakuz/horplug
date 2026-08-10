@@ -22,6 +22,7 @@ enum MessageType {
   image,
   cleaningRequest,
   cleaningUpdate,
+  invoice,
 }
 
 enum AppRole { landlord, tenant }
@@ -377,6 +378,7 @@ class ChatMessage {
   final MessageType type;
   final String? attachmentUrl;
   final int? maintenanceRequestId;
+  final int? invoiceId;
 
   ChatMessage({
     required this.id,
@@ -387,6 +389,7 @@ class ChatMessage {
     this.type = MessageType.text,
     this.attachmentUrl,
     this.maintenanceRequestId,
+    this.invoiceId,
   });
 }
 

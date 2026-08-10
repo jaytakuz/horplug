@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/chat_view_model.dart';
 import '../../widgets/chat_conversation_view.dart';
+import '../../widgets/invoice_detail_sheet.dart';
 
 class ChatScreen extends StatelessWidget {
   const ChatScreen({super.key});
@@ -281,6 +282,15 @@ class _ChatViewState extends State<_ChatView> {
                     requestId: requestId,
                     status: status,
                     requestType: requestType),
+            invoicesById: viewModel.invoicesById,
+            onOpenInvoice: (invoice) async {
+              final changed = await showInvoiceDetailSheet(
+                context,
+                invoice: invoice,
+                dormitoryId: viewModel.dormitoryId,
+              );
+              if (changed) await viewModel.refreshInvoices();
+            },
           ),
         ),
       ],

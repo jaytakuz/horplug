@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_chat_view_model.dart';
 import '../../widgets/chat_conversation_view.dart';
+import '../../widgets/payment_sheet.dart';
 
 class TenantChatScreen extends StatelessWidget {
   /// [embedded] = true เมื่อถูกวางเป็นแท็บใน TenantShell ซึ่งมี Scaffold และ
@@ -53,6 +57,7 @@ class TenantChatScreen extends StatelessWidget {
         roomId: roomId,
         tenantId: profile!.id,
         tenantName: tenantName,
+        dormitoryId: profile.dormitoryId,
       )..start(),
       child: _TenantChatView(embedded: embedded),
     );
@@ -63,6 +68,19 @@ class _TenantChatView extends StatelessWidget {
   const _TenantChatView({required this.embedded});
 
   final bool embedded;
+
+  Future<void> _handleOpenInvoice(
+    BuildContext context,
+    TenantChatViewModel viewModel,
+    Invoice invoice,
+  ) async {
+    await showPaymentSheet(
+      context,
+      bill: invoice,
+      channel: viewModel.paymentChannel,
+      onSubmit: (File slip) => viewModel.submitSlip(bill: invoice, slip: slip),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +131,9 @@ class _TenantChatView extends StatelessWidget {
                   isUploadingImage: viewModel.isUploadingImage,
                   onRequestMaintenance: viewModel.requestMaintenance,
                   isRequestingMaintenance: viewModel.isRequestingMaintenance,
+                  invoicesById: viewModel.invoicesById,
+                  onOpenInvoice: (invoice) =>
+                      _handleOpenInvoice(context, viewModel, invoice),
                 );
 
     if (embedded) return body;
