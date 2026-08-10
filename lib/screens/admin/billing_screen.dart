@@ -25,38 +25,15 @@ class BillingScreen extends StatelessWidget {
   }
 }
 
-class _BillingView extends StatefulWidget {
+/// แสดง error ของการโหลดในตัวหน้าจอ ไม่ใช่ผ่าน SnackBar
+///
+/// เดิมหน้านี้ addListener แล้วยิง SnackBar ทันทีที่โหลดล้ม ซึ่งพังกับ
+/// `IndexedStack` ใน AdminShell ที่ build ทุกแท็บพร้อมกันตั้งแต่เปิดแอป —
+/// SnackBar ของหน้าบิลจึงโผล่ทับหน้าหลักทั้งที่ผู้ใช้ยังไม่เคยแตะแท็บบิล
+/// วาด error ในหน้าตัวเองทำให้ผู้ใช้เห็นตอนเปิดแท็บนี้จริงๆ และมีที่ให้วางปุ่ม
+/// ลองใหม่ ซึ่ง SnackBar ที่หายไปเองใน 4 วินาทีให้ไม่ได้
+class _BillingView extends StatelessWidget {
   const _BillingView();
-
-  @override
-  State<_BillingView> createState() => _BillingViewState();
-}
-
-class _BillingViewState extends State<_BillingView> {
-  BillingViewModel? _viewModel;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final viewModel = context.read<BillingViewModel>();
-    if (!identical(_viewModel, viewModel)) {
-      _viewModel?.removeListener(_onViewModelChanged);
-      _viewModel = viewModel..addListener(_onViewModelChanged);
-    }
-  }
-
-  void _onViewModelChanged() {
-    final error = _viewModel?.consumeError();
-    if (error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
-    }
-  }
-
-  @override
-  void dispose() {
-    _viewModel?.removeListener(_onViewModelChanged);
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -111,9 +88,14 @@ class _BillingViewState extends State<_BillingView> {
         Expanded(
           child: viewModel.isLoading
               ? const Center(child: CircularProgressIndicator())
-              : filteredInvoices.isEmpty
-                  ? _buildEmptyState(viewModel)
-                  : ListView.separated(
+              // error ต้องมาก่อน empty state — รายการที่ว่างเพราะโหลดไม่สำเร็จ
+              // ไม่ใช่ "ยังไม่ได้จดมิเตอร์" การบอกผิดทำให้เจ้าของหอไปตามหา
+              // ปัญหาผิดที่
+              : viewModel.errorMessage != null
+                  ? _buildErrorState(context, viewModel)
+                  : filteredInvoices.isEmpty
+                      ? _buildEmptyState(context, viewModel)
+                      : ListView.separated(
                       padding: const EdgeInsets.all(16),
                       itemCount: filteredInvoices.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -203,7 +185,37 @@ class _BillingViewState extends State<_BillingView> {
   /// รายการว่างมีสองความหมายที่ต่างกันคนละเรื่อง — งวดนี้ยังไม่มีบิลเลย
   /// กับตัวกรองที่เลือกไม่ตรงกับบิลใบไหน อย่างหลังไม่ควรชวนให้ออกบิลใหม่
   /// ทั้งที่บิลอีกยี่สิบใบอยู่ห่างไปแค่ชิปเดียว
-  Widget _buildEmptyState(BillingViewModel viewModel) {
+  Widget _buildErrorState(BuildContext context, BillingViewModel viewModel) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline,
+                size: 48, color: AppColors.destructive),
+            const SizedBox(height: 16),
+            Text('โหลดข้อมูลบิลไม่สำเร็จ',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              viewModel.errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.mutedForeground),
+            ),
+            const SizedBox(height: 16),
+            PrimaryButton(
+              label: 'ลองใหม่',
+              icon: Icons.refresh,
+              onPressed: viewModel.loadInvoices,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, BillingViewModel viewModel) {
     if (viewModel.invoices.isNotEmpty) {
       return const Center(
         child: Padding(

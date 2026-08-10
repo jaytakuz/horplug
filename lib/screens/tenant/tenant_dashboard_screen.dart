@@ -462,7 +462,13 @@ class _UsageSection extends StatelessWidget {
             ),
           ],
         ),
-        if (viewModel.usageErrorMessage != null) ...[
+        // ซ่อนเมื่อข้อความซ้ำกับกล่อง error ของบิลด้านบน — ทั้งสองส่วนอ่านจาก
+        // ตาราง invoices เหมือนกัน เวลาชั้นฐานข้อมูลล้มจึงได้ข้อความเดียวกัน
+        // แล้วผู้เช่าเห็นกล่องแดงสองใบซ้อนกันในหน้าจอเดียว · ยังแยก field ไว้
+        // ใน ViewModel เพราะสองส่วนนี้ล้มคนละเหตุผลได้จริง (เช่นบิลโหลดผ่านแต่
+        // ประวัติ 2 เดือนไม่ผ่าน) กรณีนั้นยังต้องเห็นทั้งคู่
+        if (viewModel.usageErrorMessage != null &&
+            viewModel.usageErrorMessage != viewModel.billErrorMessage) ...[
           const SizedBox(height: 8),
           SectionErrorNote(
             message: viewModel.usageErrorMessage!,

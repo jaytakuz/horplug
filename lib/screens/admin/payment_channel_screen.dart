@@ -17,7 +17,8 @@ Future<bool> showPaymentChannelScreen(
   final saved = await Navigator.of(context).push<bool>(
     MaterialPageRoute(
       builder: (_) => ChangeNotifierProvider(
-        create: (_) => PaymentChannelViewModel(dormitoryId: dormitoryId)..load(),
+        create: (_) =>
+            PaymentChannelViewModel(dormitoryId: dormitoryId)..load(),
         child: const _PaymentChannelScreen(),
       ),
     ),
@@ -64,50 +65,59 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
           : SafeArea(
               child: Form(
                 key: _formKey,
-                child: ListView(
+                // SingleChildScrollView + Column ไม่ใช่ ListView — ListView
+                // สร้าง children แบบ lazy ช่องที่เลื่อนพ้นจอจะถูกถอดออกจาก tree
+                // แล้ว deregister ตัวเองจาก Form ทำให้ validate() ข้ามช่องนั้นไป
+                // เงียบๆ ด่านตรวจจริงจึงเหลือแค่ CHECK ในฐานข้อมูล ซึ่งเด้ง
+                // ข้อความคนละแบบกลับมา · ฟอร์มนี้มีไม่กี่ช่อง การสร้างทั้งหมด
+                // พร้อมกันจึงไม่มีต้นทุนที่ต้องกังวล
+                child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
-                  children: [
-                    if (viewModel.errorMessage != null) ...[
-                      SectionErrorNote(message: viewModel.errorMessage!),
-                      const SizedBox(height: 16),
-                    ],
-                    Text(
-                      'ผู้เช่าจะเห็นข้อมูลนี้ตอนกดชำระเงิน และคิวอาร์จะฝังยอด'
-                      'ของบิลแต่ละใบให้อัตโนมัติ',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.mutedForeground,
-                          ),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildPromptPaySection(context, viewModel),
-                    const SizedBox(height: 20),
-                    _buildBankSection(context, viewModel),
-                    const SizedBox(height: 20),
-                    _buildAccountNameField(viewModel),
-                    const SizedBox(height: 12),
-                    // ตรวจ "ต้องมีอย่างน้อยหนึ่งช่องทาง" ที่ระดับฟอร์ม ไม่ใช่ราย
-                    // ช่อง เพราะเป็นเงื่อนไขข้ามช่อง — ผูกไว้กับ FormField ที่ไม่มี
-                    // ช่องกรอกของตัวเอง เพื่อให้เข้าร่วม validate() ตามปกติ
-                    FormField<void>(
-                      validator: (_) => validateHasAnyChannel(
-                        promptPayId: viewModel.promptPayId,
-                        bankName: viewModel.bankName,
-                        accountNo: viewModel.accountNo,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (viewModel.errorMessage != null) ...[
+                        SectionErrorNote(message: viewModel.errorMessage!),
+                        const SizedBox(height: 16),
+                      ],
+                      Text(
+                        'ผู้เช่าจะเห็นข้อมูลนี้ตอนกดชำระเงิน และคิวอาร์จะฝังยอด'
+                        'ของบิลแต่ละใบให้อัตโนมัติ',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.mutedForeground,
+                            ),
                       ),
-                      builder: (field) => field.hasError
-                          ? SectionErrorNote(message: field.errorText!)
-                          : const SizedBox.shrink(),
-                    ),
-                    const SizedBox(height: 12),
-                    PrimaryButton(
-                      label: 'บันทึก',
-                      icon: Icons.save_outlined,
-                      fullWidth: true,
-                      isLoading: viewModel.isSaving,
-                      onPressed: _save,
-                    ),
-                    const SizedBox(height: 24),
-                  ],
+                      const SizedBox(height: 20),
+                      _buildPromptPaySection(context, viewModel),
+                      const SizedBox(height: 20),
+                      _buildBankSection(context, viewModel),
+                      const SizedBox(height: 20),
+                      _buildAccountNameField(viewModel),
+                      const SizedBox(height: 12),
+                      // ตรวจ "ต้องมีอย่างน้อยหนึ่งช่องทาง" ที่ระดับฟอร์ม ไม่ใช่ราย
+                      // ช่อง เพราะเป็นเงื่อนไขข้ามช่อง — ผูกไว้กับ FormField ที่ไม่มี
+                      // ช่องกรอกของตัวเอง เพื่อให้เข้าร่วม validate() ตามปกติ
+                      FormField<void>(
+                        validator: (_) => validateHasAnyChannel(
+                          promptPayId: viewModel.promptPayId,
+                          bankName: viewModel.bankName,
+                          accountNo: viewModel.accountNo,
+                        ),
+                        builder: (field) => field.hasError
+                            ? SectionErrorNote(message: field.errorText!)
+                            : const SizedBox.shrink(),
+                      ),
+                      const SizedBox(height: 12),
+                      PrimaryButton(
+                        label: 'บันทึก',
+                        icon: Icons.save_outlined,
+                        fullWidth: true,
+                        isLoading: viewModel.isSaving,
+                        onPressed: _save,
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -230,9 +240,8 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
           helperText: 'ผู้เช่าใช้ชื่อนี้ตรวจปลายทางก่อนกดโอน',
           border: OutlineInputBorder(),
         ),
-        validator: (value) => (value?.trim().isEmpty ?? true)
-            ? 'กรุณากรอกชื่อบัญชี'
-            : null,
+        validator: (value) =>
+            (value?.trim().isEmpty ?? true) ? 'กรุณากรอกชื่อบัญชี' : null,
         onChanged: (value) => viewModel.update(accountName: value),
       ),
     );

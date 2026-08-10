@@ -7,6 +7,8 @@
 // เพราะมันวาด QR จาก payload ที่ยังไม่ได้ซ่อม checksum (ดูเหตุผลใต้
 // promptPayPayload) และหน้าตาเป็นกรอบสีน้ำเงินพร้อมข้อความอังกฤษตายตัว
 // ignore: implementation_imports
+import 'package:promptpay_qrcode_generate/src/crc16.dart';
+// ignore: implementation_imports
 import 'package:promptpay_qrcode_generate/src/generate_qrcode.dart';
 
 /// ความยาวของเลข PromptPay ที่ generateQRCode รองรับ
@@ -43,14 +45,27 @@ String? promptPayPayload({
   final raw = generateQRCode(promptPayID: id, amount: amount);
   if (raw.isEmpty) return null;
 
-  // tag 63 (CRC) เป็นฟิลด์สุดท้ายเสมอตามสเปก EMVCo ทุกอย่างก่อน "6304" คือ
-  // ข้อมูลที่ CRC คำนวณมาจาก ส่วนที่ตามหลังคือตัว checksum ที่ต้องยาว 4 พอดี
-  final marker = raw.lastIndexOf('6304');
-  if (marker < 0) return null;
+  // tag 63 (CRC) เป็นฟิลด์สุดท้ายเสมอตามสเปก EMVCo · checksum ที่ package ต่อ
+  // ท้ายมายาว 1–4 ตัว จึงลองตัดทีละความยาวแล้วยืนยันด้วยการคำนวณ CRC ซ้ำจาก
+  // ส่วนหน้า
+  //
+  // เคยใช้ lastIndexOf('6304') ซึ่งพังเมื่อ checksum เองมีค่าเป็น "6304" พอดี
+  // (payload ลงท้าย "...63046304") — lastIndexOf ไปเจอตัวหลังซึ่งเป็น checksum
+  // ไม่ใช่ tag ทำให้ตัด body ผิดแล้วเติม "0000" ต่อท้ายทั้งก้อน ได้ payload เสีย
+  // ซึ่งเป็นความพังแบบเดียวกับที่ฟังก์ชันนี้มีไว้เพื่อป้องกัน
+  for (var crcLength = 1; crcLength <= 4; crcLength++) {
+    final marker = raw.length - crcLength - 4;
+    if (marker < 0) break;
+    if (!raw.startsWith('6304', marker)) continue;
 
-  final body = raw.substring(0, marker + 4);
-  final checksum = raw.substring(marker + 4);
-  return '$body${checksum.padLeft(4, '0')}';
+    final body = raw.substring(0, marker + 4);
+    final checksum = raw.substring(marker + 4);
+    if (crc16(body).toRadixString(16).toUpperCase() != checksum) continue;
+
+    return '$body${checksum.padLeft(4, '0')}';
+  }
+
+  return null;
 }
 
 /// ตรวจเลข PromptPay ให้ตรงกับที่ระบบรองรับ · null แปลว่าผ่าน

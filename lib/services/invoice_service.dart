@@ -351,14 +351,19 @@ class InvoiceService {
     final periodEnd = DateTime(month == 12 ? year + 1 : year,
         month == 12 ? 1 : month + 1, 1);
 
+    // .toUtc() ก่อนแปลงเป็นสตริงเสมอ — เหตุผลเดียวกับ paid_at ใน approveSlip
+    // DateTime ที่ไม่ใช่ UTC ให้สตริงที่ไม่มี offset แล้ว Postgres ตีความเป็น
+    // UTC ขอบของงวดจึงเลื่อนไปเท่ากับ timezone ของเครื่อง (ไทย +7) งานทำความ
+    // สะอาดที่เสร็จช่วง 00:00–07:00 ของวันที่ 1 จะตกไปอยู่ในงวดก่อนหน้าซึ่ง
+    // ออกบิลไปแล้ว แปลว่าไม่ถูกเรียกเก็บเลยสักงวด
     final data = await _client
         .from('maintenance_requests')
         .select('room_id, cleaning_fee')
         .inFilter('room_id', roomIds)
         .eq('request_type', 'Cleaning')
         .eq('status', 'Completed')
-        .gte('completed_at', periodStart.toIso8601String())
-        .lt('completed_at', periodEnd.toIso8601String());
+        .gte('completed_at', periodStart.toUtc().toIso8601String())
+        .lt('completed_at', periodEnd.toUtc().toIso8601String());
 
     final feeByRoom = <int, double>{};
     for (final row in (data as List).cast<Map<String, dynamic>>()) {

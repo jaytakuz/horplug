@@ -3,11 +3,18 @@ import 'package:horplug/services/promptpay.dart';
 // ignore: implementation_imports
 import 'package:promptpay_qrcode_generate/src/generate_qrcode.dart';
 
-/// ดึง checksum (ข้อมูลของ tag 63) ออกจาก payload
-String _checksumOf(String payload) {
-  final marker = payload.lastIndexOf('6304');
-  return payload.substring(marker + 4);
-}
+/// checksum ของ payload ที่ซ่อมแล้ว — 4 ตัวท้ายเสมอ
+///
+/// ห้ามใช้ lastIndexOf('6304') หา tag เพราะ checksum เองมีค่าเป็น "6304" ได้
+/// (payload จะลงท้าย "...63046304") แล้วจะไปเจอตัวหลังซึ่งเป็น checksum ไม่ใช่
+/// tag — เป็นบั๊กเดียวกับที่ promptPayPayload ต้องแก้ ถ้า helper ของเทสต์มีบั๊ก
+/// เดียวกัน เทสต์จะมองไม่เห็นเคสนั้นเลย
+String _checksumOf(String payload) =>
+    payload.substring(payload.length - 4);
+
+/// tag ที่นำหน้า checksum · payload ที่ถูกต้องต้องเป็น "6304" เสมอ
+String _tagBeforeChecksum(String payload) =>
+    payload.substring(payload.length - 8, payload.length - 4);
 
 void main() {
   const phone = '0812345678';
@@ -16,30 +23,60 @@ void main() {
     // เหตุผลทั้งหมดอยู่ใน doc ของ promptPayPayload — เทสต์คู่นี้คือหลักฐานที่
     // อ้างถึง ถ้าวันหนึ่ง package ออกเวอร์ชันที่แก้แล้ว เทสต์แรกจะล้ม ซึ่งเป็น
     // สัญญาณให้กลับมาลบ wrapper ทิ้งได้ ไม่ใช่ความล้มเหลว
-    test('package สร้าง checksum สั้นกว่า 4 หลักจริง', () {
+    test('package สร้าง payload ที่สั้นกว่าที่ควรจริง', () {
       final broken = <double>[];
 
       for (var satang = 0; satang < 5000; satang++) {
         final amount = satang / 100;
-        final payload = generateQRCode(promptPayID: phone, amount: amount);
-        if (payload.isEmpty) continue;
-        if (_checksumOf(payload).length != 4) broken.add(amount);
+        final raw = generateQRCode(promptPayID: phone, amount: amount);
+        final fixed = promptPayPayload(promptPayId: phone, amount: amount);
+        if (raw.isEmpty || fixed == null) continue;
+        // payload ที่ซ่อมแล้วยาวกว่าของเดิม = ของเดิม checksum ไม่ครบ 4 หลัก
+        if (fixed.length > raw.length) broken.add(amount);
       }
 
       expect(broken, isNotEmpty,
           reason: 'ถ้าว่างแปลว่า package แก้บั๊กแล้ว — ลบ wrapper ได้');
     });
 
-    test('promptPayPayload คืน checksum 4 หลักเสมอทุกยอด', () {
+    // invariant ที่แข็งแรงกว่าการนับความยาว checksum: payload EMVCo ที่ถูกต้อง
+    // ต้องจบด้วย tag 63 · length 04 · ข้อมูล 4 ตัว รวม 8 ตัวท้ายเสมอ
+    test('promptPayPayload ปิดท้ายด้วย tag 6304 + checksum 4 หลักเสมอ', () {
       for (var satang = 0; satang < 5000; satang++) {
         final amount = satang / 100;
-        final payload =
-            promptPayPayload(promptPayId: phone, amount: amount);
+        final payload = promptPayPayload(promptPayId: phone, amount: amount);
 
         expect(payload, isNotNull);
-        expect(_checksumOf(payload!).length, 4,
-            reason: 'ยอด $amount ให้ checksum ที่ยาวไม่ครบ');
+        expect(_tagBeforeChecksum(payload!), '6304',
+            reason: 'ยอด $amount ตัดตำแหน่ง tag ผิด');
+        expect(_checksumOf(payload), hasLength(4));
       }
+    });
+
+    // lastIndexOf('6304') พังเมื่อ checksum เองเป็น "6304" พอดี เพราะ payload
+    // ลงท้าย "...63046304" แล้วไปเจอตัวหลังซึ่งเป็น checksum ไม่ใช่ tag
+    test('checksum ที่บังเอิญเป็น "6304" ไม่ทำให้ตัด payload ผิดตำแหน่ง', () {
+      var covered = false;
+
+      for (var satang = 0; satang < 400000; satang++) {
+        final amount = satang / 100;
+        final raw = generateQRCode(promptPayID: phone, amount: amount);
+        // body จบด้วย tag "6304" เสมอ ถ้า checksum เป็น "6304" ด้วย
+        // payload จะลงท้ายด้วยแปดตัวนี้พอดี
+        if (!raw.endsWith('63046304')) continue;
+
+        covered = true;
+        final payload = promptPayPayload(promptPayId: phone, amount: amount)!;
+
+        // checksum ครบ 4 อยู่แล้ว จึงต้องไม่มีอะไรถูกต่อท้ายเพิ่ม
+        expect(payload, raw);
+        expect(_tagBeforeChecksum(payload), '6304');
+        break;
+      }
+
+      expect(covered, isTrue,
+          reason: 'ไม่เจอยอดที่ทำให้ checksum เป็น 6304 ในช่วงที่กวาด '
+              'ขยายช่วงหรือเปลี่ยนเบอร์ทดสอบ');
     });
 
     test('ซ่อมด้วยการเติมศูนย์ข้างหน้า ไม่ใช่ตัดหรือคำนวณใหม่', () {
@@ -47,8 +84,9 @@ void main() {
       final raw = generateQRCode(promptPayID: phone, amount: 0.1);
       final fixed = promptPayPayload(promptPayId: phone, amount: 0.1)!;
 
-      expect(_checksumOf(raw).length, lessThan(4));
-      expect(_checksumOf(fixed), '0${_checksumOf(raw)}');
+      expect(fixed.length, raw.length + 1);
+      expect(fixed, '${raw.substring(0, raw.length - 3)}0'
+          '${raw.substring(raw.length - 3)}');
     });
   });
 
