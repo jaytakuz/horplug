@@ -7,6 +7,7 @@ import '../../viewmodels/auth_view_model.dart' show AuthScope;
 import '../../viewmodels/billing_view_model.dart';
 import '../../viewmodels/invoice_actions_view_model.dart';
 import '../../utils/formatters.dart';
+import 'payment_channel_screen.dart';
 import '../../widgets/issue_invoices_dialog.dart';
 import '../../widgets/invoice_detail_sheet.dart';
 import '../../widgets/slip_review_sheet.dart';
@@ -76,6 +77,18 @@ class _BillingViewState extends State<_BillingView> {
                   Text('${_getMonthName(viewModel.selectedMonth)} ${viewModel.selectedYear}',
                     style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
                 ],
+              ),
+              // ตั้งค่าช่องทางรับเงินอยู่ตรงนี้เพราะเป็นเรื่องของบิลโดยตรง และ
+              // bottom navigation มีห้าแท็บอยู่แล้ว การเพิ่มแท็บที่หกเพื่อหน้า
+              // ที่เปิดปีละครั้งไม่คุ้มกับพื้นที่ที่กิน
+              IconButton(
+                icon: const Icon(Icons.qr_code_2, size: 22),
+                tooltip: 'ช่องทางชำระเงิน',
+                color: AppColors.mutedForeground,
+                onPressed: () => showPaymentChannelScreen(
+                  context,
+                  dormitoryId: viewModel.dormitoryId,
+                ),
               ),
               PrimaryButton(
                 label: 'ออกบิลใหม่',

@@ -17,6 +17,11 @@ dependencies:
   image_picker: ^1.1.2
   pdf: ^3.11.0
   printing: ^5.13.0
+  promptpay_qrcode_generate: ^1.0.2
+  # ใช้ตรงๆ ใน widgets/promptpay_qr.dart เพื่อวาด QR จาก payload ที่ซ่อมแล้ว
+  # แทนที่จะใช้ widget ของ promptpay_qrcode_generate ซึ่งวาดจาก payload ที่ยัง
+  # ไม่ได้ซ่อม · ประกาศเป็น direct dependency เพราะพึ่งพาโดยตรง ไม่ใช่ผ่านตัวอื่น
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
@@ -29,7 +34,6 @@ flutter:
   uses-material-design: true
   assets:
     - .env
-    - lib/assets/sample_paymant_qrcode.jpg
     # ประกาศเป็น asset ไม่ใช่ fonts: เพราะแพ็กเกจ pdf โหลดฟอนต์ผ่าน rootBundle
     # เอง ไม่ได้ใช้ระบบฟอนต์ของ Flutter
     - lib/assets/fonts/Sarabun-Regular.ttf

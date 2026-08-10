@@ -6,11 +6,13 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
 import '../services/invoice_pdf.dart';
+import '../services/promptpay.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/action_result.dart';
 import '../viewmodels/auth_view_model.dart' show AuthScope;
 import '../viewmodels/error_message.dart';
 import '../viewmodels/tenant_dashboard_view_model.dart' show thaiMonthName;
+import 'promptpay_qr.dart';
 import 'reusable_widgets.dart';
 import '../utils/formatters.dart';
 
@@ -185,9 +187,13 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 16),
+                // null ครอบทั้ง "เจ้าของหอยังไม่ได้ตั้งค่า" และ "โหลดไม่สำเร็จ"
+                // ข้อความจึงต้องจริงกับทั้งสองกรณี และต้องไม่ทำให้ผู้เช่าโอนไป
+                // ก่อนโดยเดาเลขบัญชีเอา — แต่ยังแนบสลิปได้ เผื่อจ่ายทางอื่นไปแล้ว
                 widget.channel == null
                     ? const SectionErrorNote(
-                        message: 'โหลดช่องทางชำระเงินไม่สำเร็จ')
+                        message: 'ยังไม่มีข้อมูลช่องทางชำระเงินของหอนี้ '
+                            'กรุณาสอบถามเจ้าของหอก่อนโอน')
                     : _buildChannel(context, widget.channel!),
                 const Divider(height: 24),
                 Text('แนบสลิปโอนเงิน',
@@ -236,6 +242,16 @@ class _PaymentSheetState extends State<_PaymentSheet> {
   }
 
   Widget _buildChannel(BuildContext context, PaymentChannel channel) {
+    // null ได้สองทาง: หอนี้ไม่ได้ตั้งเลขพร้อมเพย์ไว้ หรือเลขที่ตั้งไว้ผิดรูปแบบ
+    // จนสร้าง payload ไม่ได้ ทั้งสองกรณีจบลงเหมือนกันคือไม่แสดง QR แล้วให้โอน
+    // ด้วยเลขบัญชีแทน ดีกว่าโชว์กล่องเปล่าให้สแกนไม่ติด
+    final qrPayload = channel.hasPromptPay
+        ? promptPayPayload(
+            promptPayId: channel.promptPayId!,
+            amount: widget.bill.total,
+          )
+        : null;
+
     return Column(
       children: [
         Text('ยอดที่ต้องชำระ',
@@ -243,46 +259,53 @@ class _PaymentSheetState extends State<_PaymentSheet> {
         Text(formatBaht(widget.bill.total),
             style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.asset(channel.qrAssetPath, width: 200, height: 200),
-        ),
-        const SizedBox(height: 8),
-        // QR เฟสนี้เป็นภาพนิ่งจึงไม่มีจำนวนเงินฝังอยู่ ถ้าไม่บอกตรงนี้ ผู้เช่า
-        // จะสแกนแล้วเจอช่องจำนวนเงินว่าง กรอกผิด แล้วสลิปถูกปฏิเสธ
-        Text(
-          'กรุณากรอกจำนวนเงินเอง',
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: AppColors.warning),
-        ),
-        const SizedBox(height: 12),
-        Text(channel.bankName, style: Theme.of(context).textTheme.bodyMedium),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SelectableText(
-              channel.accountNo,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(letterSpacing: 1.2),
-            ),
-            IconButton(
-              icon: const Icon(Icons.copy, size: 18),
-              tooltip: 'คัดลอกเลขบัญชี',
-              onPressed: () async {
-                await Clipboard.setData(
-                    ClipboardData(text: channel.accountNo));
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('คัดลอกเลขบัญชีแล้ว')),
-                );
-              },
-            ),
-          ],
-        ),
+        // QR ถูกสร้างสดจากเลขพร้อมเพย์ของหอบวกยอดของบิลใบนี้ จำนวนเงินจึงฝังอยู่
+        // ในตัว QR แล้ว ผู้เช่าไม่ต้องพิมพ์ยอดเอง — ซึ่งเคยเป็นสาเหตุอันดับต้นๆ
+        // ที่สลิปถูกปฏิเสธแล้วต้องโอนใหม่
+        if (qrPayload != null) ...[
+          PromptPayQr(payload: qrPayload, size: 200),
+          const SizedBox(height: 8),
+          Text(
+            'สแกนแล้วยอดจะขึ้นให้อัตโนมัติ ไม่ต้องกรอกเอง',
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: AppColors.mutedForeground),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (channel.hasBankAccount) ...[
+          if (qrPayload != null)
+            Text('หรือโอนเข้าบัญชี',
+                style: Theme.of(context).textTheme.labelSmall),
+          Text(channel.bankName!,
+              style: Theme.of(context).textTheme.bodyMedium),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SelectableText(
+                channel.accountNo!,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(letterSpacing: 1.2),
+              ),
+              IconButton(
+                icon: const Icon(Icons.copy, size: 18),
+                tooltip: 'คัดลอกเลขบัญชี',
+                onPressed: () async {
+                  await Clipboard.setData(
+                      ClipboardData(text: channel.accountNo!));
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('คัดลอกเลขบัญชีแล้ว')),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
         Text(channel.accountName,
             style: Theme.of(context).textTheme.bodySmall),
       ],

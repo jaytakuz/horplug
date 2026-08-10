@@ -3,6 +3,7 @@ import 'dart:io';
 import '../models/models.dart';
 import '../viewmodels/action_result.dart';
 import 'invoice_service.dart';
+import 'payment_channel_service.dart';
 import 'supabase_service.dart';
 
 /// ช่องทางที่ฝั่งผู้เช่าใช้เข้าถึงบิลของตัวเอง
@@ -21,7 +22,8 @@ abstract class TenantBillingSource {
     int monthCount,
   });
 
-  Future<PaymentChannel> fetchPaymentChannel({required int dormitoryId});
+  /// null เมื่อหอนี้ยังไม่ได้ตั้งค่าช่องทางชำระเงิน
+  Future<PaymentChannel?> fetchPaymentChannel({required int dormitoryId});
 
   Future<ActionResult> submitPaymentSlip({
     required Invoice bill,
@@ -40,6 +42,7 @@ class SupabaseTenantBillingSource implements TenantBillingSource {
   final SupabaseService? _injectedService;
   InvoiceService? _resolvedInvoices;
   SupabaseService? _resolvedService;
+  PaymentChannelService? _resolvedChannels;
 
   /// สร้างแบบ lazy: constructor ของทั้งสองตัวอ่าน Supabase.instance ทันที
   /// ซึ่ง assert ใน unit test การหน่วงไว้ทำให้ทดสอบส่วนที่ไม่แตะเครือข่ายได้
@@ -47,6 +50,8 @@ class SupabaseTenantBillingSource implements TenantBillingSource {
       _resolvedInvoices ??= (_injectedInvoices ?? InvoiceService());
   SupabaseService get _service =>
       _resolvedService ??= (_injectedService ?? SupabaseService());
+  PaymentChannelService get _channels =>
+      _resolvedChannels ??= PaymentChannelService(service: _service);
 
   @override
   Future<Invoice?> fetchCurrentBill({
@@ -68,15 +73,16 @@ class SupabaseTenantBillingSource implements TenantBillingSource {
       _invoices.fetchForRoom(roomDbId: roomDbId, monthCount: monthCount);
 
   @override
-  Future<PaymentChannel> fetchPaymentChannel({required int dormitoryId}) async {
-    final dorm = await _service.fetchDormitoryInfo(dormitoryId: dormitoryId);
-    return PaymentChannel(
-      bankName: 'ธนาคารกสิกรไทย',
-      accountNo: '1438323216',
-      accountName: dorm?.landlordName ?? dorm?.name ?? 'เจ้าของหอ',
-      qrAssetPath: 'lib/assets/sample_paymant_qrcode.jpg',
-    );
-  }
+  /// อ่านช่องทางที่เจ้าของหอตั้งไว้ · null เมื่อยังไม่ได้ตั้ง
+  ///
+  /// เคย hardcode เลขบัญชีเดียวให้ทุกหอ โดยหยิบชื่อเจ้าของหอจริงมาแสดงคู่กัน
+  /// ผู้เช่าของหออื่นจึงเห็นชื่อที่ถูกต้องข้างเลขบัญชีของคนอื่น ซึ่งอ่านแล้ว
+  /// เหมือนข้อมูลที่ผ่านการยืนยันมาแล้ว
+  @override
+  Future<PaymentChannel?> fetchPaymentChannel({
+    required int dormitoryId,
+  }) =>
+      _channels.fetch(dormitoryId: dormitoryId);
 
   /// อัปโหลดก่อนแล้วค่อยบันทึก ถ้าบันทึกล้มให้ลบไฟล์ที่เพิ่งอัปทิ้ง
   /// ไม่งั้นจะเหลือไฟล์ที่ไม่มีแถวไหนอ้างถึงค้างอยู่ใน storage

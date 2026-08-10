@@ -51,22 +51,42 @@ class _IssueInvoicesDialog extends StatelessWidget {
       ),
       actions: [
         TextButton(
-          onPressed: viewModel.isIssuing ? null : () => Navigator.pop(context, false),
-          child: const Text('ยกเลิก'),
-        ),
-        PrimaryButton(
-          label: 'ออกบิล ${preview?.drafts.length ?? 0} ห้อง',
-          isLoading: viewModel.isIssuing,
-          onPressed: (preview?.drafts.isEmpty ?? true)
+          // ปิดกล่องต้องคืน hasIssued ไม่ใช่ false ตายตัว — เมื่อบิลออกไปแล้วแต่
+          // แจ้งเตือนล้ม ผู้ใช้อาจเลือกปิดโดยไม่ลองส่งซ้ำ รายการบิลข้างหลังก็ยัง
+          // ต้องรีเฟรชอยู่ดี
+          onPressed: viewModel.isIssuing
               ? null
-              : () async {
-                  final result = await viewModel.issue();
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text(result.message)));
-                  if (result.success) Navigator.pop(context, true);
-                },
+              : () => Navigator.pop(context, viewModel.hasIssued),
+          child: Text(viewModel.hasIssued ? 'ปิด' : 'ยกเลิก'),
         ),
+        // บิลออกไปแล้วแต่การ์ดในแชทยังไม่ได้โพสต์ — ปุ่มเปลี่ยนหน้าที่ไปเป็นการ
+        // ส่งซ้ำ เพราะการออกบิลไม่มีอะไรให้ทำอีกแล้ว
+        if (viewModel.unnotified.isNotEmpty)
+          PrimaryButton(
+            label: 'ส่งแจ้งเตือนอีกครั้ง',
+            isLoading: viewModel.isIssuing,
+            onPressed: () async {
+              final result = await viewModel.retryNotices();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(result.message)));
+              if (result.success) Navigator.pop(context, true);
+            },
+          )
+        else
+          PrimaryButton(
+            label: 'ออกบิล ${preview?.drafts.length ?? 0} ห้อง',
+            isLoading: viewModel.isIssuing,
+            onPressed: (preview?.drafts.isEmpty ?? true)
+                ? null
+                : () async {
+                    final result = await viewModel.issue();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text(result.message)));
+                    if (result.success) Navigator.pop(context, true);
+                  },
+          ),
       ],
     );
   }

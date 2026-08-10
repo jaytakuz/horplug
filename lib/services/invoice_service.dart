@@ -67,14 +67,28 @@ class InvoiceService {
   }
 
   /// ประวัติบิลของห้องเดียว เรียงจากงวดล่าสุดไปเก่า
+  ///
+  /// ใบที่ยกเลิกถูกกรองออกโดยค่าเริ่มต้น ไม่ใช่แค่เพื่อความสะอาดของรายการ แต่
+  /// เพราะ [monthCount] ถูกใช้เป็น `limit` ซึ่งนับ **แถว** งวดที่มีทั้งใบที่
+  /// ยกเลิกและใบแทนจึงกินโควตาสองแถว ทำให้ "ประวัติ 6 เดือน" เหลือ 5 เดือนโดย
+  /// เงียบสนิท เมื่อกรอง voided ออกแล้ว partial unique index
+  /// (`invoices_one_active_per_period`) รับประกันว่าหนึ่งงวดเหลือได้อย่างมาก
+  /// หนึ่งแถว หนึ่งแถวจึงเท่ากับหนึ่งเดือนจริงๆ
+  ///
+  /// [includeVoided] มีไว้ให้ [invoicesByIdForRoom] ซึ่งต้อง resolve บิลทุกใบที่
+  /// การ์ดในแชทอ้างถึง รวมใบที่ยกเลิกไปแล้ว — ที่นั่น [monthCount] กลับไปเป็น
+  /// จำนวนแถวตามตรง
   Future<List<Invoice>> fetchForRoom({
     required int roomDbId,
     int monthCount = 6,
+    bool includeVoided = false,
   }) async {
-    final data = await _client
-        .from('invoices')
-        .select(_columns)
-        .eq('room_id', roomDbId)
+    var query = _client.from('invoices').select(_columns).eq('room_id', roomDbId);
+    if (!includeVoided) {
+      query = query.neq('status', InvoiceStatus.voided.name);
+    }
+
+    final data = await query
         .order('billing_year', ascending: false)
         .order('billing_month', ascending: false)
         .limit(monthCount);
@@ -164,11 +178,16 @@ class InvoiceService {
         room: room,
         billingMonth: month,
         billingYear: year,
+        // หน่วยต้องผ่าน meterUnitsUsed เหมือนกับที่ ElectricityRecord.amount
+        // ผ่านตอนบันทึกมิเตอร์ ไม่งั้นงวดที่มิเตอร์หมุนกลับ 9999 → 0000 จะถูก
+        // ตรึงลงบิลเป็นหน่วยติดลบข้างค่าไฟที่ถูกต้อง แล้วพิมพ์ออก PDF แบบนั้น
         electricity: e.isEmpty
             ? null
             : MeterCharge(
-                units: _toDouble(e['current_reading']) -
-                    _toDouble(e['previous_reading']),
+                units: meterUnitsUsed(
+                  previousReading: _toDouble(e['previous_reading']),
+                  currentReading: _toDouble(e['current_reading']),
+                ),
                 amount: _toDouble(e['amount']),
               ),
         waterAmount: w.isEmpty ? null : _toDouble(w['amount']),
@@ -196,13 +215,19 @@ class InvoiceService {
     final issuedBy = _client.auth.currentUser?.id;
     if (issuedBy == null) throw Exception('ยังไม่ได้เข้าสู่ระบบ');
 
+    final superseded = await _supersededByRoom(drafts);
+
     final rows = drafts.map((draft) {
       final due = dueDateFor(draft.billingYear, draft.billingMonth);
+      final previous = superseded[draft.roomDbId];
+      final revision = (previous?.revision ?? 0) + 1;
+
       return {
         'invoice_no': invoiceNoFor(
           year: draft.billingYear,
           month: draft.billingMonth,
           roomNumber: draft.roomNumber,
+          revision: revision,
         ),
         'dorm_id': dormitoryId,
         'room_id': draft.roomDbId,
@@ -217,6 +242,8 @@ class InvoiceService {
         'due_date':
             '${due.year}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}',
         'issued_by': issuedBy,
+        'revision': revision,
+        if (previous != null) 'replaces_invoice_id': previous.id,
       };
     }).toList();
 
@@ -225,6 +252,37 @@ class InvoiceService {
         .cast<Map<String, dynamic>>()
         .map(_invoiceFromRow)
         .toList();
+  }
+
+  /// บิลใบล่าสุดของแต่ละห้องในงวดที่กำลังจะออก — รวมใบที่ยกเลิกแล้ว
+  ///
+  /// มีอยู่เพราะเลขที่บิลไม่ซ้ำทั้งหอ (`invoices_no_per_dorm`) และใบที่ยกเลิก
+  /// **ยังถือครองเลขของมันอยู่** ถ้าออกบิลงวดเดิมซ้ำโดยไม่ขยับ revision เลขจะชน
+  /// เป็น 23505 และเพราะเป็น batch insert เดียว ทั้งหอจะไม่ได้บิลสักห้อง โดยที่
+  /// ข้อความบอกให้ "โหลดใหม่" ซึ่งไม่ได้แก้อะไรเลย
+  Future<Map<int, ({int id, int revision})>> _supersededByRoom(
+    List<InvoiceDraft> drafts,
+  ) async {
+    final roomIds = drafts.map((draft) => draft.roomDbId).toList();
+    final first = drafts.first;
+
+    final rows = await _client
+        .from('invoices')
+        .select('id, room_id, revision')
+        .inFilter('room_id', roomIds)
+        .eq('billing_month', first.billingMonth)
+        .eq('billing_year', first.billingYear);
+
+    final latest = <int, ({int id, int revision})>{};
+    for (final row in (rows as List).cast<Map<String, dynamic>>()) {
+      final roomId = row['room_id'] as int;
+      final revision = (row['revision'] as int?) ?? 1;
+      // เก็บ revision สูงสุดไว้ ห้องหนึ่งอาจถูกยกเลิกมาแล้วหลายรอบ
+      if (revision > (latest[roomId]?.revision ?? 0)) {
+        latest[roomId] = (id: row['id'] as int, revision: revision);
+      }
+    }
+    return latest;
   }
 
   /// โพสต์การ์ดบิลเข้าห้องแชทของแต่ละบิล
@@ -271,10 +329,15 @@ class InvoiceService {
   /// บิลของห้องหนึ่ง map ด้วย id — ให้การ์ดในแชทแสดงสถานะสด ไม่ใช่สถานะตอนส่ง
   Future<Map<int, Invoice>> invoicesByIdForRoom({
     required int roomDbId,
-    int monthCount = 24,
+    int rowCount = 24,
   }) async {
-    final invoices =
-        await fetchForRoom(roomDbId: roomDbId, monthCount: monthCount);
+    // includeVoided: การ์ดในแชทที่ชี้ไปยังบิลที่ถูกยกเลิกต้องขึ้นป้าย
+    // "ยกเลิกแล้ว" ไม่ใช่ตกกลับไปเป็นข้อความเปล่าเพราะ resolve ไม่เจอ
+    final invoices = await fetchForRoom(
+      roomDbId: roomDbId,
+      monthCount: rowCount,
+      includeVoided: true,
+    );
     return {for (final invoice in invoices) invoice.dbId: invoice};
   }
 
@@ -379,16 +442,21 @@ class InvoiceService {
     // เก็บ path เดิมไว้ก่อน column จะถูกเซ็ตเป็น null — ไม่งั้นไฟล์ในบัคเก็ต
     // payment-slip จะกำพร้าอยู่ถาวรเพราะไม่มีบิลไหนอ้างอิงมันอีกแล้ว
     final oldSlipPath = invoice.slipUrl;
-    if (oldSlipPath != null) {
-      await discardSlip(oldSlipPath);
-    }
 
+    // อัปเดตแถวก่อน แล้วค่อยลบไฟล์ ลำดับกลับกันทำให้บิลที่ยังเป็น pending ชี้ไป
+    // ที่ไฟล์ที่ถูกลบไปแล้วเมื่อ update ล้ม ซึ่งกู้ไม่ได้จากทั้งสองฝั่ง —
+    // เจ้าของหอเปิดสลิปแล้วเจอ 404 ส่วนผู้เช่าแนบใหม่ไม่ได้เพราะบิลไม่ได้อยู่ที่
+    // unpaid ไฟล์กำพร้าหนึ่งไฟล์ราคาถูกกว่าบิลที่ค้างอยู่ในสภาพนั้นมาก
     await _client.from('invoices').update({
       'status': InvoiceStatus.unpaid.name,
       'rejection_reason': reason,
       'slip_url': null,
       'slip_submitted_at': null,
     }).eq('id', invoice.dbId);
+
+    if (oldSlipPath != null) {
+      await discardSlip(oldSlipPath);
+    }
 
     await _postInvoiceNotice(
       invoice: invoice,
@@ -472,7 +540,17 @@ class InvoiceService {
     }).select(_columns).single();
 
     final invoice = _invoiceFromRow(inserted);
-    await postIssueNotices(invoices: [invoice]);
+
+    // ใบแทนเกิดแล้ว ณ จุดนี้ การแจ้งเตือนที่ล้มต้องไม่ถูกรายงานว่า "ออกใบแทน
+    // ไม่สำเร็จ" — ถ้าปล่อยให้ throw ขึ้นไป ผู้ใช้จะกดใหม่ แล้วรอบสองห้องนั้นมี
+    // บิลอยู่แล้วจึงไม่อยู่ในร่าง ทำให้ได้ข้อความว่า "ยังไม่ได้จดมิเตอร์ หรือ
+    // ห้องไม่มีผู้เช่า" ซึ่งไม่จริงสักข้อ
+    try {
+      await postIssueNotices(invoices: [invoice]);
+    } catch (_) {
+      // การ์ดในแชทเป็นการประกาศเกี่ยวกับบิล ไม่ใช่ตัวบิล
+    }
+
     return invoice;
   }
 

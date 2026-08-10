@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/models.dart';
 import '../services/invoice_service.dart';
 import 'action_result.dart';
 import 'error_message.dart';
@@ -34,6 +35,18 @@ class InvoiceIssueViewModel extends ChangeNotifier with SafeNotifier {
   bool isIssuing = false;
   String? errorMessage;
   InvoicePreview? preview;
+
+  /// บิลที่ออกไปแล้วแต่การ์ดในแชทยังโพสต์ไม่สำเร็จ
+  ///
+  /// ต้องถือไว้ที่นี่เพราะไม่มีทางกลับมาหาบิลชุดนี้ได้อีกเลย พอออกบิลสำเร็จ
+  /// ห้องทั้งหมดกลายเป็น `alreadyIssued` ร่างบิลจึงว่าง ปุ่มออกบิลถูกปิด และ
+  /// `postIssueNotices` ไม่มีทางถูกเรียกอีก คำแนะนำเดิมที่บอกให้ "กดออกบิลอีก
+  /// ครั้งเพื่อส่งแจ้งเตือนซ้ำ" จึงเป็นคำแนะนำที่ทำตามไม่ได้
+  List<Invoice> unnotified = const [];
+
+  /// true เมื่อบิลถูกสร้างไปแล้วในกล่องนี้ ไม่ว่าการแจ้งเตือนจะสำเร็จหรือไม่ —
+  /// หน้าที่เรียกต้องรีเฟรชรายการแม้ผู้ใช้จะปิดกล่องด้วยปุ่ม "ปิด"
+  bool hasIssued = false;
 
   Future<void> load() async {
     isLoading = true;
@@ -71,14 +84,18 @@ class InvoiceIssueViewModel extends ChangeNotifier with SafeNotifier {
         dormitoryId: dormitoryId,
         drafts: drafts,
       );
+      hasIssued = true;
 
       try {
         await _service.postIssueNotices(invoices: issued);
       } catch (_) {
+        // success: false ไม่ได้แปลว่าบิลล้ม — บิลอยู่ครบแล้ว แต่กล่องต้องไม่ปิด
+        // ตัวเอง ไม่งั้นปุ่มส่งแจ้งเตือนซ้ำจะหายไปพร้อมกับกล่อง
+        unnotified = issued;
         return ActionResult(
-          success: true,
+          success: false,
           message: 'ออกบิลแล้ว ${issued.length} ห้อง '
-              'แต่แจ้งเตือนในแชทไม่สำเร็จ กดออกบิลอีกครั้งเพื่อส่งแจ้งเตือนซ้ำ',
+              'แต่แจ้งเตือนในแชทไม่สำเร็จ',
         );
       }
 
@@ -88,6 +105,36 @@ class InvoiceIssueViewModel extends ChangeNotifier with SafeNotifier {
       return ActionResult(
         success: false,
         message: 'ออกบิลไม่สำเร็จ: ${describeIssueError(error)}',
+      );
+    } finally {
+      isIssuing = false;
+      notifyListeners();
+    }
+  }
+
+  /// ส่งการ์ดบิลที่ค้างอยู่เข้าแชทอีกครั้ง
+  ///
+  /// `postIssueNotices` ข้ามใบที่เคยแจ้งไปแล้วอยู่แล้ว การกดซ้ำจึงไม่ทำให้เกิด
+  /// ข้อความซ้อนแม้บางใบจะส่งผ่านไปแล้วในรอบก่อน
+  Future<ActionResult> retryNotices() async {
+    if (unnotified.isEmpty) {
+      return const ActionResult(success: true, message: 'ไม่มีแจ้งเตือนค้างส่ง');
+    }
+
+    isIssuing = true;
+    notifyListeners();
+
+    try {
+      final sent = await _service.postIssueNotices(invoices: unnotified);
+      unnotified = const [];
+      return ActionResult(
+        success: true,
+        message: 'ส่งแจ้งเตือนเข้าแชทแล้ว $sent ห้อง',
+      );
+    } catch (error) {
+      return ActionResult(
+        success: false,
+        message: 'ส่งแจ้งเตือนไม่สำเร็จ: ${describeIssueError(error)}',
       );
     } finally {
       isIssuing = false;

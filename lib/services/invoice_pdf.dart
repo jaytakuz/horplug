@@ -8,9 +8,33 @@ import 'package:printing/printing.dart';
 import '../models/models.dart';
 import '../utils/formatters.dart';
 import '../viewmodels/tenant_dashboard_view_model.dart' show thaiMonthName;
+import 'promptpay.dart';
 
 const _regularFont = 'lib/assets/fonts/Sarabun-Regular.ttf';
 const _boldFont = 'lib/assets/fonts/Sarabun-Bold.ttf';
+
+/// payload ของ QR ที่ควรอยู่ในเอกสารของบิลใบนี้ · null แปลว่าไม่ต้องมี QR
+///
+/// **QR ขึ้นเฉพาะบิลที่ยังค้างชำระ** เอกสารที่แชร์ออกไปแล้วเรียกคืนไม่ได้ ถ้าบิล
+/// ที่จ่ายหรือยกเลิกไปแล้วยังมี QR ที่สแกนจ่ายได้ ไฟล์ที่ผู้เช่าเก็บไว้จะกลาย
+/// เป็นช่องทางจ่ายซ้ำ ลายน้ำ "ชำระแล้ว" ไม่พอ เพราะคนที่ยกมือถือขึ้นมาสแกนมองที่
+/// QR ไม่ได้อ่านลายน้ำ
+///
+/// แยกออกมาเป็นฟังก์ชันของตัวเองเพื่อให้เทสต์ตรวจกฎนี้ได้ตรงๆ — การเดาจากขนาด
+/// ไฟล์ PDF ใช้ไม่ได้ เพราะข้อความไทยที่เพิ่มเข้ามาทำให้ฟอนต์ฝัง glyph เพิ่มจน
+/// ขนาดขยับด้วยเหตุผลที่ไม่เกี่ยวกับ QR เลย
+String? invoiceQrPayload({
+  required Invoice invoice,
+  PaymentChannel? channel,
+}) {
+  if (invoice.status != InvoiceStatus.unpaid) return null;
+  if (channel == null || !channel.hasPromptPay) return null;
+
+  return promptPayPayload(
+    promptPayId: channel.promptPayId!,
+    amount: invoice.total,
+  );
+}
 
 /// สร้างเอกสารบิลจากบิลที่ **ตรึงแล้ว** เท่านั้น
 ///
@@ -27,11 +51,7 @@ Future<Uint8List> buildInvoicePdf({
   final regular = pw.Font.ttf(await rootBundle.load(_regularFont));
   final bold = pw.Font.ttf(await rootBundle.load(_boldFont));
 
-  Uint8List? qr;
-  if (channel != null) {
-    final data = await rootBundle.load(channel.qrAssetPath);
-    qr = data.buffer.asUint8List();
-  }
+  final qrPayload = invoiceQrPayload(invoice: invoice, channel: channel);
 
   final document = pw.Document(
     theme: pw.ThemeData.withFont(base: regular, bold: bold),
@@ -89,13 +109,33 @@ Future<Uint8List> buildInvoicePdf({
               ],
               if (channel != null) ...[
                 pw.Divider(),
-                _row('ชำระผ่าน', channel.bankName),
-                _row('เลขบัญชี', channel.accountNo),
-                if (qr != null)
+                _row('ชื่อบัญชี', channel.accountName),
+                if (channel.hasBankAccount) ...[
+                  _row('ชำระผ่าน', channel.bankName!),
+                  _row('เลขบัญชี', channel.accountNo!),
+                ],
+                // วาด QR จาก payload ตรงๆ ไม่ต้องโหลดรูปจากเครือข่าย การสร้าง
+                // เอกสารจึงทำงานได้แม้ออฟไลน์ และไม่มีทางล้มกลางคันเพราะรูป
+                if (qrPayload != null) ...[
+                  pw.SizedBox(height: 8),
                   pw.Center(
-                    child:
-                        pw.Image(pw.MemoryImage(qr), width: 120, height: 120),
+                    child: pw.BarcodeWidget(
+                      barcode: pw.Barcode.qrCode(),
+                      data: qrPayload,
+                      width: 120,
+                      height: 120,
+                      // ไม่วาดข้อความใต้บาร์โค้ด — ค่าเริ่มต้นคือวาด payload
+                      // ดิบด้วยฟอนต์ Courier ซึ่งไม่รองรับ Unicode (มี warning
+                      // ตอนสร้างเอกสาร) และผู้อ่านไม่ได้ประโยชน์อะไรจากสตริง
+                      // EMVCo ยาวๆ อยู่แล้ว บรรทัดที่มีความหมายเราวาดเองข้างล่าง
+                      drawText: false,
+                    ),
                   ),
+                  pw.Center(
+                    child: pw.Text('สแกนเพื่อชำระ ${formatBaht(invoice.total)}',
+                        style: const pw.TextStyle(fontSize: 9)),
+                  ),
+                ],
               ],
             ],
           ),

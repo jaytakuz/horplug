@@ -7,8 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import '../models/models.dart';
 import '../services/invoice_service.dart';
 import '../services/supabase_service.dart';
+import 'safe_notifier.dart';
 
-class ChatViewModel extends ChangeNotifier {
+class ChatViewModel extends ChangeNotifier with SafeNotifier {
   ChatViewModel({
     required this.dormitoryId,
     required this.ownerId,

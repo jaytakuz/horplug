@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_chat_view_model.dart';
+import '../../viewmodels/tenant_dashboard_view_model.dart' show billStatusLabel;
 import '../../widgets/chat_conversation_view.dart';
 import '../../widgets/payment_sheet.dart';
 
@@ -74,6 +75,21 @@ class _TenantChatView extends StatelessWidget {
     TenantChatViewModel viewModel,
     Invoice invoice,
   ) async {
+    // เปิดแผ่นชำระเงินได้เฉพาะบิลที่ยังค้างชำระ ตามกฎเดียวกับที่ TenantBillCard
+    // ใช้อยู่ (ปุ่ม "ชำระเงิน" โผล่เฉพาะ unpaid) — การ์ดในแชทเคยเปิดได้ทุกสถานะ
+    // ผู้เช่าจึงแนบสลิปทับบิลที่จ่ายไปแล้วหรือที่ถูกยกเลิกได้ ไฟล์อัปขึ้น
+    // storage สำเร็จก่อน แล้วค่อยโดน RPC ปฏิเสธทีหลัง
+    if (invoice.status != InvoiceStatus.unpaid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'บิล ${invoice.invoiceNo} · ${billStatusLabel(invoice.status)}',
+          ),
+        ),
+      );
+      return;
+    }
+
     await showPaymentSheet(
       context,
       bill: invoice,

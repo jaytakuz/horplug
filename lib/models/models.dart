@@ -274,6 +274,22 @@ class InvoiceDraft {
 
 enum UtilityType { electricity, water }
 
+/// หน่วยไฟที่ใช้จริงระหว่างสองครั้งที่จด รองรับมิเตอร์ 4 หลักที่หมุนกลับ
+/// 9999 → 0000
+///
+/// อยู่นอกคลาสเพราะ [ElectricityRecord] ไม่ใช่ที่เดียวที่ต้องใช้กฎนี้ —
+/// `previewDrafts` อ่านแถวมิเตอร์ดิบจากฐานข้อมูลแล้วประกอบร่างบิลเอง ตอนที่กฎ
+/// ยังอยู่ใน getter ของคลาส ที่นั่นเขียนเป็นการลบตรงๆ ทำให้บิลของงวดที่มิเตอร์
+/// หมุนกลับถูกตรึงด้วยหน่วยติดลบคู่กับค่าไฟที่ถูกต้อง
+double meterUnitsUsed({
+  required double previousReading,
+  double? currentReading,
+}) {
+  if (currentReading == null) return 0;
+  if (currentReading >= previousReading) return currentReading - previousReading;
+  return (10000 - previousReading) + currentReading;
+}
+
 class ElectricityRecord {
   final String? id;
   final int roomDbId;
@@ -305,11 +321,10 @@ class ElectricityRecord {
   bool get isOverflow => currentReading != null && currentReading! < previousReading;
 
   // Handles 4-digit meter overflow: (10000 - prev) + current
-  double get unitsUsed {
-    if (currentReading == null) return 0;
-    if (currentReading! >= previousReading) return currentReading! - previousReading;
-    return (10000 - previousReading) + currentReading!;
-  }
+  double get unitsUsed => meterUnitsUsed(
+        previousReading: previousReading,
+        currentReading: currentReading,
+      );
 
   double get amount => unitsUsed * unitRate;
 
@@ -463,23 +478,37 @@ class DormitoryInfo {
       (landlordEmail != null && landlordEmail!.trim().isNotEmpty);
 }
 
-/// ช่องทางรับชำระเงินของหอพัก
+/// ช่องทางรับเงินของหอหนึ่งแห่ง มาจากตาราง dormitory_payment_channels
 ///
-/// เฟสนี้ QR เป็นภาพนิ่งใน assets จึงไม่มีจำนวนเงินฝังอยู่ เมื่อเปลี่ยนไปใช้
-/// QR ที่สร้างสดพร้อมจำนวนเงิน ให้เปลี่ยนเฉพาะที่มาของ [qrAssetPath]
-/// ผู้เรียกทั้งหมดไม่ต้องแก้
+/// ไม่มีค่าตั้งต้น และไม่มีตัวอย่าง — ถ้าเจ้าของหอยังไม่ได้ตั้งค่า ผู้เรียกจะได้
+/// null แล้วแผ่นชำระเงินบอกผู้เช่าตามตรงว่ายังไม่มีข้อมูล การเดาเลขบัญชีให้
+/// อันตรายกว่าการไม่มีอะไรให้เลย
 class PaymentChannel {
-  final String bankName;
-  final String accountNo;
+  /// เลขพร้อมเพย์ 10 หรือ 13 หลัก · ใช้สร้าง QR ที่ฝังยอดของบิลไว้แล้ว
+  final String? promptPayId;
+
+  /// ช่องทางสำรองด้วยเลขบัญชี · หอที่ใช้พร้อมเพย์อย่างเดียวปล่อยว่างได้
+  final String? bankName;
+  final String? accountNo;
+
+  /// ผู้เช่าต้องเห็นชื่อปลายทางเพื่อเทียบก่อนกดโอน จึงมีเสมอ
   final String accountName;
-  final String qrAssetPath;
 
   const PaymentChannel({
-    required this.bankName,
-    required this.accountNo,
     required this.accountName,
-    required this.qrAssetPath,
+    this.promptPayId,
+    this.bankName,
+    this.accountNo,
   });
+
+  bool get hasPromptPay =>
+      promptPayId != null && promptPayId!.trim().isNotEmpty;
+
+  bool get hasBankAccount =>
+      bankName != null &&
+      bankName!.trim().isNotEmpty &&
+      accountNo != null &&
+      accountNo!.trim().isNotEmpty;
 }
 
 enum MaintenanceRequestType { repair, cleaning }

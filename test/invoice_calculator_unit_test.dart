@@ -216,4 +216,45 @@ void main() {
       expect(record.amount, 0);
     });
   });
+
+  // กฎวนรอบเคยอยู่แต่ใน getter ของ ElectricityRecord และกลุ่มเทสต์ข้างบนก็ผ่าน
+  // มาตลอด แต่ previewDrafts อ่านแถวมิเตอร์ดิบจากฐานข้อมูลแล้วเขียนการลบตรงๆ
+  // เอง บิลของงวดที่มิเตอร์วนรอบจึงถูกตรึงด้วยหน่วย -9858 คู่กับค่าไฟ ฿1,136
+  // ที่ถูกต้อง แล้วพิมพ์ลง PDF แบบนั้น — เทสต์ที่ผ่านอยู่ไม่ได้ครอบคลุมเส้นทาง
+  // ที่ออกบิลจริง กฎจึงถูกย้ายมาเป็นฟังก์ชันเดียวที่ทั้งสองทางเรียกใช้
+  group('meterUnitsUsed — กฎเดียวที่ทั้งหน้าจดมิเตอร์และการออกบิลใช้ร่วมกัน', () {
+    test('เดือนปกติ หักลบตรงๆ', () {
+      expect(meterUnitsUsed(previousReading: 1200, currentReading: 1342), 142);
+    });
+
+    test('วนรอบให้ผลบวกเสมอ ไม่ใช่ค่าติดลบขนาดมหาศาล', () {
+      expect(meterUnitsUsed(previousReading: 9950, currentReading: 92), 142);
+      expect(9950 - 92, isNot(142)); // สิ่งที่โค้ดเดิมในเส้นทางออกบิลคำนวณได้
+    });
+
+    test('ยังไม่จดเลขปัจจุบัน คิดเป็นศูนย์', () {
+      expect(meterUnitsUsed(previousReading: 1200), 0);
+    });
+
+    test('อ่านซ้ำเลขเดิม ได้ศูนย์หน่วย ไม่ใช่ค่าติดลบ', () {
+      expect(meterUnitsUsed(previousReading: 1342, currentReading: 1342), 0);
+    });
+
+    test('ElectricityRecord ใช้กฎเดียวกันนี้ ไม่ได้ถือสำเนาของตัวเอง', () {
+      final wrapped = ElectricityRecord(
+        roomDbId: 1,
+        roomNumber: '301',
+        billingMonth: 8,
+        billingYear: 2026,
+        previousReading: 9950,
+        currentReading: 92,
+        unitRate: 8,
+      );
+
+      expect(
+        wrapped.unitsUsed,
+        meterUnitsUsed(previousReading: 9950, currentReading: 92),
+      );
+    });
+  });
 }

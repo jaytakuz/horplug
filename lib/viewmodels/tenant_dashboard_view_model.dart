@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
@@ -9,6 +7,7 @@ import '../widgets/reusable_widgets.dart';
 import 'action_result.dart';
 import 'error_message.dart';
 import 'safe_notifier.dart';
+import 'tenant_slip_submission.dart';
 
 // ── Pure helpers ────────────────────────────────────────────────────────────
 // อยู่นอกคลาสเพราะ SupabaseService สร้าง client ตอน field initializer ทำให้
@@ -99,7 +98,8 @@ BadgeVariant billStatusVariant(InvoiceStatus status) {
 
 // ── ViewModel ───────────────────────────────────────────────────────────────
 
-class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
+class TenantDashboardViewModel extends ChangeNotifier
+    with SafeNotifier, TenantSlipSubmission {
   TenantDashboardViewModel({
     required this.roomId,
     this.dormitoryId,
@@ -134,7 +134,12 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
   String? chatErrorMessage;
 
   Invoice? currentBill;
-  PaymentChannel? paymentChannel;
+
+  @override
+  TenantBillingSource get billingSource => _billingSource;
+
+  @override
+  Future<void> reloadAfterSlip() => load();
 
   /// การใช้ไฟเดือนนี้เทียบเดือนก่อน — null เมื่อมีประวัติไม่ถึง 2 เดือน
   UtilityTrend? electricityTrend;
@@ -187,15 +192,7 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
         year: now.year,
       );
 
-      final dorm = dormitoryId;
-      if (dorm != null) {
-        try {
-          paymentChannel =
-              await _billingSource.fetchPaymentChannel(dormitoryId: dorm);
-        } catch (_) {
-          // ไม่ critical — แค่ไม่มีเลขพร้อมเพย์ให้แสดง
-        }
-      }
+      await loadPaymentChannel(dormitoryId);
     } catch (error) {
       billErrorMessage = formatErrorMessage(error);
     }
@@ -243,23 +240,6 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
       );
     } catch (error) {
       chatErrorMessage = formatErrorMessage(error);
-    }
-  }
-
-  Future<ActionResult> submitSlip({
-    required Invoice bill,
-    required File slip,
-  }) async {
-    try {
-      final result =
-          await _billingSource.submitPaymentSlip(bill: bill, slip: slip);
-      if (result.success) await load();
-      return result;
-    } catch (error) {
-      return ActionResult(
-        success: false,
-        message: 'ส่งสลิปไม่สำเร็จ: ${formatErrorMessage(error)}',
-      );
     }
   }
 

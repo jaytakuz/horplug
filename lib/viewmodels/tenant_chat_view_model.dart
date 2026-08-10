@@ -8,11 +8,12 @@ import '../models/models.dart';
 import '../services/invoice_service.dart';
 import '../services/supabase_service.dart';
 import '../services/tenant_billing_source.dart';
-import 'action_result.dart';
 import 'error_message.dart';
 import 'safe_notifier.dart';
+import 'tenant_slip_submission.dart';
 
-class TenantChatViewModel extends ChangeNotifier with SafeNotifier {
+class TenantChatViewModel extends ChangeNotifier
+    with SafeNotifier, TenantSlipSubmission {
   TenantChatViewModel({
     required this.roomId,
     required this.tenantId,
@@ -40,11 +41,16 @@ class TenantChatViewModel extends ChangeNotifier with SafeNotifier {
   bool isSending = false;
   bool isUploadingImage = false;
   bool isRequestingMaintenance = false;
-  bool isSubmittingSlip = false;
   String? errorMessage;
 
   Map<int, Invoice> invoicesById = {};
-  PaymentChannel? paymentChannel;
+
+  @override
+  TenantBillingSource get billingSource => _billingSource;
+
+  /// รีเฟรชบิลของห้องหลังส่งสลิป เพื่อให้ป้ายสถานะบนการ์ดในแชทเปลี่ยนทันที
+  @override
+  Future<void> reloadAfterSlip() => _loadInvoices();
 
   /// error จากการ "ส่ง" (ต่างจาก errorMessage ที่เป็น error ของการโหลดแชท)
   /// View อ่านค่านี้ไปขึ้น SnackBar แล้วเรียก clearSendError()
@@ -88,37 +94,8 @@ class TenantChatViewModel extends ChangeNotifier with SafeNotifier {
   }
 
   Future<void> _loadPaymentChannel() async {
-    final dorm = dormitoryId;
-    if (dorm == null) return;
-    try {
-      paymentChannel = await _billingSource.fetchPaymentChannel(dormitoryId: dorm);
-      notifyListeners();
-    } catch (_) {
-      // ช่องทางชำระเงินไม่ critical — แผ่นชำระเงินแสดงได้แม้ไม่มี QR
-    }
-  }
-
-  /// ส่งสลิปจากการ์ดบิลในแชท แล้วรีเฟรชสถานะบิลของห้องให้สด
-  Future<ActionResult> submitSlip({
-    required Invoice bill,
-    required File slip,
-  }) async {
-    isSubmittingSlip = true;
+    await loadPaymentChannel(dormitoryId);
     notifyListeners();
-
-    try {
-      final result = await _billingSource.submitPaymentSlip(bill: bill, slip: slip);
-      if (result.success) await _loadInvoices();
-      return result;
-    } catch (error) {
-      return ActionResult(
-        success: false,
-        message: 'ส่งสลิปไม่สำเร็จ: ${formatErrorMessage(error)}',
-      );
-    } finally {
-      isSubmittingSlip = false;
-      notifyListeners();
-    }
   }
 
   void _subscribeToMessages() {
