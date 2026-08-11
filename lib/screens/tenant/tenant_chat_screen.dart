@@ -75,11 +75,10 @@ class _TenantChatView extends StatelessWidget {
     TenantChatViewModel viewModel,
     Invoice invoice,
   ) async {
-    // เปิดแผ่นชำระเงินได้เฉพาะบิลที่ยังค้างชำระ ตามกฎเดียวกับที่ TenantBillCard
-    // ใช้อยู่ (ปุ่ม "ชำระเงิน" โผล่เฉพาะ unpaid) — การ์ดในแชทเคยเปิดได้ทุกสถานะ
-    // ผู้เช่าจึงแนบสลิปทับบิลที่จ่ายไปแล้วหรือที่ถูกยกเลิกได้ ไฟล์อัปขึ้น
-    // storage สำเร็จก่อน แล้วค่อยโดน RPC ปฏิเสธทีหลัง
-    if (invoice.status != InvoiceStatus.unpaid) {
+    // showPaymentSheet ปฏิเสธบิลที่ไม่ใช่ unpaid อยู่แล้ว แต่ถามผ่าน
+    // canOpenPaymentSheet ก่อนเพื่อบอกผู้เช่าว่าทำไมถึงกดแล้วไม่มีอะไรขึ้น —
+    // การเงียบไปเฉยๆ ทำให้ดูเหมือนแอปค้าง
+    if (!canOpenPaymentSheet(invoice)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

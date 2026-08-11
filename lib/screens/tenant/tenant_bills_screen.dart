@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
+import '../../services/invoice_pdf.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_view_model.dart';
+import '../../viewmodels/error_message.dart';
 import '../../viewmodels/tenant_bills_view_model.dart';
 import '../../widgets/payment_sheet.dart';
 import '../../widgets/reusable_widgets.dart';
@@ -42,6 +44,27 @@ class _TenantBillsView extends StatelessWidget {
       channel: viewModel.paymentChannel,
       onSubmit: (slip) => viewModel.submitSlip(bill: bill, slip: slip),
     );
+  }
+
+  Future<void> _handleSavePdf(
+    BuildContext context,
+    TenantBillsViewModel viewModel,
+    Invoice bill,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final dormitoryName = AuthScope.of(context).dormitoryName ?? 'หอพัก';
+
+    try {
+      await shareInvoicePdf(
+        invoice: bill,
+        dormitoryName: dormitoryName,
+        channel: viewModel.paymentChannel,
+      );
+    } catch (error) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('สร้างไฟล์ PDF ไม่สำเร็จ: ${formatErrorMessage(error)}'),
+      ));
+    }
   }
 
   @override
@@ -166,6 +189,7 @@ class _TenantBillsView extends StatelessWidget {
         TenantBillCard(
           bill: bill,
           onPay: () => _handlePay(context, viewModel, bill),
+          onSavePdf: () => _handleSavePdf(context, viewModel, bill),
         ),
         const SizedBox(height: 12),
       ],

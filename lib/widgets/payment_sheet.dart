@@ -16,16 +16,35 @@ import 'promptpay_qr.dart';
 import 'reusable_widgets.dart';
 import '../utils/formatters.dart';
 
+/// true เมื่อบิลใบนี้เปิดแผ่นชำระเงินได้ — เฉพาะบิลที่ยังค้างชำระเท่านั้น
+///
+/// เงื่อนไขนี้เคยกระจายอยู่ที่ผู้เรียกทั้งสามที่: [TenantBillCard] แสดงปุ่ม
+/// "ชำระเงิน" เฉพาะ unpaid · การ์ดบิลในแชทเช็คก่อนเปิด · แดชบอร์ดเหมือนกัน
+/// แปลว่าผู้เรียกรายที่สี่ที่ลืมเช็คจะพาผู้เช่าไปแนบสลิปทับบิลที่จ่ายไปแล้ว
+/// (อัปโหลดสำเร็จก่อน แล้วค่อยโดน RPC ปฏิเสธ) หรือเห็นคิวอาร์ที่สแกนจ่ายซ้ำได้
+///
+/// เป็นกฎของแผ่นนี้ ไม่ใช่กฎของหน้าจอที่บังเอิญเปิดมัน จึงย้ายมาอยู่ที่นี่
+bool canOpenPaymentSheet(Invoice bill) =>
+    bill.status == InvoiceStatus.unpaid;
+
 /// เปิดแผ่นชำระเงินสำหรับบิลหนึ่งใบ
 ///
-/// เรียกได้ทั้งจากการ์ดยอดค้างบนแดชบอร์ด (ชำระได้ในแตะเดียว) และจากแท็บบิล
-/// คืน true เมื่อส่งสลิปสำเร็จ เพื่อให้หน้าที่เรียกรีเฟรชตัวเอง
+/// เรียกได้ทั้งจากการ์ดยอดค้างบนแดชบอร์ด (ชำระได้ในแตะเดียว) จากแท็บบิล และจาก
+/// การ์ดบิลในแชท คืน true เมื่อส่งสลิปสำเร็จ เพื่อให้หน้าที่เรียกรีเฟรชตัวเอง
+///
+/// **เปิดได้เฉพาะบิลที่ยังค้างชำระ** — ดู [canOpenPaymentSheet]
 Future<bool> showPaymentSheet(
   BuildContext context, {
   required Invoice bill,
   required PaymentChannel? channel,
   required Future<ActionResult> Function(File slip) onSubmit,
 }) async {
+  if (!canOpenPaymentSheet(bill)) {
+    debugPrint('showPaymentSheet ถูกเรียกด้วยบิลสถานะ ${bill.status.name} — '
+        'ผู้เรียกต้องกรองก่อน แผ่นจะไม่ถูกเปิด');
+    return false;
+  }
+
   final result = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,

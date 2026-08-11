@@ -13,10 +13,19 @@ class TenantBillCard extends StatelessWidget {
     super.key,
     required this.bill,
     this.onPay,
+    this.onSavePdf,
   });
 
   final Invoice bill;
   final VoidCallback? onPay;
+
+  /// บันทึกบิลใบนี้เป็น PDF
+  ///
+  /// อยู่บนการ์ดไม่ใช่ในแผ่นชำระเงิน เพราะแผ่นนั้นเปิดได้เฉพาะบิลที่ยังค้างชำระ
+  /// ผู้เช่าจึงเคยบันทึกได้แต่บิลที่ยังไม่จ่าย ส่วนใบที่จ่ายแล้ว — ซึ่งเป็นใบที่
+  /// ต้องเก็บไว้เป็นหลักฐานจริงๆ และเป็นเหตุผลที่เอกสารมีลายน้ำ "ชำระแล้ว" —
+  /// ไม่มีทางเข้าถึงเลยสักทาง
+  final VoidCallback? onSavePdf;
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +90,32 @@ class TenantBillCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              _buildAction(context),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildAction(context),
+                  // ทุกสถานะบันทึก PDF ได้ เพราะเอกสารไม่แตะสถานะบิลเลย และ
+                  // คิวอาร์ในไฟล์ถูกกันไว้แล้วให้ขึ้นเฉพาะบิลค้างชำระ
+                  // (ดู invoiceQrPayload) ใบที่จ่ายแล้วจึงเป็นใบเสร็จ ไม่ใช่
+                  // ช่องทางจ่ายซ้ำ
+                  if (onSavePdf != null) ...[
+                    const SizedBox(height: 4),
+                    TextButton.icon(
+                      onPressed: onSavePdf,
+                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                      label: const Text('บันทึก PDF'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.mutedForeground,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
           // ผู้เช่าต้องอ่านเหตุผลที่สลิปถูกปฏิเสธก่อนจ่ายรอบสอง
