@@ -67,3 +67,25 @@ String formatUnits(double units) {
 /// เลขมิเตอร์ดิบ (ไม่ใช่ปริมาณการใช้) — ใส่ตัวคั่นหลักพัน ไม่มีทศนิยม
 String formatMeterReading(double reading) =>
     groupThousands(reading.round().toString());
+
+/// เวลาแบบ "นานแค่ไหนมาแล้ว" สำหรับรายการห้องที่เรียงตามเวลาล่าสุด
+///
+/// เกินเจ็ดวันเปลี่ยนไปบอกวันที่ เพราะ "23 วันที่แล้ว" ต้องนั่งคำนวณต่อในหัว
+/// กว่าจะรู้ว่าคือเมื่อไหร่ ขณะที่ช่วงไม่กี่วันแรกคนอ่านต้องการรู้ว่า "เพิ่ง"
+/// หรือ "นานแล้ว" มากกว่าวันที่จริง
+///
+/// [now] มีไว้ให้เทสต์กำหนดเวลาอ้างอิงได้ · ค่าเริ่มต้นคือเวลาปัจจุบัน
+///
+/// ใช้ร่วมกันระหว่างหน้ารวมแชทกับหน้ารวมประวัติแจ้งซ่อม — สองรายการที่หน้าตา
+/// เหมือนกันแต่ถือนาฬิกาคนละเรือนคือจุดที่ค่อยๆ เพี้ยนออกจากกันโดยไม่มีใคร
+/// สังเกตจนกว่าจะมีคนวางสองหน้าจอไว้ข้างกัน
+String formatRelativeTime(DateTime timestamp, {DateTime? now}) {
+  final local = timestamp.toLocal();
+  final difference = (now ?? DateTime.now()).difference(local);
+
+  if (difference.inMinutes < 1) return 'เมื่อสักครู่';
+  if (difference.inMinutes < 60) return '${difference.inMinutes} นาทีที่แล้ว';
+  if (difference.inHours < 24) return '${difference.inHours} ชม.ที่แล้ว';
+  if (difference.inDays < 7) return '${difference.inDays} วันที่แล้ว';
+  return '${local.day}/${local.month}/${local.year}';
+}

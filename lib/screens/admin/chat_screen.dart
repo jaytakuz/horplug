@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
+import '../../utils/formatters.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../viewmodels/auth_view_model.dart';
@@ -38,16 +39,6 @@ class _ChatView extends StatefulWidget {
 
 class _ChatViewState extends State<_ChatView> {
   final TextEditingController _searchController = TextEditingController();
-
-  String _formatMessageTime(DateTime timestamp) {
-    final local = timestamp.toLocal();
-    final difference = DateTime.now().difference(local);
-    if (difference.inMinutes < 1) return 'เมื่อสักครู่';
-    if (difference.inMinutes < 60) return '${difference.inMinutes} นาทีที่แล้ว';
-    if (difference.inHours < 24) return '${difference.inHours} ชม.ที่แล้ว';
-    if (difference.inDays < 7) return '${difference.inDays} วันที่แล้ว';
-    return '${local.day}/${local.month}/${local.year}';
-  }
 
   @override
   void dispose() {
@@ -207,7 +198,7 @@ class _ChatViewState extends State<_ChatView> {
                                     const SizedBox(height: 4),
                                   if (chat.lastMessageAt != null)
                                     Text(
-                                      _formatMessageTime(chat.lastMessageAt!),
+                                      formatRelativeTime(chat.lastMessageAt!),
                                       style: Theme.of(context)
                                           .textTheme
                                           .labelSmall

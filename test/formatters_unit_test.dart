@@ -76,5 +76,40 @@ void main() {
         expect(groupThousands('-12345'), '-12,345');
       });
     });
+
+    // ใช้ร่วมกันระหว่างหน้ารวมแชทกับหน้ารวมประวัติแจ้งซ่อม — เดิมเป็นเมธอด
+    // private ในหน้าแชท จึงไม่เคยถูกทดสอบเลยแม้แต่ขอบของแต่ละช่วง
+    group('formatRelativeTime', () {
+      final now = DateTime(2026, 8, 12, 18, 0);
+
+      String at(Duration ago) =>
+          formatRelativeTime(now.subtract(ago), now: now);
+
+      test('ต่ำกว่าหนึ่งนาทีคือเมื่อสักครู่', () {
+        expect(at(const Duration(seconds: 0)), 'เมื่อสักครู่');
+        expect(at(const Duration(seconds: 59)), 'เมื่อสักครู่');
+      });
+
+      test('เป็นนาทีจนถึงก่อนครบชั่วโมง', () {
+        expect(at(const Duration(minutes: 1)), '1 นาทีที่แล้ว');
+        expect(at(const Duration(minutes: 59)), '59 นาทีที่แล้ว');
+      });
+
+      test('เป็นชั่วโมงจนถึงก่อนครบวัน', () {
+        expect(at(const Duration(hours: 1)), '1 ชม.ที่แล้ว');
+        expect(at(const Duration(hours: 23)), '23 ชม.ที่แล้ว');
+      });
+
+      test('เป็นวันจนถึงก่อนครบเจ็ดวัน', () {
+        expect(at(const Duration(days: 1)), '1 วันที่แล้ว');
+        expect(at(const Duration(days: 6)), '6 วันที่แล้ว');
+      });
+
+      // "23 วันที่แล้ว" ต้องนั่งคำนวณต่อในหัวกว่าจะรู้ว่าคือวันไหน
+      test('ตั้งแต่เจ็ดวันขึ้นไปบอกเป็นวันที่', () {
+        expect(at(const Duration(days: 7)), '5/8/2026');
+        expect(at(const Duration(days: 40)), '3/7/2026');
+      });
+    });
   });
 }
