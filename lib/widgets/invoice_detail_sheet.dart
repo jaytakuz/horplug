@@ -63,17 +63,27 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
 
   /// ส่งการ์ดบิลใบนี้เข้าแชทห้องอีกครั้ง
   ///
-  /// ไม่ปิดแผ่นหลังส่ง เพราะสถานะบิลไม่ได้เปลี่ยน — เจ้าของหอที่กดทวงแล้วอาจ
-  /// อยากยกเลิกบิลต่อในจังหวะเดียวกัน การเด้งออกไปทำให้ต้องเปิดกลับเข้ามาใหม่
+  /// ปิดแผ่นเมื่อส่งสำเร็จ — การกดแล้วแผ่นค้างอยู่ที่เดิมอ่านเหมือนยังไม่มีอะไร
+  /// เกิดขึ้น เจ้าของหอต้องมองหา SnackBar ที่โผล่ใต้แผ่นเพื่อจะรู้ว่าสำเร็จ
+  ///
+  /// คืน false เพราะสถานะบิลไม่ได้เปลี่ยน หน้าที่เรียกจึงไม่ต้องรีโหลดรายการ
+  /// ส่วนการ์ดใบใหม่ในห้องแชทมาถึงเองผ่าน stream ของข้อความอยู่แล้ว
+  ///
+  /// ส่งไม่สำเร็จให้แผ่นค้างไว้ ปุ่มยังอยู่ที่เดิมให้กดซ้ำได้ทันที
   Future<void> _sendCardToChat() async {
     final actions = context.read<InvoiceActionsViewModel>();
     if (actions.isBusy) return;
 
+    // จับ messenger ไว้ก่อนปิดแผ่น — ScaffoldMessenger.of(context) หลัง pop
+    // จะอ้าง context ที่ถูกถอดออกจาก tree ไปแล้ว
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
     final result = await actions.sendCardToChat();
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(result.message)));
+    if (result.success) navigator.pop(false);
+    messenger.showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   /// ยกเลิกบิล (บังคับเหตุผล) แล้วถามแยกต่างหากว่าจะออกใบแทนหรือไม่ — สอง
