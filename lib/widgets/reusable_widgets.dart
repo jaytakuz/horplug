@@ -200,59 +200,102 @@ class StatCard extends StatelessWidget {
   }
 }
 
-class MobileHeader extends StatelessWidget implements PreferredSizeWidget {
-  final String subtitle;
-  final List<Widget>? actions;
+/// โลโก้แอปสำหรับใช้ใน UI
+///
+/// อ่านจากไฟล์ย่อ ไม่ใช่ไอคอนต้นฉบับขนาด 4000×4000 ซึ่งหนัก 13MB — Flutter
+/// decode bitmap เต็มขนาดเข้าหน่วยความจำก่อนย่อลงมาวาด คิดเป็นราว 64MB RAM
+/// เพื่อแสดงผลสามสิบพิกเซล · [cacheWidth] กำกับซ้ำอีกชั้นให้ decode เท่าที่ใช้จริง
+class AppLogo extends StatelessWidget {
+  const AppLogo({super.key, this.size = 32});
 
-  const MobileHeader({super.key, required this.subtitle, this.actions});
+  final double size;
 
   @override
   Widget build(BuildContext context) {
+    final pixels = (size * MediaQuery.devicePixelRatioOf(context)).round();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.24),
+      child: Image.asset(
+        'lib/assets/horplug_logo.png',
+        width: size,
+        height: size,
+        cacheWidth: pixels,
+        cacheHeight: pixels,
+        // โลโก้หายไม่ใช่เหตุให้ทั้งหน้าพัง — แสดงตัวแทนที่ยังบอกได้ว่าคือแอปอะไร
+        errorBuilder: (_, __, ___) => Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(size * 0.24),
+          ),
+          child: Icon(Icons.home_rounded,
+              size: size * 0.6, color: AppColors.background),
+        ),
+      ),
+    );
+  }
+}
+
+/// แถบหัวของทุกหน้าในแอป
+///
+/// แสดงโลโก้ ชื่อแอป และชื่อหอ — สามอย่างที่ตอบว่า "นี่คือแอปอะไร ของหอไหน"
+///
+/// เดิม [subtitle] เป็น "ชื่อหอ • ชื่อหน้า" ซึ่งส่วนหลังบอกซ้ำกับแท็บที่ถูก
+/// ไฮไลต์อยู่ด้านล่างจออยู่แล้ว หัวข้อของหน้าก็มักปรากฏเป็นหัวเรื่องใหญ่ในตัว
+/// เนื้อหาอีกที ชื่อหน้าจึงถูกพูดถึงสามที่พร้อมกัน ตอนนี้เหลือชื่อหอที่เดียว
+class MobileHeader extends StatelessWidget implements PreferredSizeWidget {
+  /// ชื่อหอพัก · null เมื่อยังไม่รู้ (เช่นผู้เช่าที่ยังไม่ได้เข้าหอ)
+  final String? dormitoryName;
+  final List<Widget>? actions;
+
+  const MobileHeader({super.key, this.dormitoryName, this.actions});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = dormitoryName?.trim();
+
     return AppBar(
       backgroundColor: AppColors.background,
       elevation: 0,
       scrolledUnderElevation: 0,
       titleSpacing: 16,
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            "HorPlug",
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.primary,
-                  letterSpacing: -0.5,
+          const AppLogo(size: 32),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'HorPlug',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.primary,
+                        letterSpacing: -0.5,
+                      ),
                 ),
-          ),
-          Text(
-            subtitle,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.mutedForeground,
-                ),
+                if (name != null && name.isNotEmpty)
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppColors.mutedForeground,
+                        ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
-      actions: actions ??
-          [
-            Stack(
-              alignment: Alignment.topRight,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.notifications_none, color: AppColors.primary),
-                  onPressed: () {},
-                ),
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(color: AppColors.destructive, shape: BoxShape.circle),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 8),
-          ],
+      // ค่าเริ่มต้นคือไม่มีปุ่มอะไรเลย · ของเดิมเป็นกระดิ่งแจ้งเตือนที่ onPressed
+      // ว่างเปล่า พร้อมจุดแดงที่ติดค้างตลอดเวลา — บอกผู้ใช้ว่ามีอะไรรออยู่ทั้งที่
+      // กดแล้วไม่มีอะไรเกิดขึ้นสักครั้ง
+      actions: actions,
     );
   }
 

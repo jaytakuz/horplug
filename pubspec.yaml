@@ -36,6 +36,9 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    # โลโก้ย่อสำหรับใช้ใน UI · ไอคอนต้นฉบับ 4000×4000 ไม่ได้ประกาศไว้เพราะ
+    # หนัก 13MB และใช้เป็น app icon ผ่านระบบของแต่ละแพลตฟอร์มอยู่แล้ว
+    - lib/assets/horplug_logo.png
     # ประกาศเป็น asset ไม่ใช่ fonts: เพราะแพ็กเกจ pdf โหลดฟอนต์ผ่าน rootBundle
     # เอง ไม่ได้ใช้ระบบฟอนต์ของ Flutter
     - lib/assets/fonts/Sarabun-Regular.ttf

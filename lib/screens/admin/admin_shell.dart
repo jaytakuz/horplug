@@ -82,15 +82,6 @@ class _AdminShellView extends StatelessWidget {
     viewModel.refreshUnreadCount();
   }
 
-  String _getHeaderSubtitle(String location) {
-    if (location.endsWith('/rooms')) return 'ห้องพัก';
-    if (location.endsWith('/meter')) return 'บันทึกมิเตอร์';
-    if (location.endsWith('/billing')) return 'จัดการบิล';
-    if (location.endsWith('/chat')) return 'แชท';
-    if (location.endsWith('/lease')) return 'สัญญาเช่า';
-    return 'หน้าหลัก';
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = AuthScope.of(context);
@@ -102,13 +93,9 @@ class _AdminShellView extends StatelessWidget {
     final activeIndex = desiredIndex.clamp(0, pages.length - 1);
     final bottomNavIndex = activeIndex <= 4 ? activeIndex : 0;
 
-    final dormName = auth.dormitoryName;
-    final sectionTitle = _getHeaderSubtitle(location);
-    final headerSubtitle = dormName != null ? '$dormName • $sectionTitle' : sectionTitle;
-
     return Scaffold(
       appBar: MobileHeader(
-        subtitle: headerSubtitle,
+        dormitoryName: auth.dormitoryName,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.primary),

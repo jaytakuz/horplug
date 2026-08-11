@@ -167,7 +167,9 @@ class _DashboardView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            Text('เมนูด่วน', style: Theme.of(context).textTheme.titleMedium),
+            // ใช้คำเดียวกับฝั่งผู้เช่า — สองฝั่งเรียกของอย่างเดียวกันคนละชื่อ
+            // ("เมนูด่วน" กับ "ทางลัด") ทำให้ดูเหมือนคนละฟีเจอร์ทั้งที่เหมือนกัน
+            Text('ทางลัด', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             GridView.count(
               shrinkWrap: true,

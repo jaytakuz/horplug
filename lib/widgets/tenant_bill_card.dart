@@ -70,58 +70,36 @@ class TenantBillCard extends StatelessWidget {
           if (bill.cleaningFee > 0)
             _LineItem(label: '🧹 ค่าทำความสะอาด', amount: bill.cleaningFee),
           const Divider(height: 24),
+          // ข้อมูลทั้งหมดก่อน แล้วปุ่มไว้ท้ายสุด — เดิมปุ่มอยู่ระหว่างยอดรวมกับ
+          // วันครบกำหนด ผู้เช่าจึงเจอปุ่มให้กดก่อนจะอ่านครบว่าต้องจ่ายเมื่อไหร่
+          // และเหตุผลที่สลิปรอบก่อนถูกปฏิเสธ
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              Text('ยอดรวมสุทธิ',
+                  style: Theme.of(context).textTheme.labelSmall),
               Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('ยอดรวมสุทธิ',
-                        style: Theme.of(context).textTheme.labelSmall),
-                    const SizedBox(height: 2),
-                    Text(
-                      formatBaht(bill.total),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontSize: 20),
-                    ),
-                  ],
+                child: Text(
+                  formatBaht(bill.total),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontSize: 20),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildAction(context),
-                  // ทุกสถานะบันทึก PDF ได้ เพราะเอกสารไม่แตะสถานะบิลเลย และ
-                  // คิวอาร์ในไฟล์ถูกกันไว้แล้วให้ขึ้นเฉพาะบิลค้างชำระ
-                  // (ดู invoiceQrPayload) ใบที่จ่ายแล้วจึงเป็นใบเสร็จ ไม่ใช่
-                  // ช่องทางจ่ายซ้ำ
-                  if (onSavePdf != null) ...[
-                    const SizedBox(height: 4),
-                    TextButton.icon(
-                      onPressed: onSavePdf,
-                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                      label: const Text('บันทึก PDF'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.mutedForeground,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        minimumSize: const Size(0, 32),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        textStyle: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ],
               ),
             ],
           ),
+          if (bill.status == InvoiceStatus.unpaid) ...[
+            const SizedBox(height: 4),
+            Text(
+              'ครบกำหนด ${bill.dueDate.day} ${thaiMonthName(bill.dueDate.month)} ${bill.dueDate.year}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
           // ผู้เช่าต้องอ่านเหตุผลที่สลิปถูกปฏิเสธก่อนจ่ายรอบสอง
           if (bill.rejectionReason != null &&
               bill.status == InvoiceStatus.unpaid) ...[
@@ -142,13 +120,30 @@ class TenantBillCard extends StatelessWidget {
               ),
             ),
           ],
-          if (bill.status == InvoiceStatus.unpaid) ...[
-            const SizedBox(height: 8),
-            Text(
-              'ครบกำหนด ${bill.dueDate.day} ${thaiMonthName(bill.dueDate.month)} ${bill.dueDate.year}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(child: _buildAction(context)),
+              // ทุกสถานะบันทึก PDF ได้ เพราะเอกสารไม่แตะสถานะบิลเลย และคิวอาร์
+              // ในไฟล์ถูกกันไว้แล้วให้ขึ้นเฉพาะบิลค้างชำระ (ดู invoiceQrPayload)
+              // ใบที่จ่ายแล้วจึงเป็นใบเสร็จ ไม่ใช่ช่องทางจ่ายซ้ำ
+              if (onSavePdf != null)
+                TextButton.icon(
+                  onPressed: onSavePdf,
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                  label: const Text('บันทึก PDF'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.mutedForeground,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );

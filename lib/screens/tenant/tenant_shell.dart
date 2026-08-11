@@ -53,14 +53,6 @@ class _TenantShellViewState extends State<_TenantShellView> {
     '/tenant/profile',
   ];
 
-  static const _sectionTitles = [
-    'หน้าหลัก',
-    'บิล',
-    'แจ้งซ่อม',
-    'แชท',
-    'โปรไฟล์',
-  ];
-
   static const _chatIndex = 3;
 
   int _calculateSelectedIndex(String location) {
@@ -117,17 +109,11 @@ class _TenantShellViewState extends State<_TenantShellView> {
 
     _syncUnreadForIndex(activeIndex);
 
-    final dormName = auth.dormitoryName;
-    final headerSubtitle = dormName != null
-        ? '$dormName • ${_sectionTitles[activeIndex]}'
-        : _sectionTitles[activeIndex];
-
     return Scaffold(
       appBar: MobileHeader(
-        subtitle: headerSubtitle,
+        dormitoryName: auth.dormitoryName,
         // ไม่ใส่ action ที่นี่ — ปุ่มออกจากระบบอยู่ในแท็บโปรไฟล์ เพื่อลด chrome
         // ที่ต้องแบกไปทุกหน้า
-        actions: const [SizedBox.shrink()],
       ),
       body: IndexedStack(
         index: activeIndex,

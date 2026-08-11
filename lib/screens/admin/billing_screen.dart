@@ -55,18 +55,6 @@ class _BillingView extends StatelessWidget {
                     style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
                 ],
               ),
-              // ตั้งค่าช่องทางรับเงินอยู่ตรงนี้เพราะเป็นเรื่องของบิลโดยตรง และ
-              // bottom navigation มีห้าแท็บอยู่แล้ว การเพิ่มแท็บที่หกเพื่อหน้า
-              // ที่เปิดปีละครั้งไม่คุ้มกับพื้นที่ที่กิน
-              IconButton(
-                icon: const Icon(Icons.qr_code_2, size: 22),
-                tooltip: 'ช่องทางชำระเงิน',
-                color: AppColors.mutedForeground,
-                onPressed: () => showPaymentChannelScreen(
-                  context,
-                  dormitoryId: viewModel.dormitoryId,
-                ),
-              ),
               PrimaryButton(
                 label: 'ออกบิลใหม่',
                 icon: Icons.add_chart,
@@ -84,6 +72,33 @@ class _BillingView extends StatelessWidget {
           ),
         ),
         _buildPeriodSelector(viewModel),
+        // ตั้งค่าช่องทางรับเงินอยู่หน้านี้เพราะเป็นเรื่องของบิลโดยตรง แต่เป็น
+        // งานที่ทำครั้งเดียวตอนเปิดหอ ไม่ใช่ทุกเดือนแบบการออกบิล จึงไม่ควรไป
+        // เบียดพื้นที่หัวหน้าจอกับปุ่มหลัก
+        //
+        // มีป้ายกำกับ ไม่ใช่ไอคอนคิวอาร์ลอยๆ แบบเดิม — ไอคอนเปล่าไม่ได้บอกใคร
+        // ว่ากดแล้วเกิดอะไร และ tooltip ไม่มีอยู่จริงบนจอสัมผัส
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: const Icon(Icons.qr_code_2, size: 18),
+              label: const Text('ตั้งค่าช่องทางรับเงิน'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.mutedForeground,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+              onPressed: () => showPaymentChannelScreen(
+                context,
+                dormitoryId: viewModel.dormitoryId,
+              ),
+            ),
+          ),
+        ),
         _buildFilters(viewModel),
         Expanded(
           child: viewModel.isLoading

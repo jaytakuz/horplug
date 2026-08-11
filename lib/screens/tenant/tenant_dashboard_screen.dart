@@ -175,15 +175,18 @@ class _TenantDashboardView extends StatelessWidget {
         _buildJoinRequestSection(context, viewModel),
         const SizedBox(height: 16),
       ],
+      // เรียงตามความถี่ที่ผู้เช่าต้องการ: ยอดที่ต้องจ่าย → ค่าน้ำค่าไฟงวดนี้ →
+      // ข้อความล่าสุด → ปุ่มที่กดบ่อย → ประวัติที่ย้อนดูเป็นครั้งคราว
+      // ประวัติแจ้งซ่อมลงล่างสุดเพราะเป็นสิ่งที่เปิดดูน้อยที่สุดในหน้านี้
       _BillHeroCard(viewModel: viewModel),
       const SizedBox(height: 16),
       _UsageSection(viewModel: viewModel),
       const SizedBox(height: 16),
-      _MaintenanceSummary(viewModel: viewModel),
-      const SizedBox(height: 16),
       _LatestMessageCard(viewModel: viewModel),
       const SizedBox(height: 16),
       _QuickActions(viewModel: viewModel),
+      const SizedBox(height: 16),
+      _MaintenanceSummary(viewModel: viewModel),
     ];
   }
 
@@ -488,9 +491,15 @@ class _UsageSection extends StatelessWidget {
                 value: hasRecord ? formatBaht(invoice.electricityCost) : '—',
                 // ตัวเลขมาจากบิลที่ออกแล้ว ไม่ใช่มิเตอร์สด — งวดที่จดมิเตอร์แล้ว
                 // แต่ยังไม่ออกบิลจึงยังว่างอยู่ ข้อความต้องไม่โทษการจดมิเตอร์
-                subtitle: hasRecord
-                    ? '${formatUnits(invoice.electricityUnits)} หน่วย'
-                    : 'รอเจ้าของหอออกบิล',
+                //
+                // "฿0 · 0 หน่วย" อ่านเหมือนระบบคำนวณพลาด ทั้งที่แปลว่าบิลงวดนี้
+                // ออกมาโดยไม่มีค่าไฟจริงๆ (ยังไม่ได้จดมิเตอร์ตอนออกบิล) บอกตรงๆ
+                // ดีกว่าปล่อยให้ผู้เช่าเดาว่าตัวเลขหายไปไหน
+                subtitle: !hasRecord
+                    ? 'รอเจ้าของหอออกบิล'
+                    : invoice.electricityUnits > 0
+                        ? '${formatUnits(invoice.electricityUnits)} หน่วย'
+                        : 'ไม่มีค่าไฟในบิลงวดนี้',
                 icon: Icons.bolt,
                 variant: BadgeVariant.warning,
               ),
@@ -597,7 +606,10 @@ class _MaintenanceSummary extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text('แจ้งซ่อม/ทำความสะอาด',
+                // ชื่อเดิม "แจ้งซ่อม/ทำความสะอาด" อ่านเหมือนปุ่มสำหรับแจ้งเรื่อง
+                // ใหม่ ทั้งที่การ์ดนี้แสดงของที่แจ้งไปแล้ว ส่วนการแจ้งจริงอยู่ที่
+                // ปุ่มทางลัดด้านบน
+                child: Text('ประวัติการแจ้งซ่อม/ทำความสะอาด',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium),
