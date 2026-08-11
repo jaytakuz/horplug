@@ -150,6 +150,11 @@ class _TenantChatView extends StatelessWidget {
                   invoicesById: viewModel.invoicesById,
                   onOpenInvoice: (invoice) =>
                       _handleOpenInvoice(context, viewModel, invoice),
+                  // ช่องทางชำระเงินถูกโหลดไว้แล้วตอนเปิดแชท (ผ่าน
+                  // TenantSlipSubmission) การ์ดบิลจึงมี QR ได้โดยไม่ต้องยิง
+                  // เครือข่ายเพิ่ม · null เมื่อหอยังไม่ได้ตั้งเลขพร้อมเพย์ ซึ่ง
+                  // การ์ดจัดการเองด้วยการไม่วาด QR
+                  promptPayId: viewModel.paymentChannel?.promptPayId,
                 );
 
     if (embedded) return body;

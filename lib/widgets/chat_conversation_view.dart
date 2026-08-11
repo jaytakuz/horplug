@@ -24,6 +24,7 @@ class ChatConversationView extends StatefulWidget {
     this.onUpdateMaintenanceStatus,
     this.invoicesById = const {},
     this.onOpenInvoice,
+    this.promptPayId,
   });
 
   final List<ChatMessage> messages;
@@ -66,6 +67,10 @@ class ChatConversationView extends StatefulWidget {
   /// เรียกเมื่อแตะการ์ดบิล — ฝั่งผู้เช่าเปิดแผ่นชำระเงิน ฝั่งเจ้าของหอเปิด
   /// รายละเอียดบิล (Task 7) ส่ง null เพื่อทำให้การ์ดบิลแตะไม่ได้
   final void Function(Invoice invoice)? onOpenInvoice;
+
+  /// ฝั่งผู้เช่า: เลขพร้อมเพย์ของหอ ทำให้การ์ดบิลที่ยังค้างชำระมี QR ระบุยอด
+  /// ให้สแกนจ่ายได้ในแชทเลย · ฝั่งเจ้าของหอไม่ส่งมา
+  final String? promptPayId;
 
   @override
   State<ChatConversationView> createState() => _ChatConversationViewState();
@@ -505,6 +510,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
         fallbackText: message.text,
         textColor: textColor,
         onOpen: widget.onOpenInvoice == null ? null : () {},
+        promptPayId: widget.promptPayId,
       );
     }
 
