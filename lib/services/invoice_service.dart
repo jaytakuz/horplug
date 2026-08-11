@@ -17,8 +17,7 @@ class InvoicePreview {
 
   const InvoicePreview({required this.drafts, required this.skipped});
 
-  double get total =>
-      drafts.fold<double>(0, (sum, draft) => sum + draft.total);
+  double get total => drafts.fold<double>(0, (sum, draft) => sum + draft.total);
 }
 
 /// ทุกอย่างที่คุยกับตาราง invoices และ bucket payment-slip
@@ -93,7 +92,8 @@ class InvoiceService {
     int monthCount = 6,
     bool includeVoided = false,
   }) async {
-    var query = _client.from('invoices').select(_columns).eq('room_id', roomDbId);
+    var query =
+        _client.from('invoices').select(_columns).eq('room_id', roomDbId);
     if (!includeVoided) {
       query = query.neq('status', InvoiceStatus.voided.name);
     }
@@ -125,6 +125,23 @@ class InvoiceService {
         .maybeSingle();
 
     return data == null ? null : _invoiceFromRow(data);
+  }
+
+  /// จำนวนบิลของหอที่ผู้เช่าแจ้งชำระมาแล้วและรอเจ้าของหอตรวจ
+  ///
+  /// นับทุกงวด ไม่ใช่เฉพาะงวดปัจจุบัน — สลิปของบิลเดือนที่แล้วที่ยังไม่มีใครกด
+  /// ตรวจคืองานที่ค้างอยู่จริงๆ และเป็นงานที่ลืมง่ายที่สุดเพราะไม่มีอะไรทวง
+  ///
+  /// error ถูกปล่อยขึ้นไป ผู้เรียกบนแดชบอร์ดเลือกเองว่าจะซ่อน badge เงียบๆ
+  /// ดีกว่าคืน 0 ที่นี่ ซึ่งอ่านไม่ออกว่าไม่มีงานค้างหรือนับไม่สำเร็จ
+  Future<int> countAwaitingReview({required int dormitoryId}) async {
+    final rows = await _client
+        .from('invoices')
+        .select('id')
+        .eq('dorm_id', dormitoryId)
+        .eq('status', InvoiceStatus.pending.name);
+
+    return (rows as List).length;
   }
 
   // ── ตรวจก่อนออกบิล ──────────────────────────────────────────────────────
@@ -262,7 +279,8 @@ class InvoiceService {
       };
     }).toList();
 
-    final inserted = await _client.from('invoices').insert(rows).select(_columns);
+    final inserted =
+        await _client.from('invoices').insert(rows).select(_columns);
     return (inserted as List)
         .cast<Map<String, dynamic>>()
         .map(_invoiceFromRow)
@@ -390,8 +408,8 @@ class InvoiceService {
     required int year,
   }) async {
     final periodStart = DateTime(year, month, 1);
-    final periodEnd = DateTime(month == 12 ? year + 1 : year,
-        month == 12 ? 1 : month + 1, 1);
+    final periodEnd =
+        DateTime(month == 12 ? year + 1 : year, month == 12 ? 1 : month + 1, 1);
 
     // .toUtc() ก่อนแปลงเป็นสตริงเสมอ — เหตุผลเดียวกับ paid_at ใน approveSlip
     // DateTime ที่ไม่ใช่ UTC ให้สตริงที่ไม่มี offset แล้ว Postgres ตีความเป็น
@@ -629,29 +647,33 @@ class InvoiceService {
     final revision = voided.revision + 1;
     final due = dueDateFor(draft.billingYear, draft.billingMonth);
 
-    final inserted = await _client.from('invoices').insert({
-      'invoice_no': invoiceNoFor(
-        year: draft.billingYear,
-        month: draft.billingMonth,
-        roomNumber: draft.roomNumber,
-        revision: revision,
-      ),
-      'dorm_id': dormitoryId,
-      'room_id': draft.roomDbId,
-      'tenant_id': draft.tenantId,
-      'billing_month': draft.billingMonth,
-      'billing_year': draft.billingYear,
-      'room_price': draft.roomPrice,
-      'electricity_units': draft.electricityUnits,
-      'electricity_cost': draft.electricityCost,
-      'water_cost': draft.waterCost,
-      'cleaning_fee': draft.cleaningFee,
-      'due_date':
-          '${due.year}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}',
-      'issued_by': issuedBy,
-      'revision': revision,
-      'replaces_invoice_id': voided.dbId,
-    }).select(_columns).single();
+    final inserted = await _client
+        .from('invoices')
+        .insert({
+          'invoice_no': invoiceNoFor(
+            year: draft.billingYear,
+            month: draft.billingMonth,
+            roomNumber: draft.roomNumber,
+            revision: revision,
+          ),
+          'dorm_id': dormitoryId,
+          'room_id': draft.roomDbId,
+          'tenant_id': draft.tenantId,
+          'billing_month': draft.billingMonth,
+          'billing_year': draft.billingYear,
+          'room_price': draft.roomPrice,
+          'electricity_units': draft.electricityUnits,
+          'electricity_cost': draft.electricityCost,
+          'water_cost': draft.waterCost,
+          'cleaning_fee': draft.cleaningFee,
+          'due_date':
+              '${due.year}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}',
+          'issued_by': issuedBy,
+          'revision': revision,
+          'replaces_invoice_id': voided.dbId,
+        })
+        .select(_columns)
+        .single();
 
     final invoice = _invoiceFromRow(inserted);
 
