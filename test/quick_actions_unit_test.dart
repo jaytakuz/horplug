@@ -4,19 +4,41 @@ import 'package:horplug/services/quick_action_store.dart';
 import 'package:horplug/viewmodels/quick_actions_view_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Future<QuickActionsViewModel> _viewModel({
+Future<QuickActionsViewModel<QuickAction>> _viewModel({
   Map<String, Object> initial = const {},
   String userId = 'tenant-1',
 }) async {
   SharedPreferences.setMockInitialValues(initial);
   final prefs = await SharedPreferences.getInstance();
-  final viewModel = QuickActionsViewModel(
+  final viewModel = QuickActionsViewModel<QuickAction>(
     userId: userId,
-    store: QuickActionStore(preferences: prefs),
+    store: _store(prefs),
   );
   await viewModel.load();
   return viewModel;
 }
+
+QuickActionStore<QuickAction> _store(SharedPreferences prefs) =>
+    QuickActionStore(catalog: tenantQuickActions, preferences: prefs);
+
+/// ทางลัดของอีกบทบาทหนึ่ง — ยืนแทน LandlordQuickAction เพื่อพิสูจน์ว่าโครงนี้
+/// รับบทบาทที่สองได้จริงโดยไม่ปนกับของผู้เช่า
+enum _OtherRoleAction implements QuickActionSpec {
+  alpha,
+  beta;
+
+  @override
+  String get label => 'ทางลัด $name';
+
+  @override
+  String get description => 'คำอธิบายของ $name';
+}
+
+const _otherRoleActions = QuickActionCatalog<_OtherRoleAction>(
+  storageKeyPrefix: 'other_role_quick_actions',
+  values: _OtherRoleAction.values,
+  defaults: [_OtherRoleAction.alpha],
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -81,14 +103,16 @@ void main() {
     test('ลำดับที่จัดไว้ถูกอ่านกลับมาได้', () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
-      final store = QuickActionStore(preferences: prefs);
+      final store = _store(prefs);
 
-      final first = QuickActionsViewModel(userId: 'tenant-1', store: store);
+      final first =
+          QuickActionsViewModel<QuickAction>(userId: 'tenant-1', store: store);
       await first.load();
       await first.reorder(0, 2);
       final expected = [...first.actions];
 
-      final reopened = QuickActionsViewModel(userId: 'tenant-1', store: store);
+      final reopened =
+          QuickActionsViewModel<QuickAction>(userId: 'tenant-1', store: store);
       await reopened.load();
 
       expect(reopened.actions, expected);
@@ -147,15 +171,17 @@ void main() {
         () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
-      final store = QuickActionStore(preferences: prefs);
+      final store = _store(prefs);
 
-      final first = QuickActionsViewModel(userId: 'tenant-1', store: store);
+      final first =
+          QuickActionsViewModel<QuickAction>(userId: 'tenant-1', store: store);
       await first.load();
       for (final action in [...first.actions]) {
         await first.remove(action);
       }
 
-      final reopened = QuickActionsViewModel(userId: 'tenant-1', store: store);
+      final reopened =
+          QuickActionsViewModel<QuickAction>(userId: 'tenant-1', store: store);
       await reopened.load();
 
       expect(reopened.actions, isEmpty);
@@ -183,8 +209,8 @@ void main() {
         ],
       });
 
-      expect(viewModel.actions,
-          [QuickAction.reportRepair, QuickAction.openChat]);
+      expect(
+          viewModel.actions, [QuickAction.reportRepair, QuickAction.openChat]);
     });
 
     test('รายการที่ถอดรหัสไม่ได้เลย ตกกลับไปใช้ค่าตั้งต้น', () async {
@@ -200,16 +226,77 @@ void main() {
     test('การตั้งค่าของแต่ละบัญชีแยกจากกัน', () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
-      final store = QuickActionStore(preferences: prefs);
+      final store = _store(prefs);
 
-      final first = QuickActionsViewModel(userId: 'tenant-1', store: store);
+      final first =
+          QuickActionsViewModel<QuickAction>(userId: 'tenant-1', store: store);
       await first.load();
       await first.remove(first.actions.first);
 
-      final second = QuickActionsViewModel(userId: 'tenant-2', store: store);
+      final second =
+          QuickActionsViewModel<QuickAction>(userId: 'tenant-2', store: store);
       await second.load();
 
       expect(second.actions, defaultQuickActions);
+    });
+  });
+
+  group('ทางลัดของคนละบทบาท', () {
+    // คีย์ของฝั่งผู้เช่ามีมาก่อนที่โครงนี้จะรับบทบาทที่สอง และถูกใช้อยู่บน
+    // เครื่องจริง การเปลี่ยนมันคือการล้างการจัดปุ่มของผู้เช่าทุกคนแบบเงียบๆ
+    test('คีย์ของผู้เช่ายังเป็น quick_actions.<userId> เหมือนเดิม', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      final viewModel = QuickActionsViewModel<QuickAction>(
+          userId: 'tenant-1', store: _store(prefs));
+      await viewModel.load();
+      await viewModel.remove(viewModel.actions.first);
+
+      expect(prefs.getStringList('quick_actions.tenant-1'), isNotNull);
+    });
+
+    test('บัญชีเดียวกันคนละบทบาท ไม่ใช้การจัดปุ่มร่วมกัน', () async {
+      // เจ้าของหอที่เคยล็อกอินเป็นผู้เช่าด้วย id เดียวกัน (เกิดได้ตอนสาธิต)
+      // ต้องไม่ได้ทางลัดของอีกฝั่งมาวางบนแดชบอร์ดตัวเอง
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      final tenant = QuickActionsViewModel<QuickAction>(
+          userId: 'same-id', store: _store(prefs));
+      await tenant.load();
+      for (final action in [...tenant.actions]) {
+        await tenant.remove(action);
+      }
+
+      final other = QuickActionsViewModel<_OtherRoleAction>(
+        userId: 'same-id',
+        store: QuickActionStore(
+          catalog: _otherRoleActions,
+          preferences: prefs,
+        ),
+      );
+      await other.load();
+
+      expect(tenant.actions, isEmpty);
+      expect(other.actions, _otherRoleActions.defaults);
+    });
+
+    test('อีกบทบาทได้ค่าตั้งต้นและรายการที่เลือกได้ของตัวเอง', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      final other = QuickActionsViewModel<_OtherRoleAction>(
+        userId: 'landlord-1',
+        store: QuickActionStore(
+          catalog: _otherRoleActions,
+          preferences: prefs,
+        ),
+      );
+      await other.load();
+
+      expect(other.actions, [_OtherRoleAction.alpha]);
+      expect(other.available, [_OtherRoleAction.beta]);
     });
   });
 }

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../models/quick_action.dart';
 import '../../services/invoice_pdf.dart';
+import '../../services/quick_action_store.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
@@ -44,8 +45,10 @@ class TenantDashboardScreen extends StatelessWidget {
         // แยก provider เพราะทางลัดอ่านจากดิสก์ ไม่ใช่เครือข่าย — การรีเฟรช
         // แดชบอร์ดจึงไม่ทำให้ปุ่มกระพริบ และการจัดปุ่มไม่ทำให้ต้องโหลดบิลใหม่
         ChangeNotifierProvider(
-          create: (_) =>
-              QuickActionsViewModel(userId: profile?.id ?? 'guest')..load(),
+          create: (_) => QuickActionsViewModel<QuickAction>(
+            userId: profile?.id ?? 'guest',
+            store: QuickActionStore(catalog: tenantQuickActions),
+          )..load(),
         ),
       ],
       child: const _TenantDashboardView(),
@@ -90,16 +93,16 @@ class _TenantDashboardView extends StatelessWidget {
       },
       child: LayoutBuilder(
         builder: (context, constraints) => ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: contentInsets(context, availableWidth: constraints.maxWidth),
-        children: [
-          _Greeting(profile: profile),
-          const SizedBox(height: 16),
-          if (profile?.roomId == null)
-            ..._buildNoRoomSections(context, viewModel)
-          else
-            ..._buildDashboardSections(context, viewModel),
-        ],
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: contentInsets(context, availableWidth: constraints.maxWidth),
+          children: [
+            _Greeting(profile: profile),
+            const SizedBox(height: 16),
+            if (profile?.roomId == null)
+              ..._buildNoRoomSections(context, viewModel)
+            else
+              ..._buildDashboardSections(context, viewModel),
+          ],
         ),
       ),
     );
@@ -872,7 +875,7 @@ class _QuickActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final unreadCount =
         context.watch<TenantShellViewModel>().unreadMessageCount;
-    final quickActions = context.watch<QuickActionsViewModel>();
+    final quickActions = context.watch<QuickActionsViewModel<QuickAction>>();
 
     if (quickActions.isLoading) return const SizedBox.shrink();
 

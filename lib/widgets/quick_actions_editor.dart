@@ -5,31 +5,36 @@ import '../models/quick_action.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/quick_actions_view_model.dart';
 
-/// เปิดแผ่นจัดการทางลัด
+/// เปิดแผ่นจัดการทางลัด — ใช้ได้ทั้งทางลัดของผู้เช่าและของเจ้าของหอ
 ///
 /// รับ ViewModel ตัวเดิมจากแดชบอร์ดผ่าน [ChangeNotifierProvider.value] แทนการ
 /// สร้างใหม่ การ์ดข้างหลังจึงขยับตามทันทีที่ลาก ไม่ต้องรอปิดแผ่นก่อน
-Future<void> showQuickActionsEditor(
+///
+/// ชนิดของทางลัดถูกส่งต่อลงไปถึง provider ด้วย ([QuickActionsViewModel] ของสอง
+/// บทบาทเป็นคนละชนิดกัน) การอ่านกลับด้วย `context.watch` จึงหยิบตัวที่ถูกเสมอ
+/// แม้จะมีทั้งสองอยู่ใน tree เดียวกัน
+Future<void> showQuickActionsEditor<T extends QuickActionSpec>(
   BuildContext context, {
-  required QuickActionsViewModel viewModel,
+  required QuickActionsViewModel<T> viewModel,
 }) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => ChangeNotifierProvider.value(
+    builder: (_) => ChangeNotifierProvider<QuickActionsViewModel<T>>.value(
       value: viewModel,
-      child: const _QuickActionsEditor(),
+      // const ไม่ได้ — ค่าคงที่ใช้ type parameter เป็น type argument ไม่ได้
+      child: _QuickActionsEditor<T>(),
     ),
   );
 }
 
-class _QuickActionsEditor extends StatelessWidget {
+class _QuickActionsEditor<T extends QuickActionSpec> extends StatelessWidget {
   const _QuickActionsEditor();
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = context.watch<QuickActionsViewModel>();
+    final viewModel = context.watch<QuickActionsViewModel<T>>();
 
     return SafeArea(
       child: Container(
@@ -90,14 +95,15 @@ class _QuickActionsEditor extends StatelessWidget {
                         child: Text(
                           'วางได้สูงสุด $maxQuickActions ปุ่ม '
                           'เอาบางปุ่มออกก่อนถึงจะเพิ่มได้',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppColors.warning,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppColors.warning,
+                                  ),
                         ),
                       ),
                     const SizedBox(height: 8),
                     ...viewModel.available.map(
-                      (action) => _AvailableRow(action: action),
+                      (action) => _AvailableRow<T>(action: action),
                     ),
                   ],
                 ],
@@ -111,7 +117,7 @@ class _QuickActionsEditor extends StatelessWidget {
 
   Widget _buildSelected(
     BuildContext context,
-    QuickActionsViewModel viewModel,
+    QuickActionsViewModel<T> viewModel,
   ) {
     if (viewModel.actions.isEmpty) {
       return Padding(
@@ -139,8 +145,8 @@ class _QuickActionsEditor extends StatelessWidget {
             // ทุกตัวใน ReorderableListView ต้องมี key ที่ต่างกันและคงที่
             key: ValueKey(action),
             contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.drag_handle,
-                color: AppColors.mutedForeground),
+            leading:
+                const Icon(Icons.drag_handle, color: AppColors.mutedForeground),
             title: Text(action.label),
             subtitle: Text(action.description,
                 style: Theme.of(context).textTheme.bodySmall),
@@ -156,14 +162,14 @@ class _QuickActionsEditor extends StatelessWidget {
   }
 }
 
-class _AvailableRow extends StatelessWidget {
+class _AvailableRow<T extends QuickActionSpec> extends StatelessWidget {
   const _AvailableRow({required this.action});
 
-  final QuickAction action;
+  final T action;
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = context.watch<QuickActionsViewModel>();
+    final viewModel = context.watch<QuickActionsViewModel<T>>();
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
