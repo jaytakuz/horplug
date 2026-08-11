@@ -33,10 +33,14 @@ Invoice _invoice({
 /// initializer การสร้าง InvoiceService ในเทสต์จะ assert ทันทีที่ Supabase ยัง
 /// ไม่ได้ initialize ซึ่งเป็นเหตุผลที่ชั้น service ไม่เคยถูกทดสอบมาก่อน
 class _FakeInvoiceService extends InvoiceService {
-  _FakeInvoiceService({this.error, this.reissued});
+  _FakeInvoiceService({this.error, this.reissued, this.cardError});
 
   /// error ที่จะโยนออกมาจากทุกเมธอด — null แปลว่าสำเร็จ
   final Object? error;
+
+  /// error เฉพาะของ [sendInvoiceCard] — แยกจาก [error] เพราะเคสจริงคือบิลออก
+  /// สำเร็จแต่การ์ดในแชทล้ม (ฐานข้อมูลยังไม่รู้จัก message_type 'invoice')
+  final Object? cardError;
 
   /// ผลของ reissueInvoice — null แปลว่าไม่มีร่างบิลให้ออกใบแทน
   final Invoice? reissued;
@@ -80,6 +84,7 @@ class _FakeInvoiceService extends InvoiceService {
   @override
   Future<void> sendInvoiceCard({required Invoice invoice}) async {
     calls.add('sendInvoiceCard:${invoice.invoiceNo}');
+    if (cardError != null) throw cardError!;
     if (error != null) throw error!;
   }
 }
@@ -122,7 +127,8 @@ void main() {
       expect(service.calls, ['voidInvoice:จดมิเตอร์ผิด']);
     });
 
-    test('ส่งบิลเข้าแชทเรียก sendInvoiceCard ไม่ใช่ postIssueNotices', () async {
+    test('ส่งบิลเข้าแชทเรียก sendInvoiceCard ไม่ใช่ postIssueNotices',
+        () async {
       // postIssueNotices ข้ามใบที่เคยแจ้งแล้ว การทวงจึงต้องไปทางอื่น ไม่งั้น
       // ปุ่มนี้จะกดแล้วไม่มีอะไรเกิดขึ้นกับบิลทุกใบที่ถูกแจ้งตอนออกไปแล้ว
       // ซึ่งก็คือบิลทุกใบที่มีอยู่
@@ -199,6 +205,35 @@ void main() {
       expect(result.message, contains('ยกเลิกบิล INV-202608-301 แล้ว'));
       expect(result.message, contains('ออกใบแทนไม่สำเร็จ'));
       expect(result.message, contains('ชนคีย์ซ้ำ'));
+    });
+
+    test('ใบแทนออกแล้ว ต้องส่งการ์ดเข้าแชทต่อเสมอ', () async {
+      final service = _FakeInvoiceService(
+        reissued: _invoice(invoiceNo: 'INV-202608-301-R2'),
+      );
+
+      await _viewModel(service).reissue();
+
+      expect(service.calls,
+          ['reissueInvoice', 'sendInvoiceCard:INV-202608-301-R2']);
+    });
+
+    // เคสจริงที่เจอบนฐานข้อมูลที่ยังไม่รู้จัก message_type 'invoice': ใบแทนออก
+    // สำเร็จ การ์ดในแชทตกด้วย 23514 แล้วเดิมถูกกลืนหายทั้งก้อน เจ้าของหอจึงเชื่อ
+    // ว่าผู้เช่าได้รับการ์ดแล้วทั้งที่ไม่มีอะไรถูกส่งเลย
+    test('การ์ดในแชทล้ม — ยังนับว่าออกใบแทนสำเร็จ แต่ต้องบอกว่าการ์ดไม่ได้ส่ง',
+        () async {
+      final service = _FakeInvoiceService(
+        reissued: _invoice(invoiceNo: 'INV-202608-301-R2'),
+        cardError: Exception('ส่งข้อความไม่ได้'),
+      );
+
+      final result = await _viewModel(service).reissue();
+
+      expect(result.success, isTrue);
+      expect(result.message, contains('INV-202608-301-R2'));
+      expect(result.message, contains('ส่งการ์ดเข้าแชทไม่สำเร็จ'));
+      expect(result.message, contains('ส่งบิลเข้าแชท'));
     });
   });
 }

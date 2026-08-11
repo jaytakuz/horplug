@@ -16,12 +16,28 @@
 | 3 | `invoices_schema.sql` | ตาราง `invoices` + index + trigger | 1 |
 | 4 | `invoices_rls.sql` | policy ของบิล + ฟังก์ชัน `submit_payment_slip` | 3 |
 | 5 | `invoices_backfill.sql` | ประวัติบิลย้อนหลังจากมิเตอร์ที่จดไว้ (ไม่บังคับ) | 4 |
-| 6 | `invoices_chat_message.sql` | `messages.invoice_id` สำหรับการ์ดบิลในแชท | 3 |
+| 6 | `invoices_chat_message.sql` | `messages.invoice_id` + ชนิดข้อความ `invoice` | 3 |
 | 7 | `payment_slip_bucket.sql` | policy ของบัคเก็ตสลิป | 3 · **สร้าง bucket ก่อน** |
 | 8 | `dormitory_payment_channel.sql` | ตารางช่องทางชำระเงินต่อหอ | 1 |
 | 9 | `invoices_cash_payment.sql` | คอลัมน์ `payment_method` + RPC แจ้ง/ยกเลิกการจ่ายเงินสด | 4 |
 
 ไฟล์ทุกไฟล์ **รันซ้ำได้** (`IF NOT EXISTS` / `DROP POLICY IF EXISTS`)
+
+### ฐานข้อมูลที่รันข้อ 6 ไปแล้วก่อน 12 ส.ค. 2026 ต้องรันซ้ำ
+
+เวอร์ชันแรกของ `invoices_chat_message.sql` เพิ่มแค่คอลัมน์ `invoice_id` แต่ไม่ได้เติม
+`'invoice'` ลงใน CHECK constraint ของ `messages.message_type` การ์ดบิลในแชทจึงตกด้วย
+`23514 messages_message_type_check` ทุกครั้ง — ทั้งตอนออกบิล ตอนออกใบแทน และตอนกด
+"ส่งบิลเข้าแชท" · รันไฟล์นี้ซ้ำเพื่อแก้ แล้วตรวจด้วย
+
+```sql
+SELECT pg_get_constraintdef(oid) FROM pg_constraint
+ WHERE conname = 'messages_message_type_check';
+```
+
+ต้องเห็น `'invoice'` อยู่ในรายการ · ถ้า `ADD CONSTRAINT` ล้ม แปลว่ามีแถวเก่าที่ใช้ชนิด
+นอกรายการ ดูด้วย `SELECT DISTINCT message_type FROM messages;` แล้วเติมค่านั้นเข้าไป
+ในไฟล์ก่อนรันใหม่
 
 ### ก่อนรันข้อ 7
 

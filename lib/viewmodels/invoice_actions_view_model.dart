@@ -65,7 +65,8 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
   /// ปฏิเสธการแจ้งจ่ายเงินสดที่ยังไม่ได้รับเงินจริง — ปลายทางเดียวกับ [reject]
   /// คือบิลกลับไปค้างชำระพร้อมเหตุผล ต่างที่ข้อความ เพราะไม่มีสลิปให้พูดถึง
   Future<ActionResult> rejectCash(String reason) => _run(
-        () => _service.rejectCashPayment(invoice: invoice, reason: reason.trim()),
+        () =>
+            _service.rejectCashPayment(invoice: invoice, reason: reason.trim()),
         onSuccess: 'แจ้งว่ายังไม่ได้รับเงินสดของบิล ${invoice.invoiceNo} แล้ว',
         onFailure: 'ปฏิเสธไม่สำเร็จ',
       );
@@ -107,7 +108,8 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
           ? ActionResult(
               success: true,
               message: 'ยกเลิกบิล ${invoice.invoiceNo} แล้ว '
-                  'ออกใบแทน ${reissued.invoiceNo} เรียบร้อย',
+                  'ออกใบแทน ${reissued.invoiceNo} เรียบร้อย'
+                  '${await _sendCardOrDescribeFailure(reissued)}',
             )
           : ActionResult(
               success: false,
@@ -123,6 +125,23 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
     } finally {
       isBusy = false;
       notifyListeners();
+    }
+  }
+
+  /// ส่งการ์ดของใบแทนเข้าแชท · คืนสตริงว่างเมื่อสำเร็จ
+  ///
+  /// ไม่โยน error ต่อ เพราะใบแทนเกิดขึ้นแล้วจริงและถอยกลับไม่ได้ — รายงานว่า
+  /// "ออกใบแทนไม่สำเร็จ" จะทำให้เจ้าของหอกดใหม่ แล้วรอบสองห้องนั้นมีบิลอยู่แล้ว
+  /// จึงไม่อยู่ในร่าง ได้ข้อความว่า "ยังไม่ได้จดมิเตอร์ หรือห้องไม่มีผู้เช่า"
+  /// ซึ่งไม่จริงสักข้อ · แต่การเงียบไปเฉยๆ ก็ไม่ได้เหมือนกัน เจ้าของหอจะเชื่อว่า
+  /// ผู้เช่าได้รับการ์ดแล้วทั้งที่ไม่มีอะไรถูกส่ง จึงต่อท้ายข้อความแทน
+  Future<String> _sendCardOrDescribeFailure(Invoice reissued) async {
+    try {
+      await _service.sendInvoiceCard(invoice: reissued);
+      return '';
+    } catch (error) {
+      return ' แต่ส่งการ์ดเข้าแชทไม่สำเร็จ: ${formatErrorMessage(error)} '
+          '— เปิดบิลใบใหม่แล้วกด "ส่งบิลเข้าแชท" อีกครั้ง';
     }
   }
 

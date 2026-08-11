@@ -622,6 +622,12 @@ class InvoiceService {
   /// partial unique index ปล่อยให้ใบใหม่เกิดได้เพราะใบเดิมไม่นับเป็น active
   /// แล้ว revision + 1 ทำให้เลขที่บิลไม่ชนกัน และ replaces_invoice_id ทำให้
   /// สลิปที่จ่ายใบเดิมไปแล้วยังตามรอยได้
+  ///
+  /// **ไม่โพสต์การ์ดเข้าแชทเอง** ผู้เรียกต้องเรียก [sendInvoiceCard] ต่อ — เดิม
+  /// ทำให้ตรงนี้แล้วกลืน error ทิ้งด้วยเหตุผลว่าใบแทนเกิดแล้ว การแจ้งเตือนที่ล้ม
+  /// ไม่ควรรายงานว่า "ออกใบแทนไม่สำเร็จ" ซึ่งถูกครึ่งเดียว: ผลที่ได้จริงคือ
+  /// เจ้าของหอออกใบแทนสำเร็จ ผู้เช่าไม่ได้รับการ์ด และไม่มีใครในสองฝั่งรู้เลย
+  /// ว่าเกิดอะไรขึ้น · การแยกสองขั้นออกจากกันทำให้ผู้เรียกเล่าได้ครบทั้งสองผล
   Future<Invoice?> reissueInvoice({
     required Invoice voided,
     required int dormitoryId,
@@ -675,19 +681,7 @@ class InvoiceService {
         .select(_columns)
         .single();
 
-    final invoice = _invoiceFromRow(inserted);
-
-    // ใบแทนเกิดแล้ว ณ จุดนี้ การแจ้งเตือนที่ล้มต้องไม่ถูกรายงานว่า "ออกใบแทน
-    // ไม่สำเร็จ" — ถ้าปล่อยให้ throw ขึ้นไป ผู้ใช้จะกดใหม่ แล้วรอบสองห้องนั้นมี
-    // บิลอยู่แล้วจึงไม่อยู่ในร่าง ทำให้ได้ข้อความว่า "ยังไม่ได้จดมิเตอร์ หรือ
-    // ห้องไม่มีผู้เช่า" ซึ่งไม่จริงสักข้อ
-    try {
-      await postIssueNotices(invoices: [invoice]);
-    } catch (_) {
-      // การ์ดในแชทเป็นการประกาศเกี่ยวกับบิล ไม่ใช่ตัวบิล
-    }
-
-    return invoice;
+    return _invoiceFromRow(inserted);
   }
 
   void _assertTransition(InvoiceStatus from, InvoiceStatus to) {
