@@ -318,7 +318,8 @@ double meterUnitsUsed({
   double? currentReading,
 }) {
   if (currentReading == null) return 0;
-  if (currentReading >= previousReading) return currentReading - previousReading;
+  if (currentReading >= previousReading)
+    return currentReading - previousReading;
   return (10000 - previousReading) + currentReading;
 }
 
@@ -350,7 +351,8 @@ class ElectricityRecord {
   });
 
   // Returns true when meter wrapped around from 9999 → 0000
-  bool get isOverflow => currentReading != null && currentReading! < previousReading;
+  bool get isOverflow =>
+      currentReading != null && currentReading! < previousReading;
 
   // Handles 4-digit meter overflow: (10000 - prev) + current
   double get unitsUsed => meterUnitsUsed(
@@ -448,7 +450,6 @@ class ChatPreview {
   final String lastMessage;
   final int unreadCount;
   final DateTime? lastMessageAt;
-
 
   ChatPreview({
     required this.roomDbId,
@@ -549,6 +550,37 @@ class PaymentChannel {
 enum MaintenanceRequestType { repair, cleaning }
 
 enum MaintenanceStatus { pending, inProgress, completed, cancelled }
+
+/// สรุปประวัติแจ้งซ่อม/ทำความสะอาดของห้องหนึ่ง สำหรับหน้ารวมทั้งหอ
+///
+/// หนึ่งแถวคือหนึ่งห้อง ไม่ใช่หนึ่งคำขอ — เจ้าของหอคิดเป็นห้อง และ feed ที่รวม
+/// ทุกคำขอทำให้ห้องที่แจ้งบ่อยกลบห้องอื่นจนหมด
+class RoomMaintenanceSummary {
+  final int roomDbId;
+  final String roomNumber;
+  final String floor;
+  final String tenantName;
+
+  /// คำขอล่าสุดของห้องนี้ — ใช้ทั้งข้อความตัวอย่างและเวลาที่ใช้เรียงลำดับ
+  final MaintenanceRequest latest;
+
+  /// คำขอที่ยังไม่จบ (รอดำเนินการ + กำลังดำเนินการ) — งานที่ค้างอยู่จริง
+  final int openCount;
+
+  final int totalCount;
+
+  const RoomMaintenanceSummary({
+    required this.roomDbId,
+    required this.roomNumber,
+    required this.floor,
+    required this.tenantName,
+    required this.latest,
+    required this.openCount,
+    required this.totalCount,
+  });
+
+  DateTime get lastRequestedAt => latest.requestedAt;
+}
 
 class MaintenanceRequest {
   final int id;

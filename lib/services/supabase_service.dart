@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
+import 'maintenance_overview.dart';
 
 const _chatImageBucket = 'chat-image';
 
@@ -524,7 +525,8 @@ class SupabaseService {
             .order('created_at', ascending: false);
         for (final message in (messages as List).cast<Map<String, dynamic>>()) {
           final roomId = message['room_id'] as int;
-          final timestamp = DateTime.tryParse(message['created_at'] as String? ?? '');
+          final timestamp =
+              DateTime.tryParse(message['created_at'] as String? ?? '');
           if (timestamp != null && !latestMessageAtByRoom.containsKey(roomId)) {
             latestMessageAtByRoom[roomId] = timestamp;
           }
@@ -856,6 +858,39 @@ class SupabaseService {
         .toList();
   }
 
+  /// ประวัติแจ้งซ่อม/ทำความสะอาดของทั้งหอ ยุบเหลือห้องละแถว
+  ///
+  /// `rooms!inner` ทำให้กรองด้วย `rooms.dorm_id` ได้ในคิวรีเดียว แทนการดึงห้อง
+  /// ทั้งหอมาก่อนแล้วค่อยยิงคำขอตามรายการ id ซึ่งกลายเป็นสองรอบเครือข่ายและ
+  /// รายการ id ที่ยาวขึ้นตามจำนวนห้อง
+  ///
+  /// จงใจไม่ใส่ `limit` — การตัดที่จำนวนแถวจะทำให้ห้องที่แจ้งครั้งสุดท้ายนานแล้ว
+  /// **หายไปจากรายการทั้งห้อง** ไม่ใช่แค่แสดงข้อมูลเก่า และหอขนาดนี้มีคำขอนับ
+  /// ได้ด้วยหลักร้อย
+  Future<List<RoomMaintenanceSummary>> fetchMaintenanceSummaries({
+    required int dormitoryId,
+  }) async {
+    final data = await client
+        .from('maintenance_requests')
+        .select(
+            'id, room_id, tenant_id, request_type, description, image_url, status, requested_at, completed_at, cleaning_fee, tenant_profiles(first_name, last_name), rooms!inner(room_number, floor, dorm_id)')
+        .eq('rooms.dorm_id', dormitoryId)
+        .order('requested_at', ascending: false);
+
+    final rows = (data as List).cast<Map<String, dynamic>>();
+
+    final floorByRoom = <int, String>{};
+    for (final row in rows) {
+      final room = row['rooms'] as Map<String, dynamic>?;
+      floorByRoom[row['room_id'] as int] = room?['floor'] as String? ?? '';
+    }
+
+    return summarizeMaintenanceByRoom(
+      requests: rows.map(_mapMaintenanceRequestRow).toList(),
+      floorByRoom: floorByRoom,
+    );
+  }
+
   /// สร้างคำขอแจ้งซ่อม พร้อมส่งข้อความแจ้งในแชทให้เจ้าของหอในคราวเดียว
   Future<void> createMaintenanceRequest({
     required int roomId,
@@ -963,8 +998,7 @@ class SupabaseService {
           .from('maintenance_requests')
           .select('id')
           .eq('room_id', roomId)
-          .inFilter('status', ['Pending', 'In-Progress'])
-          .limit(1);
+          .inFilter('status', ['Pending', 'In-Progress']).limit(1);
 
       if ((remaining as List).isEmpty) {
         await client
