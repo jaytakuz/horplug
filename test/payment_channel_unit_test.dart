@@ -180,15 +180,23 @@ void main() {
 
     // ยอด 0 หรือติดลบสร้าง payload ที่ไม่มี tag 54 ซึ่งเป็นคิวอาร์คนละแบบกับที่
     // ผู้เช่าจะเห็นจริง — การทดสอบด้วยของที่ไม่เหมือนของจริงไม่ได้พิสูจน์อะไร
-    test('ยอดที่ใช้ไม่ได้กลับไปใช้ค่าเริ่มต้น', () async {
+    // คิวอาร์ตัวอย่างโอนได้จริง · ยอดที่ใช้ไม่ได้ต้องทำให้ไม่มีคิวอาร์ ไม่ใช่
+    // เงียบๆ กลับไปใช้ ฿1,234.56 ซึ่งจะทำให้ช่องกรอกกับคิวอาร์บอกยอดคนละอย่าง
+    // แล้วคนที่สแกนระหว่างพิมพ์ก็โอนยอดที่ไม่ได้ตั้งใจ
+    test('ยอดที่ใช้ไม่ได้ทำให้ไม่มีคิวอาร์ ไม่ใช่คิวอาร์ยอดอื่น', () async {
       final viewModel = await _viewModel();
+      viewModel.update(promptPayId: '0812345678');
 
       for (final input in ['0', '-5', '', 'abc']) {
         viewModel.setPreviewAmount(input);
-        expect(viewModel.previewAmount,
-            PaymentChannelViewModel.defaultPreviewAmount,
+        expect(viewModel.previewAmount, isNull,
             reason: 'ยอด "$input" ไม่ควรถูกใช้');
+        expect(viewModel.previewPayload, isNull,
+            reason: 'ยอด "$input" ไม่ควรมีคิวอาร์ให้สแกน');
       }
+
+      // เบอร์ยังถูกต้องอยู่ ช่องกรอกยอดจึงต้องอยู่ต่อให้พิมพ์ใหม่ได้
+      expect(viewModel.canPreviewQr, isTrue);
     });
 
     test('คิวอาร์ตัวอย่างฝังยอดที่ปรับไว้จริง', () async {

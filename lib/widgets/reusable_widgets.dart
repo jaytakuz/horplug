@@ -394,21 +394,6 @@ class InfoRow extends StatelessWidget {
   }
 }
 
-/// ไอคอนสำหรับ BottomNavigationBar ที่มี badge ตัวเลขเมื่อ [count] > 0
-class NavBadgeIcon extends StatelessWidget {
-  final int count;
-  final IconData icon;
-
-  const NavBadgeIcon({super.key, required this.count, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    final iconWidget = Icon(icon);
-    if (count <= 0) return iconWidget;
-    return Badge(label: Text('$count'), child: iconWidget);
-  }
-}
-
 /// ข้อความแจ้งว่าส่วนย่อยส่วนหนึ่งของหน้าโหลดไม่สำเร็จ พร้อมปุ่มลองใหม่
 ///
 /// ใช้แทนการแสดง error เต็มหน้า เมื่อหน้าประกอบด้วยหลายส่วนที่โหลดแยกกัน —

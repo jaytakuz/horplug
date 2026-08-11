@@ -132,7 +132,7 @@ void main() {
       expect(viewModel.canAddMore, isFalse);
     });
 
-    // ลบจนหมดคือวิธีเดียวที่ผู้เช่าซึ่งไม่ต้องการการ์ดนี้จะเอามันออกจากจอได้
+    // ลบจนหมดคือวิธีที่ผู้เช่าซึ่งไม่ใช้ทางลัดเลยจะเอาปุ่มออกจากจอได้
     test('ลบได้จนหมด', () async {
       final viewModel = await _viewModel();
 
@@ -141,6 +141,24 @@ void main() {
       }
 
       expect(viewModel.actions, isEmpty);
+    });
+
+    test('ลบจนหมดแล้วยังว่างอยู่หลังเปิดใหม่ ไม่กลับมาเป็นค่าตั้งต้นเอง',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = QuickActionStore(preferences: prefs);
+
+      final first = QuickActionsViewModel(userId: 'tenant-1', store: store);
+      await first.load();
+      for (final action in [...first.actions]) {
+        await first.remove(action);
+      }
+
+      final reopened = QuickActionsViewModel(userId: 'tenant-1', store: store);
+      await reopened.load();
+
+      expect(reopened.actions, isEmpty);
     });
 
     test('คืนค่าเริ่มต้นได้หลังจัดไปแล้ว', () async {

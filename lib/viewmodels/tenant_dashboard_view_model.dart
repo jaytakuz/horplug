@@ -70,17 +70,33 @@ String thaiMonthName(int month) {
   return _thaiMonthNames[month - 1];
 }
 
+/// ป้ายสถานะจากสถานะอย่างเดียว
+///
+/// `pending` ใช้คำกลางๆ ว่า "รอยืนยัน" เพราะครอบทั้งบิลที่แนบสลิปมาและบิลที่แจ้ง
+/// จ่ายเงินสด · ฟังก์ชันนี้ถูกใช้เป็นตัวกรองรายการด้วย ([filterBills]) ข้อความ
+/// จึงต้องตรงกับชิปตัวกรอง ถ้าอยากได้คำที่เจาะจงกว่าให้ใช้ [billStatusLabelOf]
 String billStatusLabel(InvoiceStatus status) {
   switch (status) {
     case InvoiceStatus.unpaid:
       return 'ค้างชำระ';
     case InvoiceStatus.pending:
-      return 'รอตรวจสลิป';
+      return 'รอยืนยัน';
     case InvoiceStatus.paid:
       return 'ชำระแล้ว';
     case InvoiceStatus.voided:
       return 'ยกเลิกแล้ว';
   }
+}
+
+/// ป้ายสถานะที่รู้ด้วยว่าผู้เช่าแจ้งชำระมาด้วยวิธีไหน
+///
+/// บิลที่ `pending` มีสองหน้าตาที่เจ้าของหอต้องทำคนละอย่าง — ตรวจสลิป กับ
+/// ยืนยันรับเงินสด · ป้ายที่บอกว่า "รอตรวจสลิป" บนบิลที่จ่ายสดมาทำให้ทั้งสอง
+/// ฝ่ายไปตามหาสลิปที่ไม่มีอยู่
+String billStatusLabelOf(Invoice invoice) {
+  if (invoice.awaitsCashConfirmation) return 'รอยืนยันรับเงินสด';
+  if (invoice.awaitsSlipReview) return 'รอตรวจสลิป';
+  return billStatusLabel(invoice.status);
 }
 
 BadgeVariant billStatusVariant(InvoiceStatus status) {

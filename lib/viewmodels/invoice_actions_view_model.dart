@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/invoice_pdf.dart';
 import '../services/invoice_service.dart';
+import '../services/payment_channel_service.dart';
 import 'action_result.dart';
 import 'error_message.dart';
 import 'safe_notifier.dart';
@@ -23,7 +24,9 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
     required this.invoice,
     required this.dormitoryId,
     InvoiceService? service,
-  }) : _service = service ?? InvoiceService();
+    PaymentChannelService? channels,
+  })  : _service = service ?? InvoiceService(),
+        _channels = channels ?? PaymentChannelService();
 
   final Invoice invoice;
 
@@ -31,6 +34,7 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
   final int dormitoryId;
 
   final InvoiceService _service;
+  final PaymentChannelService _channels;
 
   bool isBusy = false;
 
@@ -55,6 +59,14 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
   Future<ActionResult> reject(String reason) => _run(
         () => _service.rejectSlip(invoice: invoice, reason: reason.trim()),
         onSuccess: 'ปฏิเสธสลิปของบิล ${invoice.invoiceNo} แล้ว',
+        onFailure: 'ปฏิเสธไม่สำเร็จ',
+      );
+
+  /// ปฏิเสธการแจ้งจ่ายเงินสดที่ยังไม่ได้รับเงินจริง — ปลายทางเดียวกับ [reject]
+  /// คือบิลกลับไปค้างชำระพร้อมเหตุผล ต่างที่ข้อความ เพราะไม่มีสลิปให้พูดถึง
+  Future<ActionResult> rejectCash(String reason) => _run(
+        () => _service.rejectCashPayment(invoice: invoice, reason: reason.trim()),
+        onSuccess: 'แจ้งว่ายังไม่ได้รับเงินสดของบิล ${invoice.invoiceNo} แล้ว',
         onFailure: 'ปฏิเสธไม่สำเร็จ',
       );
 
@@ -108,8 +120,27 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
   /// เปิดแผ่นแชร์ของระบบพร้อมไฟล์ PDF ของบิลใบนี้
   ///
   /// ไม่แตะสถานะบิลเลย จึงทำได้กับทุกสถานะ รวมทั้งใบที่ยกเลิกไปแล้ว
+  ///
+  /// ดึงช่องทางรับเงินมาใส่ด้วย — ไฟล์ที่เจ้าของหอส่งให้ผู้เช่าถูกใช้แทนการทวงบิล
+  /// ในแชท ถ้าไม่มีเลขบัญชีกับคิวอาร์อยู่ในนั้น ผู้เช่าก็จ่ายจากไฟล์ไม่ได้และต้อง
+  /// ย้อนกลับมาเปิดแอป ทั้งที่ไฟล์ฝั่งผู้เช่าเองมีข้อมูลครบมาตลอด
+  ///
+  /// ช่องทางที่ดึงไม่ได้ไม่ทำให้ล้มทั้งการแชร์ — ได้ไฟล์ที่ขาดคิวอาร์ ดีกว่า
+  /// ไม่ได้ไฟล์เลย
   Future<ActionResult> sharePdf({required String dormitoryName}) => _run(
-        () => shareInvoicePdf(invoice: invoice, dormitoryName: dormitoryName),
+        () async {
+          PaymentChannel? channel;
+          try {
+            channel = await _channels.fetch(dormitoryId: dormitoryId);
+          } catch (error) {
+            debugPrint('โหลดช่องทางชำระเงินไม่สำเร็จ ข้ามไป: $error');
+          }
+          await shareInvoicePdf(
+            invoice: invoice,
+            dormitoryName: dormitoryName,
+            channel: channel,
+          );
+        },
         onSuccess: 'สร้างไฟล์บิล ${invoice.invoiceNo} แล้ว',
         onFailure: 'สร้างไฟล์ PDF ไม่สำเร็จ',
       );

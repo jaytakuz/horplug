@@ -191,7 +191,12 @@ class InvoiceService {
         // หน่วยต้องผ่าน meterUnitsUsed เหมือนกับที่ ElectricityRecord.amount
         // ผ่านตอนบันทึกมิเตอร์ ไม่งั้นงวดที่มิเตอร์หมุนกลับ 9999 → 0000 จะถูก
         // ตรึงลงบิลเป็นหน่วยติดลบข้างค่าไฟที่ถูกต้อง แล้วพิมพ์ออก PDF แบบนั้น
-        electricity: e.isEmpty
+        // current_reading เป็น NULL ได้เมื่อมีแถวมิเตอร์รอไว้แต่ยังไม่ได้จดเลข
+        // งวดนี้ · ต้องส่ง null เข้า meterUnitsUsed ตรงๆ ไม่ใช่แปลงเป็น 0 ก่อน
+        // เพราะ 0 น้อยกว่าเลขครั้งก่อนเสมอ มันจึงเข้าเงื่อนไขมิเตอร์วนรอบแล้ว
+        // คืน (10000 − เลขครั้งก่อน) — ห้องที่ยังไม่จดมิเตอร์จะได้บิลที่ตรึง
+        // หน่วยไฟหลักพันไว้ทั้งที่ไม่มีใครอ่านมิเตอร์เลย
+        electricity: e.isEmpty || e['current_reading'] == null
             ? null
             : MeterCharge(
                 units: meterUnitsUsed(
@@ -486,6 +491,33 @@ class InvoiceService {
   Future<void> rejectSlip({
     required Invoice invoice,
     required String reason,
+  }) =>
+      _markUnpaid(
+        invoice: invoice,
+        reason: reason,
+        notice: 'สลิปของบิล ${invoice.invoiceNo} ไม่ผ่านการตรวจสอบ: $reason',
+      );
+
+  /// เจ้าของหอปฏิเสธการแจ้งจ่ายเงินสดที่ยังไม่ได้รับเงินจริง
+  ///
+  /// ปลายทางเหมือน [rejectSlip] — บิลกลับไป unpaid พร้อมเหตุผลให้ผู้เช่าอ่าน
+  /// ต่างแค่ข้อความ ถ้าไม่มีปุ่มนี้ เจ้าของหอที่เจอผู้เช่ากดแจ้งทั้งที่ยังไม่จ่าย
+  /// จะมีทางเลือกเดียวคือยกเลิกบิลทิ้งทั้งใบแล้วออกใหม่ ซึ่งกินเลขที่บิลเพิ่ม
+  /// และทำให้ประวัติอ่านเหมือนออกบิลผิด
+  Future<void> rejectCashPayment({
+    required Invoice invoice,
+    required String reason,
+  }) =>
+      _markUnpaid(
+        invoice: invoice,
+        reason: reason,
+        notice: 'ยังไม่ได้รับเงินสดค่าบิล ${invoice.invoiceNo}: $reason',
+      );
+
+  Future<void> _markUnpaid({
+    required Invoice invoice,
+    required String reason,
+    required String notice,
   }) async {
     _assertTransition(invoice.status, InvoiceStatus.unpaid);
 
@@ -502,16 +534,21 @@ class InvoiceService {
       'rejection_reason': reason,
       'slip_url': null,
       'slip_submitted_at': null,
+      // ล้างวิธีจ่ายด้วย ไม่งั้นบิลที่แจ้งเงินสดแล้วถูกปฏิเสธจะยังค้างเป็น cash
+      // อยู่ พอผู้เช่ากลับมาแนบสลิปแทน บิลจะเข้า pending พร้อม payment_method
+      // เดิม เจ้าของหอจึงเห็นปุ่ม "ยืนยันรับเงินสด" ทับสลิปที่เพิ่งอัปมา
+      //
+      // ใส่เฉพาะเมื่อบิลมีค่าอยู่จริง — ฐานข้อมูลที่ยังไม่ได้รัน
+      // invoices_cash_payment.sql ไม่มีคอลัมน์นี้ การส่งไปด้วยจะทำให้ทั้ง
+      // UPDATE ตกด้วย 42703 แล้วการปฏิเสธสลิปซึ่งเคยใช้ได้มาตลอดก็พังตาม
+      if (invoice.paymentMethod != null) 'payment_method': null,
     }).eq('id', invoice.dbId);
 
     if (oldSlipPath != null) {
       await discardSlip(oldSlipPath);
     }
 
-    await _postInvoiceNotice(
-      invoice: invoice,
-      body: 'สลิปของบิล ${invoice.invoiceNo} ไม่ผ่านการตรวจสอบ: $reason',
-    );
+    await _postInvoiceNotice(invoice: invoice, body: notice);
   }
 
   // ── ยกเลิกและออกใบแทน ──────────────────────────────────────────────────

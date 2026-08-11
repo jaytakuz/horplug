@@ -59,8 +59,8 @@ class QuickActionsViewModel extends ChangeNotifier with SafeNotifier {
   }
 
   Future<void> remove(QuickAction action) async {
-    // ปล่อยให้ลบจนหมดได้ — การ์ดจะซ่อนตัวเองเมื่อไม่มีปุ่มเหลือ ซึ่งเป็นทางเดียว
-    // ที่ผู้เช่าที่ไม่อยากได้การ์ดนี้เลยจะเอามันออกจากหน้าจอได้
+    // ปล่อยให้ลบจนหมดได้ — การ์ดจะยุบเหลือแถบเดียวที่ยังมีปุ่มเข้าตัวจัดการอยู่
+    // ผู้เช่าที่ไม่ใช้ทางลัดเลยจึงเอาปุ่มออกจากหน้าจอได้โดยไม่ตัดทางกลับ
     await _commit(actions.where((item) => item != action).toList());
   }
 

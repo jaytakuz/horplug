@@ -7,7 +7,7 @@ import '../utils/formatters.dart';
 import '../viewmodels/auth_view_model.dart' show AuthScope;
 import '../viewmodels/invoice_actions_view_model.dart';
 import '../viewmodels/tenant_dashboard_view_model.dart'
-    show billStatusLabel, billStatusVariant, thaiMonthName;
+    show billStatusLabelOf, billStatusVariant, thaiMonthName;
 import 'reusable_widgets.dart';
 import 'slip_review_sheet.dart';
 
@@ -115,6 +115,33 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
     if (result.success) Navigator.of(context).pop(true);
   }
 
+  /// ปฏิเสธการแจ้งจ่ายเงินสด — บิลกลับไปค้างชำระพร้อมเหตุผลให้ผู้เช่าอ่าน
+  ///
+  /// คู่กับ [_confirmCash] เสมอ ไม่งั้นเจ้าของหอที่เจอผู้เช่ากดแจ้งทั้งที่ยัง
+  /// ไม่จ่าย จะติดอยู่กับบิลที่ค้างเป็น "รอยืนยัน" ตลอดไป หรือต้องยกเลิกบิลทิ้ง
+  /// ทั้งใบซึ่งกินเลขที่บิลเพิ่มโดยไม่จำเป็น
+  Future<void> _rejectCash() async {
+    final actions = context.read<InvoiceActionsViewModel>();
+    if (actions.isBusy) return;
+
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => const _ReasonDialog(
+        title: 'ยังไม่ได้รับเงินสด',
+        hint: 'ระบุเหตุผล เช่น ยังไม่ได้รับเงิน จำนวนเงินไม่ครบ',
+        confirmLabel: 'ยืนยัน',
+      ),
+    );
+    if (reason == null || reason.trim().isEmpty || !mounted) return;
+
+    final result = await actions.rejectCash(reason);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
+    if (result.success) Navigator.of(context).pop(true);
+  }
+
   /// สร้างและแชร์ PDF โดยไม่ปิดแผ่น — ต่างจากปุ่มอื่นตรงที่ไม่ได้เปลี่ยนสถานะ
   /// อะไรเลย เจ้าของหอจึงควรอยู่หน้าเดิมได้หลังแชร์เสร็จ
   Future<void> _sharePdf() async {
@@ -180,7 +207,7 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
                       ),
                     ),
                     StatusBadge(
-                      label: billStatusLabel(invoice.status),
+                      label: billStatusLabelOf(invoice),
                       variant: billStatusVariant(invoice.status),
                     ),
                   ],
@@ -253,6 +280,18 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
                       onPressed: actions.isBusy ? null : _confirmCash,
                     ),
                     const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: actions.isBusy ? null : _rejectCash,
+                      icon: const Icon(Icons.money_off_outlined),
+                      label: const Text('ยังไม่ได้รับเงิน'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                        foregroundColor: AppColors.destructive,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                   ] else if (invoice.awaitsSlipReview) ...[
                     PrimaryButton(
                       label: 'ตรวจสลิป',
@@ -308,7 +347,11 @@ Future<bool> runVoidInvoiceFlow(
 }) async {
   final reason = await showDialog<String>(
     context: context,
-    builder: (_) => const _VoidReasonDialog(),
+    builder: (_) => const _ReasonDialog(
+      title: 'ยกเลิกบิล',
+      hint: 'ระบุเหตุผลที่ยกเลิก เช่น มิเตอร์อ่านผิด ลืมใส่ค่าทำความสะอาด',
+      confirmLabel: 'ยืนยันยกเลิก',
+    ),
   );
   if (reason == null || reason.trim().isEmpty || !context.mounted) {
     return false;
@@ -353,14 +396,24 @@ Future<bool> runVoidInvoiceFlow(
 /// ตอนนั้น dialog เพิ่งเริ่ม animate ปิด ValueListenableBuilder ข้างในยัง
 /// subscribe กับ controller อยู่ ทำให้เกิด "A TextEditingController was used
 /// after being disposed"
-class _VoidReasonDialog extends StatefulWidget {
-  const _VoidReasonDialog();
+/// กล่องขอเหตุผลก่อนทำสิ่งที่ผู้เช่าจะได้อ่านทีหลัง — ใช้ทั้งตอนยกเลิกบิลและ
+/// ตอนแจ้งว่ายังไม่ได้รับเงินสด สองอย่างนี้ต่างกันแค่ถ้อยคำ
+class _ReasonDialog extends StatefulWidget {
+  const _ReasonDialog({
+    required this.title,
+    required this.hint,
+    required this.confirmLabel,
+  });
+
+  final String title;
+  final String hint;
+  final String confirmLabel;
 
   @override
-  State<_VoidReasonDialog> createState() => _VoidReasonDialogState();
+  State<_ReasonDialog> createState() => _ReasonDialogState();
 }
 
-class _VoidReasonDialogState extends State<_VoidReasonDialog> {
+class _ReasonDialogState extends State<_ReasonDialog> {
   final _controller = TextEditingController();
 
   @override
@@ -374,14 +427,14 @@ class _VoidReasonDialogState extends State<_VoidReasonDialog> {
     return AlertDialog(
       backgroundColor: AppColors.card,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      title: const Text('ยกเลิกบิล'),
+      title: Text(widget.title),
       content: TextField(
         controller: _controller,
         autofocus: true,
         maxLines: 3,
-        decoration: const InputDecoration(
-          hintText: 'ระบุเหตุผลที่ยกเลิก เช่น มิเตอร์อ่านผิด ลืมใส่ค่าทำความสะอาด',
-          border: OutlineInputBorder(),
+        decoration: InputDecoration(
+          hintText: widget.hint,
+          border: const OutlineInputBorder(),
         ),
       ),
       actions: [
@@ -401,7 +454,7 @@ class _VoidReasonDialogState extends State<_VoidReasonDialog> {
               backgroundColor: AppColors.destructive,
               foregroundColor: Colors.white,
             ),
-            child: const Text('ยืนยันยกเลิก'),
+            child: Text(widget.confirmLabel),
           ),
         ),
       ],

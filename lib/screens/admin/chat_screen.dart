@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../viewmodels/auth_view_model.dart';
@@ -111,7 +112,9 @@ class _ChatViewState extends State<_ChatView> {
 
     final filteredChats = viewModel.filteredChatPreviews;
 
-    return Column(
+    return ContentBounds(
+      gutter: 0,
+      child: Column(
       children: [
         _buildSearchSection(viewModel),
         _buildFloorFilterSection(viewModel),
@@ -191,6 +194,7 @@ class _ChatViewState extends State<_ChatView> {
           ),
         ),
       ],
+      ),
     );
   }
 

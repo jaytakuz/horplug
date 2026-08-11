@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../utils/formatters.dart';
 import '../viewmodels/tenant_dashboard_view_model.dart'
-    show billStatusLabel, thaiMonthName;
+    show billStatusLabelOf, thaiMonthName;
 
 /// การ์ดบิลในฟองแชท — งวด ยอด ครบกำหนด และสถานะสด
 ///
@@ -56,7 +56,7 @@ class InvoiceChatCard extends StatelessWidget {
           style: TextStyle(color: textColor.withValues(alpha: 0.7), fontSize: 11),
         ),
         const SizedBox(height: 4),
-        Text(billStatusLabel(bill.status),
+        Text(billStatusLabelOf(bill),
             style: TextStyle(color: textColor, fontSize: 11)),
         if (onOpen != null) ...[
           const SizedBox(height: 8),

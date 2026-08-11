@@ -49,11 +49,15 @@ String _describePostgrest(PostgrestException error) {
   switch (error.code) {
     // ตาราง คอลัมน์ หรือฟังก์ชันหายไปจากฐานข้อมูล — แปลว่ายังไม่ได้รัน
     // migration ให้ครบ ผู้ใช้ทำอะไรไม่ได้เลยนอกจากแจ้งคนดูแล
-    // (42703 undefined_column · 42883 undefined_function)
-    case 'PGRST205':
-    case '42P01':
-    case '42703':
-    case '42883':
+    //
+    // PGRST202 คือรหัสที่ PostgREST คืนเมื่อหา RPC ไม่เจอ ซึ่งเป็นเคสที่เกิดจริง
+    // ที่สุด: โค้ดที่เรียก submit_cash_payment ถูกติดตั้งไปก่อนที่ SQL จะถูกรัน
+    // ส่วน 42883 เป็นรหัสจาก Postgres เองที่โผล่มาทางอื่น จึงจับไว้ทั้งคู่
+    case 'PGRST205': // ไม่พบตารางใน schema cache
+    case 'PGRST202': // ไม่พบฟังก์ชันใน schema cache
+    case '42P01': // undefined_table
+    case '42703': // undefined_column
+    case '42883': // undefined_function
       return 'ระบบยังติดตั้งไม่ครบ กรุณาแจ้งผู้ดูแลระบบ';
 
     // RLS ปฏิเสธ หรือไม่มีสิทธิ์บนตาราง

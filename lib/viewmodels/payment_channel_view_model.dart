@@ -68,14 +68,31 @@ class PaymentChannelViewModel extends ChangeNotifier with SafeNotifier {
   /// ปรับได้เพราะการตรวจที่แน่นอนที่สุดคือ**โอนจริง**ด้วยยอดเล็กๆ แล้วดูว่าเงิน
   /// เข้าบัญชีไหม ยอดตายตัว ฿1,234.56 บังคับให้ต้องโอนเงินจำนวนนั้นจริงเพื่อ
   /// ทดสอบ ซึ่งไม่มีใครทำ
-  double previewAmount = defaultPreviewAmount;
+  ///
+  /// null เมื่อยอดที่กรอกใช้ไม่ได้ — ตอนนั้นต้องไม่มีคิวอาร์ให้สแกน (ดู
+  /// [previewPayload]) เพราะคิวอาร์นี้โอนได้จริง
+  double? previewAmount = defaultPreviewAmount;
 
-  String? get previewPayload => promptPayId.trim().isEmpty
-      ? null
-      : promptPayPayload(
-          promptPayId: promptPayId.trim(),
-          amount: previewAmount,
-        );
+  /// true เมื่อเบอร์พร้อมเพย์ใช้สร้างคิวอาร์ได้แล้ว โดยไม่สนใจยอด
+  ///
+  /// แยกจาก [previewPayload] เพราะหน้าจอต้องคงช่องกรอกยอดไว้ตอนที่ยอดยังใช้
+  /// ไม่ได้ · ถ้าผูกช่องกรอกไว้กับ payload ช่องจะหายไปพร้อมคิวอาร์ทันทีที่ลบยอด
+  /// ทิ้ง แล้วเจ้าของหอก็พิมพ์ยอดใหม่ไม่ได้อีกเลย
+  bool get canPreviewQr =>
+      promptPayPayload(
+        promptPayId: promptPayId.trim(),
+        amount: defaultPreviewAmount,
+      ) !=
+      null;
+
+  String? get previewPayload {
+    final amount = previewAmount;
+    // ยอดใช้ไม่ได้ต้องไม่มีคิวอาร์ ไม่ใช่คิวอาร์ยอดอื่น — เจ้าของหอที่ลบยอดทิ้ง
+    // เพื่อพิมพ์ใหม่จะเห็นช่องว่างอยู่ตรงหน้า ถ้าคิวอาร์ยังอยู่และเงียบๆ กลับไป
+    // ใช้ ฿1,234.56 คนที่สแกนตอนนั้นจะโอนยอดที่ไม่มีอยู่บนจอเลย
+    if (amount == null || promptPayId.trim().isEmpty) return null;
+    return promptPayPayload(promptPayId: promptPayId.trim(), amount: amount);
+  }
 
   Future<void> load() async {
     isLoading = true;
@@ -113,14 +130,17 @@ class PaymentChannelViewModel extends ChangeNotifier with SafeNotifier {
     notifyListeners();
   }
 
-  /// ตั้งยอดของคิวอาร์ตัวอย่าง · ค่าที่ใช้ไม่ได้จะกลับไปใช้ค่าเริ่มต้น
+  /// ตั้งยอดของคิวอาร์ตัวอย่าง · ค่าที่ใช้ไม่ได้ทำให้ยอดเป็น null และคิวอาร์หาย
   ///
   /// ยอด 0 หรือติดลบสร้าง payload ที่ไม่มี tag 54 ซึ่งเป็นคิวอาร์คนละแบบกับที่
   /// ผู้เช่าจะเห็นจริง การทดสอบด้วยของที่ไม่เหมือนของจริงไม่ได้พิสูจน์อะไร
+  ///
+  /// เดิมค่าที่ใช้ไม่ได้ย้อนกลับไปใช้ ฿1,234.56 เงียบๆ ทำให้ช่องกรอกกับคิวอาร์
+  /// บอกยอดคนละอย่าง — คิวอาร์นี้โอนได้จริง คนที่สแกนระหว่างพิมพ์จึงโอนยอดที่
+  /// ไม่ได้ตั้งใจ
   void setPreviewAmount(String value) {
     final parsed = double.tryParse(value.trim().replaceAll(',', ''));
-    previewAmount =
-        (parsed == null || parsed <= 0) ? defaultPreviewAmount : parsed;
+    previewAmount = (parsed == null || parsed <= 0) ? null : parsed;
     notifyListeners();
   }
 

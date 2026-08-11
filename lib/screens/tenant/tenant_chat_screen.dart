@@ -7,7 +7,7 @@ import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_chat_view_model.dart';
-import '../../viewmodels/tenant_dashboard_view_model.dart' show billStatusLabel;
+import '../../viewmodels/tenant_dashboard_view_model.dart' show billStatusLabelOf;
 import '../../widgets/chat_conversation_view.dart';
 import '../../widgets/payment_sheet.dart';
 
@@ -82,7 +82,7 @@ class _TenantChatView extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'บิล ${invoice.invoiceNo} · ${billStatusLabel(invoice.status)}',
+            'บิล ${invoice.invoiceNo} · ${billStatusLabelOf(invoice)}',
           ),
         ),
       );

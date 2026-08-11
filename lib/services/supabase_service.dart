@@ -270,6 +270,29 @@ class SupabaseService {
     await client.from('rooms').insert({'dorm_id': dormitoryId, 'room_number': roomNumber, 'floor': floor, 'base_price': basePrice, 'status': 'vacant'});
   }
 
+  /// สร้างห้องหลายห้องใน insert เดียว
+  ///
+  /// Postgres รับประกัน all-or-nothing ให้เอง จึงไม่มีสภาพ "สร้างไป 40 จาก 84
+  /// ห้องแล้วค้าง" ซึ่งเจ้าของหอต้องมานั่งไล่ว่าห้องไหนมีแล้วห้องไหนยัง
+  Future<void> addRooms({
+    required int dormitoryId,
+    required List<({String number, String floor})> rooms,
+    required double basePrice,
+  }) async {
+    if (rooms.isEmpty) return;
+
+    await client.from('rooms').insert([
+      for (final room in rooms)
+        {
+          'dorm_id': dormitoryId,
+          'room_number': room.number,
+          'floor': room.floor,
+          'base_price': basePrice,
+          'status': 'vacant',
+        },
+    ]);
+  }
+
   Future<void> deleteRoom({required int roomDbId}) async {
     await client.from('rooms').delete().eq('id', roomDbId);
   }

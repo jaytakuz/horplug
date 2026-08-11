@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../models/quick_action.dart';
 import '../../services/invoice_pdf.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/error_message.dart';
 import '../../viewmodels/maintenance_view_model.dart'
@@ -87,9 +88,10 @@ class _TenantDashboardView extends StatelessWidget {
         await auth.refreshProfile();
         await viewModel.load();
       },
-      child: ListView(
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: contentInsets(context, availableWidth: constraints.maxWidth),
         children: [
           _Greeting(profile: profile),
           const SizedBox(height: 16),
@@ -98,6 +100,7 @@ class _TenantDashboardView extends StatelessWidget {
           else
             ..._buildDashboardSections(context, viewModel),
         ],
+        ),
       ),
     );
   }
@@ -373,7 +376,7 @@ class _BillHeroCard extends StatelessWidget {
               ),
               if (bill != null)
                 StatusBadge(
-                  label: billStatusLabel(bill.status),
+                  label: billStatusLabelOf(bill),
                   variant: billStatusVariant(bill.status),
                 ),
             ],
@@ -428,7 +431,11 @@ class _BillHeroCard extends StatelessWidget {
             const Icon(Icons.hourglass_top, size: 16, color: AppColors.warning),
             const SizedBox(width: 8),
             Text(
-              'รอเจ้าของหอตรวจสลิป',
+              // จ่ายสดไม่มีสลิปให้ตรวจ — ข้อความที่พูดถึงสลิปทำให้ผู้เช่าไป
+              // ตามหาของที่ไม่มีอยู่ และขัดกับป้ายสถานะข้างบนการ์ดใบเดียวกัน
+              bill.awaitsCashConfirmation
+                  ? 'รอเจ้าของหอยืนยันรับเงินสด'
+                  : 'รอเจ้าของหอตรวจสลิป',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -865,10 +872,36 @@ class _QuickActions extends StatelessWidget {
         context.watch<TenantShellViewModel>().unreadMessageCount;
     final quickActions = context.watch<QuickActionsViewModel>();
 
-    // ลบทางลัดออกจนหมดคือวิธีเดียวที่ผู้เช่าซึ่งไม่ต้องการการ์ดนี้จะเอามันออก
-    // จากหน้าจอได้ — การ์ดเปล่าที่มีแต่หัวเรื่องไม่ได้ให้อะไรใคร
-    if (quickActions.isLoading || quickActions.actions.isEmpty) {
-      return const SizedBox.shrink();
+    if (quickActions.isLoading) return const SizedBox.shrink();
+
+    // ลบจนหมดแล้วเหลือแค่แถบบางๆ ไม่ใช่ซ่อนทั้งการ์ด — ปุ่ม ⚙︎ บนหัวการ์ดคือ
+    // ทางเดียวที่จะเข้าตัวจัดการทางลัด ซ่อนการ์ดทั้งใบจึงเท่ากับลบทางลัดทิ้ง
+    // แบบถาวรโดยไม่มีทางเอากลับมา
+    if (quickActions.actions.isEmpty) {
+      return PaperCard(
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'ยังไม่มีทางลัด',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.mutedForeground,
+                    ),
+              ),
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.tune, size: 18),
+              label: const Text('จัดการทางลัด'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.mutedForeground,
+                visualDensity: VisualDensity.compact,
+              ),
+              onPressed: () =>
+                  showQuickActionsEditor(context, viewModel: quickActions),
+            ),
+          ],
+        ),
+      );
     }
 
     return PaperCard(

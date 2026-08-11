@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../viewmodels/admin_shell_view_model.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/adaptive_scaffold.dart';
 import '../../widgets/reusable_widgets.dart';
 import 'dashboard_screen.dart';
 import 'rooms_screen.dart';
@@ -93,12 +94,13 @@ class _AdminShellView extends StatelessWidget {
     final activeIndex = desiredIndex.clamp(0, pages.length - 1);
     final bottomNavIndex = activeIndex <= 4 ? activeIndex : 0;
 
-    return Scaffold(
+    return AdaptiveNavigationScaffold(
       appBar: MobileHeader(
         dormitoryName: auth.dormitoryName,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.primary),
+            tooltip: 'ออกจากระบบ',
             onPressed: () async {
               await auth.signOut();
             },
@@ -106,65 +108,44 @@ class _AdminShellView extends StatelessWidget {
           const SizedBox(width: 8),
         ],
       ),
+      showNavigation: dormitoryId != null,
+      selectedIndex: bottomNavIndex,
+      onDestinationSelected: (index) =>
+          _onItemTapped(context, viewModel, index),
+      destinations: [
+        const NavDestination(
+          label: 'หน้าหลัก',
+          icon: Icons.dashboard_outlined,
+          activeIcon: Icons.dashboard,
+        ),
+        const NavDestination(
+          label: 'ห้องพัก',
+          icon: Icons.meeting_room_outlined,
+          activeIcon: Icons.meeting_room,
+        ),
+        const NavDestination(
+          label: 'มิเตอร์',
+          icon: Icons.speed_outlined,
+          activeIcon: Icons.speed,
+        ),
+        const NavDestination(
+          label: 'บิล',
+          icon: Icons.receipt_long_outlined,
+          activeIcon: Icons.receipt_long,
+        ),
+        NavDestination(
+          label: 'แชท',
+          icon: Icons.chat_bubble_outline,
+          activeIcon: Icons.chat_bubble,
+          badgeCount: viewModel.unreadMessageCount,
+        ),
+      ],
       body: dormitoryId == null && activeIndex == 0
           ? _buildNoDormitoryView(context)
           : IndexedStack(
               index: activeIndex,
               children: pages,
             ),
-      bottomNavigationBar: dormitoryId != null
-          ? Container(
-              decoration: const BoxDecoration(
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 10,
-                      offset: Offset(0, -2)),
-                ],
-              ),
-              child: BottomNavigationBar(
-                currentIndex: bottomNavIndex,
-                onTap: (index) => _onItemTapped(context, viewModel, index),
-                type: BottomNavigationBarType.fixed,
-                backgroundColor: AppColors.card,
-                selectedItemColor: AppColors.primary,
-                unselectedItemColor: AppColors.mutedForeground,
-                selectedLabelStyle:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                unselectedLabelStyle:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-                items: [
-                  const BottomNavigationBarItem(
-                      icon: Icon(Icons.dashboard_outlined),
-                      activeIcon: Icon(Icons.dashboard),
-                      label: 'หน้าหลัก'),
-                  const BottomNavigationBarItem(
-                      icon: Icon(Icons.meeting_room_outlined),
-                      activeIcon: Icon(Icons.meeting_room),
-                      label: 'ห้องพัก'),
-                  const BottomNavigationBarItem(
-                      icon: Icon(Icons.speed_outlined),
-                      activeIcon: Icon(Icons.speed),
-                      label: 'มิเตอร์'),
-                  const BottomNavigationBarItem(
-                      icon: Icon(Icons.receipt_long_outlined),
-                      activeIcon: Icon(Icons.receipt_long),
-                      label: 'บิล'),
-                  BottomNavigationBarItem(
-                    icon: NavBadgeIcon(
-                      count: viewModel.unreadMessageCount,
-                      icon: Icons.chat_bubble_outline,
-                    ),
-                    activeIcon: NavBadgeIcon(
-                      count: viewModel.unreadMessageCount,
-                      icon: Icons.chat_bubble,
-                    ),
-                    label: 'แชท',
-                  ),
-                ],
-              ),
-            )
-          : null,
     );
   }
 

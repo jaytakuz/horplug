@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../models/thai_bank.dart';
 import '../../services/promptpay.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../utils/formatters.dart';
 import '../../viewmodels/payment_channel_view_model.dart';
 import '../../widgets/promptpay_qr.dart';
@@ -73,8 +74,10 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
                 // ข้อความคนละแบบกลับมา · ฟอร์มนี้มีไม่กี่ช่อง การสร้างทั้งหมด
                 // พร้อมกันจึงไม่มีต้นทุนที่ต้องกังวล
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: ContentBounds(
+                    maxWidth: 640,
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (viewModel.errorMessage != null) ...[
@@ -118,6 +121,7 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
                       ),
                       const SizedBox(height: 24),
                     ],
+                    ),
                   ),
                 ),
               ),
@@ -156,36 +160,52 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
           const SizedBox(height: 16),
           // QR ตัวอย่างด้วยยอดสมมติ — เจ้าของหอสแกนตรวจเองได้ก่อนบันทึกว่า
           // เข้าบัญชีถูกใบ ซึ่งเป็นทางเดียวที่จะจับเบอร์ที่พิมพ์ผิดแต่ครบ 10 หลัก
-          if (payload != null) ...[
-            Center(child: PromptPayQr(payload: payload, size: 180)),
-            const SizedBox(height: 12),
+          // ช่องกรอกยอดผูกกับความถูกต้องของ "เบอร์" ไม่ใช่ของ payload — ยอดที่
+          // ใช้ไม่ได้ทำให้ payload เป็น null และถ้าผูกไว้ด้วยกัน ช่องกรอกจะหาย
+          // ไปพร้อมคิวอาร์ทันทีที่ลบยอดทิ้งเพื่อพิมพ์ใหม่
+          if (viewModel.canPreviewQr) ...[
+            if (payload != null) ...[
+              Center(child: PromptPayQr(payload: payload, size: 180)),
+              const SizedBox(height: 12),
+            ],
             // ปรับยอดได้เพราะการตรวจที่แน่นอนที่สุดคือโอนจริงด้วยยอดเล็กๆ แล้วดู
             // ว่าเงินเข้าบัญชีไหม · ยอดตายตัวบังคับให้ต้องโอนเงินจำนวนนั้นจริง
             // เพื่อทดสอบ ซึ่งไม่มีใครทำ แล้วการตรวจก็เลยไม่เกิดขึ้นเลย
             TextFormField(
-              initialValue: viewModel.previewAmount.toStringAsFixed(2),
+              // คิวอาร์ข้างบนโผล่/หายตามความถูกต้องของยอด จำนวนลูกของ Column
+              // จึงเปลี่ยน · ไม่มีคีย์ Flutter จะจับคู่ element ตามตำแหน่ง ช่องนี้
+              // เลยถูกสร้างใหม่ ข้อความที่พิมพ์ค้างหายและโฟกัสหลุดกลางคัน
+              key: const ValueKey('preview-amount'),
+              initialValue: PaymentChannelViewModel.defaultPreviewAmount
+                  .toStringAsFixed(2),
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'ยอดในคิวอาร์ตัวอย่าง',
                 prefixText: '฿ ',
                 helperText: 'ลองใส่ยอดน้อยๆ แล้วโอนจริงเพื่อตรวจว่าเงินเข้า'
                     'บัญชีถูกใบ',
                 helperMaxLines: 2,
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
                 isDense: true,
+                // บอกไปตรงๆ ว่าทำไมคิวอาร์หาย ไม่ใช่ปล่อยให้เดา
+                errorText: viewModel.previewAmount == null
+                    ? 'ใส่ยอดมากกว่า 0 เพื่อดูคิวอาร์'
+                    : null,
               ),
               onChanged: viewModel.setPreviewAmount,
             ),
-            const SizedBox(height: 8),
-            Text(
-              'คิวอาร์นี้เป็นของจริง — สแกนแล้วโอนได้ทันที '
-              'ยอด ${formatBaht(viewModel.previewAmount)} จะเข้าบัญชีนี้',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.warning,
-                  ),
-            ),
+            if (viewModel.previewAmount != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'คิวอาร์นี้เป็นของจริง — สแกนแล้วโอนได้ทันที '
+                'ยอด ${formatBaht(viewModel.previewAmount!)} จะเข้าบัญชีนี้',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.warning,
+                    ),
+              ),
+            ],
           ] else if (viewModel.promptPayId.trim().isNotEmpty)
             Text(
               'กรอกให้ครบ 10 หรือ 13 หลักเพื่อดูตัวอย่างคิวอาร์',

@@ -121,8 +121,10 @@ Invoice buildInvoice({
   double waterCost = 0,
   double cleaningFee = 0,
   InvoiceStatus status = InvoiceStatus.unpaid,
+  PaymentMethod? paymentMethod,
 }) {
   return Invoice(
+    paymentMethod: paymentMethod,
     dbId: roomDbId * 10000 + year * 100 + month,
     invoiceNo: 'INV-$year${month.toString().padLeft(2, '0')}-101',
     roomDbId: roomDbId,
@@ -447,9 +449,41 @@ void main() {
     group('UTC-43 bill presentation helpers', () {
       test('UTC-43-TC-01 maps each invoice status to its Thai label', () {
         expect(billStatusLabel(InvoiceStatus.unpaid), 'ค้างชำระ');
-        expect(billStatusLabel(InvoiceStatus.pending), 'รอตรวจสลิป');
+        // pending ใช้คำกลางๆ เพราะครอบทั้งบิลที่แนบสลิปและบิลที่แจ้งจ่ายสด
+        // และเพราะข้อความนี้ถูกใช้เป็นชิปตัวกรองรายการด้วย
+        expect(billStatusLabel(InvoiceStatus.pending), 'รอยืนยัน');
         expect(billStatusLabel(InvoiceStatus.paid), 'ชำระแล้ว');
         expect(billStatusLabel(InvoiceStatus.voided), 'ยกเลิกแล้ว');
+      });
+
+      test('UTC-43-TC-03 บิลที่รอยืนยันบอกได้ว่ารออะไรอยู่', () {
+        Invoice pending({PaymentMethod? method}) => buildInvoice(
+              roomDbId: 10,
+              month: 5,
+              year: 2026,
+              status: InvoiceStatus.pending,
+              paymentMethod: method,
+            );
+
+        // เจ้าของหอต้องทำคนละอย่างกับสองใบนี้ — ตรวจสลิป กับ ยืนยันรับเงินสด
+        // ป้าย "รอตรวจสลิป" บนบิลที่จ่ายสดทำให้ทั้งสองฝ่ายไปตามหาสลิปที่ไม่มี
+        expect(billStatusLabelOf(pending()), 'รอตรวจสลิป');
+        expect(billStatusLabelOf(pending(method: PaymentMethod.transfer)),
+            'รอตรวจสลิป');
+        expect(billStatusLabelOf(pending(method: PaymentMethod.cash)),
+            'รอยืนยันรับเงินสด');
+
+        // สถานะอื่นไม่สนใจวิธีจ่าย — จ่ายสดที่ยืนยันแล้วก็คือ "ชำระแล้ว"
+        expect(
+          billStatusLabelOf(buildInvoice(
+            roomDbId: 10,
+            month: 5,
+            year: 2026,
+            status: InvoiceStatus.paid,
+            paymentMethod: PaymentMethod.cash,
+          )),
+          'ชำระแล้ว',
+        );
       });
 
       test('UTC-43-TC-02 returns Thai month names and guards bad input', () {

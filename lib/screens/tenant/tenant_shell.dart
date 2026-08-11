@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_shell_view_model.dart';
+import '../../widgets/adaptive_scaffold.dart';
 import '../../widgets/reusable_widgets.dart';
 import 'tenant_bills_screen.dart';
 import 'tenant_chat_screen.dart';
@@ -109,12 +109,44 @@ class _TenantShellViewState extends State<_TenantShellView> {
 
     _syncUnreadForIndex(activeIndex);
 
-    return Scaffold(
+    return AdaptiveNavigationScaffold(
       appBar: MobileHeader(
         dormitoryName: auth.dormitoryName,
         // ไม่ใส่ action ที่นี่ — ปุ่มออกจากระบบอยู่ในแท็บโปรไฟล์ เพื่อลด chrome
         // ที่ต้องแบกไปทุกหน้า
       ),
+      selectedIndex: activeIndex,
+      onDestinationSelected: (index) => _onItemTapped(context, index),
+      // ต่างจาก AdminShell ตรงที่แสดง nav เสมอ แม้ผู้เช่ายังไม่มีห้อง —
+      // แท็บโปรไฟล์คือที่ที่ผู้เช่าจะเห็นคำขอเข้าหอของตัวเอง
+      destinations: [
+        const NavDestination(
+          label: 'หน้าหลัก',
+          icon: Icons.home_outlined,
+          activeIcon: Icons.home,
+        ),
+        const NavDestination(
+          label: 'บิล',
+          icon: Icons.receipt_long_outlined,
+          activeIcon: Icons.receipt_long,
+        ),
+        const NavDestination(
+          label: 'แจ้งซ่อม',
+          icon: Icons.build_outlined,
+          activeIcon: Icons.build,
+        ),
+        NavDestination(
+          label: 'แชท',
+          icon: Icons.chat_bubble_outline,
+          activeIcon: Icons.chat_bubble,
+          badgeCount: viewModel.unreadMessageCount,
+        ),
+        const NavDestination(
+          label: 'โปรไฟล์',
+          icon: Icons.person_outline,
+          activeIcon: Icons.person,
+        ),
+      ],
       body: IndexedStack(
         index: activeIndex,
         children: const [
@@ -124,61 +156,6 @@ class _TenantShellViewState extends State<_TenantShellView> {
           TenantChatScreen(embedded: true),
           TenantProfileScreen(),
         ],
-      ),
-      // ต่างจาก AdminShell ตรงที่แสดง nav เสมอ แม้ผู้เช่ายังไม่มีห้อง —
-      // แท็บโปรไฟล์คือที่ที่ผู้เช่าจะเห็นคำขอเข้าหอของตัวเอง
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black12, blurRadius: 10, offset: Offset(0, -2)),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: activeIndex,
-          onTap: (index) => _onItemTapped(context, index),
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: AppColors.card,
-          selectedItemColor: AppColors.primary,
-          unselectedItemColor: AppColors.mutedForeground,
-          selectedLabelStyle:
-              const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          unselectedLabelStyle:
-              const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-          items: [
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: 'หน้าหลัก',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.receipt_long_outlined),
-              activeIcon: Icon(Icons.receipt_long),
-              label: 'บิล',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.build_outlined),
-              activeIcon: Icon(Icons.build),
-              label: 'แจ้งซ่อม',
-            ),
-            BottomNavigationBarItem(
-              icon: NavBadgeIcon(
-                count: viewModel.unreadMessageCount,
-                icon: Icons.chat_bubble_outline,
-              ),
-              activeIcon: NavBadgeIcon(
-                count: viewModel.unreadMessageCount,
-                icon: Icons.chat_bubble,
-              ),
-              label: 'แชท',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
-              label: 'โปรไฟล์',
-            ),
-          ],
-        ),
       ),
     );
   }

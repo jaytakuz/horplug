@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/dashboard_view_model.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../utils/formatters.dart';
@@ -76,18 +77,29 @@ class _DashboardView extends StatelessWidget {
       onRefresh: viewModel.loadRooms,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.4,
-              children: [
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: ContentBounds(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+            // การ์ดสรุปสี่ใบ: สองแถวบนมือถือ แถวเดียวเมื่อมีที่พอ · ปล่อยให้
+            // สองคอลัมน์ยืดออกบนจอกว้างทำให้การ์ดสูงเท่าจอครึ่งหนึ่งโดยมีตัวเลข
+            // อยู่ตรงกลางเพียงตัวเดียว
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = gridColumnsFor(
+                  availableWidth: constraints.maxWidth,
+                  minItemWidth: 240,
+                );
+
+                return GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: columns,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.4,
+                  children: [
                 StatCard(
                   title: 'รายได้คาดการณ์',
                   value: formatBaht(viewModel.estimatedMonthlyRevenue),
@@ -113,7 +125,9 @@ class _DashboardView extends StatelessWidget {
                   icon: Icons.meeting_room_outlined,
                   variant: BadgeVariant.warning,
                 ),
-              ],
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
             Row(
@@ -171,10 +185,13 @@ class _DashboardView extends StatelessWidget {
             // ("เมนูด่วน" กับ "ทางลัด") ทำให้ดูเหมือนคนละฟีเจอร์ทั้งที่เหมือนกัน
             Text('ทางลัด', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            GridView.count(
+            // สี่ปุ่มเรียงแถวเดียวบนมือถือกำลังพอดี · บนจอกว้างสี่คอลัมน์ทำให้
+            // ปุ่มบานเป็นสี่เหลี่ยมจัตุรัสใหญ่ที่มีไอคอนเล็กๆ ลอยอยู่ตรงกลาง
+            // จึงกำหนดความกว้างสูงสุดต่อปุ่มแทนที่จะกำหนดจำนวนคอลัมน์
+            GridView.extent(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 4,
+              maxCrossAxisExtent: 160,
               mainAxisSpacing: 12,
               crossAxisSpacing: 12,
               children: [
@@ -209,7 +226,8 @@ class _DashboardView extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 24),
-          ],
+            ],
+          ),
         ),
       ),
     );

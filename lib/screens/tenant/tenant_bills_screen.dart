@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../services/invoice_pdf.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/error_message.dart';
 import '../../viewmodels/tenant_bills_view_model.dart';
@@ -95,9 +96,10 @@ class _TenantBillsView extends StatelessWidget {
 
     return RefreshIndicator(
       onRefresh: viewModel.load,
-      child: ListView(
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: contentInsets(context, availableWidth: constraints.maxWidth),
         children: [
           Text('บิลของฉัน', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
@@ -135,6 +137,7 @@ class _TenantBillsView extends StatelessWidget {
           const SizedBox(height: 16),
           ..._buildList(context, viewModel),
         ],
+        ),
       ),
     );
   }

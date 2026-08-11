@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/maintenance_view_model.dart';
 import '../../widgets/maintenance_request_card.dart';
@@ -109,20 +110,23 @@ class _MaintenanceHistoryView extends StatelessWidget {
 
     return RefreshIndicator(
       onRefresh: viewModel.loadRequests,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: viewModel.requests.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final request = viewModel.requests[index];
-          return MaintenanceRequestCard(
-            request: request,
-            readOnly: readOnly,
-            isUpdating: viewModel.isUpdating,
-            onEditCleaningFee: (fee) =>
-                viewModel.updateCleaningFee(request, fee),
-          );
-        },
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView.separated(
+          padding:
+              contentInsets(context, availableWidth: constraints.maxWidth),
+          itemCount: viewModel.requests.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final request = viewModel.requests[index];
+            return MaintenanceRequestCard(
+              request: request,
+              readOnly: readOnly,
+              isUpdating: viewModel.isUpdating,
+              onEditCleaningFee: (fee) =>
+                  viewModel.updateCleaningFee(request, fee),
+            );
+          },
+        ),
       ),
     );
   }

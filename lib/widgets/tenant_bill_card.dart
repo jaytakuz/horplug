@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/tenant_dashboard_view_model.dart'
-    show billStatusLabel, billStatusVariant, thaiMonthName;
+    show billStatusLabelOf, billStatusVariant, thaiMonthName;
 import 'reusable_widgets.dart';
 import '../utils/formatters.dart';
 
@@ -49,7 +49,7 @@ class TenantBillCard extends StatelessWidget {
                 ),
               ),
               StatusBadge(
-                label: billStatusLabel(bill.status),
+                label: billStatusLabelOf(bill),
                 variant: billStatusVariant(bill.status),
               ),
             ],

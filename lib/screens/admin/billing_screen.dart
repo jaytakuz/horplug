@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../viewmodels/auth_view_model.dart' show AuthScope;
@@ -40,7 +41,12 @@ class _BillingView extends StatelessWidget {
     final viewModel = context.watch<BillingViewModel>();
     final filteredInvoices = viewModel.filteredInvoices;
 
-    return Column(
+    // ครอบทั้งคอลัมน์ รวมหัวหน้าจอกับตัวกรอง ไม่ใช่เฉพาะรายการบิล — ไม่งั้น
+    // ปุ่ม "ออกบิลใหม่" จะไปอยู่ริมขวาสุดของจอ 1,400px ห่างจากรายการที่มัน
+    // เกี่ยวข้องด้วยจนดูเหมือนคนละส่วนของหน้า
+    return ContentBounds(
+      gutter: 0,
+      child: Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
@@ -120,6 +126,7 @@ class _BillingView extends StatelessWidget {
                     ),
         ),
       ],
+      ),
     );
   }
 

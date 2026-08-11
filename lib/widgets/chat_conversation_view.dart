@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../theme/breakpoints.dart';
 import 'invoice_chat_card.dart';
 import 'maintenance_request_dialog.dart';
 
@@ -243,7 +244,13 @@ class _ChatConversationViewState extends State<ChatConversationView> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    // ห่อทั้ง Stack ไม่ใช่เฉพาะรายการข้อความ — แถบพิมพ์ต้องกว้างเท่ากับสาย
+    // สนทนา ไม่งั้นบนจอกว้างช่องพิมพ์จะทอดยาวเต็มจอในขณะที่ข้อความอยู่ตรงกลาง
+    // เป็นคอลัมน์แคบๆ ดูเหมือนเป็นคนละหน้าจอกัน
+    return ContentBounds(
+      maxWidth: 900,
+      gutter: 0,
+      child: Stack(
       children: [
         // ครอบเฉพาะพื้นที่ข้อความ ไม่ครอบแถบพิมพ์ — แตะที่ว่างเพื่อปิดแป้นพิมพ์
         //
@@ -303,6 +310,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
           child: _buildInputBar(),
         ),
       ],
+      ),
     );
   }
 

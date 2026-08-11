@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../viewmodels/meter_view_model.dart';
@@ -152,7 +153,9 @@ class _MeterViewState extends State<_MeterView>
       _resetFieldControllers();
     }
 
-    return Column(
+    return ContentBounds(
+      gutter: 0,
+      child: Column(
       children: [
         _buildHeader(viewModel),
         _buildPeriodSelector(viewModel),
@@ -180,6 +183,7 @@ class _MeterViewState extends State<_MeterView>
                 ),
         ),
       ],
+      ),
     );
   }
 
