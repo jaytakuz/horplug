@@ -238,7 +238,9 @@ class TenantDashboardViewModel extends ChangeNotifier
     try {
       final all = await _service.fetchMaintenanceRequests(roomId: roomId!);
       openRequests = all
-          .where((request) => request.status != MaintenanceStatus.completed)
+          .where((request) =>
+              request.status != MaintenanceStatus.completed &&
+              request.status != MaintenanceStatus.cancelled)
           .toList();
     } catch (error) {
       maintenanceErrorMessage = formatErrorMessage(error);

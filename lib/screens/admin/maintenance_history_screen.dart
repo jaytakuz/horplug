@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../theme/app_theme.dart';
-import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/maintenance_view_model.dart';
 import '../../widgets/maintenance_request_card.dart';
@@ -32,23 +31,41 @@ class MaintenanceHistoryScreen extends StatelessWidget {
         roomId: roomId,
         landlordId: landlordId,
       )..loadRequests(),
-      child: _MaintenanceHistoryView(roomNumber: roomNumber, readOnly: readOnly),
+      child:
+          _MaintenanceHistoryView(roomNumber: roomNumber, readOnly: readOnly),
     );
   }
 }
 
-class _MaintenanceHistoryView extends StatelessWidget {
-  const _MaintenanceHistoryView({required this.roomNumber, required this.readOnly});
+class _MaintenanceHistoryView extends StatefulWidget {
+  const _MaintenanceHistoryView(
+      {required this.roomNumber, required this.readOnly});
 
   final String roomNumber;
   final bool readOnly;
+
+  @override
+  State<_MaintenanceHistoryView> createState() =>
+      _MaintenanceHistoryViewState();
+}
+
+class _MaintenanceHistoryViewState extends State<_MaintenanceHistoryView> {
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<MaintenanceViewModel>();
 
     return Scaffold(
-      appBar: AppBar(title: Text('ประวัติการแจ้งซ่อม/ทำความสะอาด ห้อง $roomNumber')),
+      appBar: AppBar(
+          title:
+              Text('ประวัติการแจ้งซ่อม/ทำความสะอาด ห้อง ${widget.roomNumber}')),
       body: _buildBody(context, viewModel),
     );
   }
@@ -108,25 +125,85 @@ class _MaintenanceHistoryView extends StatelessWidget {
       );
     }
 
+    final requests = viewModel.filteredRequests;
     return RefreshIndicator(
       onRefresh: viewModel.loadRequests,
-      child: LayoutBuilder(
-        builder: (context, constraints) => ListView.separated(
-          padding:
-              contentInsets(context, availableWidth: constraints.maxWidth),
-          itemCount: viewModel.requests.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final request = viewModel.requests[index];
-            return MaintenanceRequestCard(
-              request: request,
-              readOnly: readOnly,
-              isUpdating: viewModel.isUpdating,
-              onEditCleaningFee: (fee) =>
-                  viewModel.updateCleaningFee(request, fee),
-            );
-          },
-        ),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          PaperCard(
+            padding: EdgeInsets.zero,
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'ค้นหารายการ',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: viewModel.searchQuery.trim().isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () {
+                          _searchController.clear();
+                          viewModel.setSearchQuery('');
+                        },
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onChanged: viewModel.setSearchQuery,
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilterChipGroup(
+            title: 'สถานะ',
+            options: maintenanceHistoryStatusFilters,
+            selectedValue: viewModel.selectedStatusFilter,
+            onSelected: viewModel.setStatusFilter,
+          ),
+          const SizedBox(height: 16),
+          if (requests.isEmpty)
+            _buildNoResultsState(context, viewModel)
+          else
+            for (final request in requests) ...[
+              MaintenanceRequestCard(
+                request: request,
+                readOnly: widget.readOnly,
+                isUpdating: viewModel.isUpdating,
+                onEditCleaningFee: (fee) =>
+                    viewModel.updateCleaningFee(request, fee),
+              ),
+              const SizedBox(height: 12),
+            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoResultsState(
+      BuildContext context, MaintenanceViewModel viewModel) {
+    final hasSearch = viewModel.searchQuery.trim().isNotEmpty;
+    final hasStatusFilter =
+        viewModel.selectedStatusFilter != maintenanceHistoryStatusFilters.first;
+    return PaperCard(
+      child: Column(
+        children: [
+          const Icon(Icons.search_off,
+              color: AppColors.mutedForeground, size: 40),
+          const SizedBox(height: 12),
+          Text('ไม่พบรายการที่ค้นหา',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            hasSearch && hasStatusFilter
+                ? 'ลองเปลี่ยนคำค้นหาหรือสถานะ'
+                : hasSearch
+                    ? 'ลองเปลี่ยนคำค้นหา'
+                    : 'ลองเลือกสถานะอื่น',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
     );
   }

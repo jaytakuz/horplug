@@ -1,32 +1,6 @@
 enum RoomStatus { occupied, vacant, maintenance }
 
-enum InvoiceStatus { unpaid, pending, paid, voided }
-
-/// วิธีที่ผู้เช่าแจ้งว่าชำระบิล
-///
-/// จงใจไม่เป็นสถานะของบิล — บิลที่รอเจ้าของหอรับรองอยู่ที่ `pending` เหมือนกัน
-/// ทั้งคู่ เพราะขั้นของบิลเหมือนกันทุกประการ ต่างแค่หลักฐานที่เจ้าของหอต้องดู
-/// การทำเป็นสถานะที่ห้าจะทำให้ทุก exhaustive switch ในแอปพัง และทำให้
-/// `canTransition` ต้องรู้เรื่องวิธีจ่ายซึ่งไม่ใช่หน้าที่ของมัน
-enum PaymentMethod {
-  /// โอนเงิน (สแกนคิวอาร์หรือโอนเลขบัญชี) แล้วแนบสลิปเป็นหลักฐาน
-  transfer,
-
-  /// จ่ายเงินสดให้เจ้าของหอโดยตรง ไม่มีสลิป เจ้าของหอต้องยืนยันการรับเงินเอง
-  cash,
-}
-
-/// เหตุผลที่ห้องหนึ่งออกบิลในงวดนี้ไม่ได้
-enum SkipReason { noTenant, noMeterReading, alreadyIssued }
-
-/// ค่ามิเตอร์ที่คำนวณเสร็จแล้วหนึ่งชนิด — แยกออกมาเพื่อให้ buildDraft
-/// รับข้อมูลที่มีชนิดชัดเจนแทน Map ดิบจาก PostgREST
-class MeterCharge {
-  final double units;
-  final double amount;
-
-  const MeterCharge({required this.units, required this.amount});
-}
+enum InvoiceStatus { unpaid, pending, paid }
 
 enum MessageType {
   text,
@@ -36,7 +10,6 @@ enum MessageType {
   image,
   cleaningRequest,
   cleaningUpdate,
-  invoice,
 }
 
 enum AppRole { landlord, tenant }
@@ -149,178 +122,39 @@ class Tenant {
   });
 }
 
-/// บิลหนึ่งใบที่ออกแล้ว — หนึ่งแถวในตาราง invoices
-///
-/// ตัวเลขทุกตัวถูกตรึงไว้ ณ วันออกบิล การแก้มิเตอร์ย้อนหลังจึงไม่กระทบบิลที่
-/// ออกไปแล้ว ร่างที่ยังไม่ออกใช้ [InvoiceDraft] คนละชนิดกัน
 class Invoice {
-  final int dbId;
-  final String invoiceNo;
-  final int roomDbId;
+  final String id;
   final String roomNumber;
-  final String? tenantId;
   final String tenantName;
-  final int billingMonth;
-  final int billingYear;
-
-  final double roomPrice;
+  final double waterUnits;
   final double electricityUnits;
-  final double electricityCost;
+  final double roomPrice;
   final double waterCost;
+  final double electricityCost;
   final double cleaningFee;
-  final double total;
-
   final InvoiceStatus status;
-  final DateTime dueDate;
-  final DateTime issuedAt;
-  final String? slipUrl;
-  final DateTime? slipSubmittedAt;
-  final String? rejectionReason;
-  final DateTime? paidAt;
-  final int revision;
-  final String? voidReason;
+  final DateTime date;
+  final bool hasSlip;
 
-  /// วิธีที่ผู้เช่าแจ้งว่าชำระ · null = ยังไม่ได้แจ้ง
-  ///
-  /// แยกจาก [status] เพราะเป็นคนละคำถาม — status บอกว่าบิลอยู่ขั้นไหน
-  /// ส่วนนี่บอกว่าหลักฐานคืออะไร บิลที่ `pending` จึงมีได้สองหน้าตา: รอตรวจสลิป
-  /// กับรอยืนยันรับเงินสด ซึ่งเจ้าของหอต้องทำคนละอย่าง
-  final PaymentMethod? paymentMethod;
-
-  const Invoice({
-    required this.dbId,
-    required this.invoiceNo,
-    required this.roomDbId,
+  Invoice({
+    required this.id,
     required this.roomNumber,
-    this.tenantId,
     required this.tenantName,
-    required this.billingMonth,
-    required this.billingYear,
-    this.roomPrice = 0,
-    this.electricityUnits = 0,
-    this.electricityCost = 0,
-    this.waterCost = 0,
+    required this.waterUnits,
+    required this.electricityUnits,
+    required this.roomPrice,
+    required this.waterCost,
+    required this.electricityCost,
     this.cleaningFee = 0,
-    required this.total,
     required this.status,
-    required this.dueDate,
-    required this.issuedAt,
-    this.slipUrl,
-    this.slipSubmittedAt,
-    this.rejectionReason,
-    this.paidAt,
-    this.revision = 1,
-    this.voidReason,
-    this.paymentMethod,
+    required this.date,
+    this.hasSlip = false,
   });
 
-  /// งวดของบิล (วันที่ 1 ของเดือนนั้น) — ใช้เรียงและแสดงชื่อเดือน
-  DateTime get period => DateTime(billingYear, billingMonth, 1);
-
-  bool get hasSlip => slipUrl != null;
-  bool get isVoided => status == InvoiceStatus.voided;
-
-  /// รอเจ้าของหอยืนยันว่ารับเงินสดแล้ว — ไม่มีสลิปให้ตรวจ
-  bool get awaitsCashConfirmation =>
-      status == InvoiceStatus.pending && paymentMethod == PaymentMethod.cash;
-
-  /// รอเจ้าของหอตรวจสลิปที่ผู้เช่าแนบมา
-  bool get awaitsSlipReview =>
-      status == InvoiceStatus.pending && !awaitsCashConfirmation;
-
-  Invoice copyWith({
-    InvoiceStatus? status,
-    String? slipUrl,
-    DateTime? slipSubmittedAt,
-    String? rejectionReason,
-    DateTime? paidAt,
-    String? voidReason,
-    PaymentMethod? paymentMethod,
-  }) {
-    return Invoice(
-      dbId: dbId,
-      invoiceNo: invoiceNo,
-      roomDbId: roomDbId,
-      roomNumber: roomNumber,
-      tenantId: tenantId,
-      tenantName: tenantName,
-      billingMonth: billingMonth,
-      billingYear: billingYear,
-      roomPrice: roomPrice,
-      electricityUnits: electricityUnits,
-      electricityCost: electricityCost,
-      waterCost: waterCost,
-      cleaningFee: cleaningFee,
-      total: total,
-      status: status ?? this.status,
-      dueDate: dueDate,
-      issuedAt: issuedAt,
-      slipUrl: slipUrl ?? this.slipUrl,
-      slipSubmittedAt: slipSubmittedAt ?? this.slipSubmittedAt,
-      rejectionReason: rejectionReason ?? this.rejectionReason,
-      paidAt: paidAt ?? this.paidAt,
-      revision: revision,
-      voidReason: voidReason ?? this.voidReason,
-      paymentMethod: paymentMethod ?? this.paymentMethod,
-    );
-  }
-}
-
-/// ร่างบิลที่คำนวณสดจากมิเตอร์ ยังไม่มีตัวตนในฐานข้อมูล
-///
-/// แยกจาก [Invoice] ที่เป็นแถวจริง เพื่อให้ compiler ปฏิเสธการเผลอเอาตัวเลข
-/// ที่คำนวณสดไปแสดงหรือไปพิมพ์ลง PDF แทนตัวเลขที่ตรึงไว้
-class InvoiceDraft {
-  final int roomDbId;
-  final String roomNumber;
-  final String? tenantId;
-  final String tenantName;
-  final int billingMonth;
-  final int billingYear;
-  final double roomPrice;
-  final double electricityUnits;
-  final double electricityCost;
-  final double waterCost;
-  final double cleaningFee;
-  final SkipReason? skipReason;
-
-  const InvoiceDraft({
-    required this.roomDbId,
-    required this.roomNumber,
-    this.tenantId,
-    required this.tenantName,
-    required this.billingMonth,
-    required this.billingYear,
-    this.roomPrice = 0,
-    this.electricityUnits = 0,
-    this.electricityCost = 0,
-    this.waterCost = 0,
-    this.cleaningFee = 0,
-    this.skipReason,
-  });
-
-  bool get canIssue => skipReason == null;
-
-  double get total => roomPrice + electricityCost + waterCost + cleaningFee;
+  double get total => roomPrice + waterCost + electricityCost + cleaningFee;
 }
 
 enum UtilityType { electricity, water }
-
-/// หน่วยไฟที่ใช้จริงระหว่างสองครั้งที่จด รองรับมิเตอร์ 4 หลักที่หมุนกลับ
-/// 9999 → 0000
-///
-/// อยู่นอกคลาสเพราะ [ElectricityRecord] ไม่ใช่ที่เดียวที่ต้องใช้กฎนี้ —
-/// `previewDrafts` อ่านแถวมิเตอร์ดิบจากฐานข้อมูลแล้วประกอบร่างบิลเอง ตอนที่กฎ
-/// ยังอยู่ใน getter ของคลาส ที่นั่นเขียนเป็นการลบตรงๆ ทำให้บิลของงวดที่มิเตอร์
-/// หมุนกลับถูกตรึงด้วยหน่วยติดลบคู่กับค่าไฟที่ถูกต้อง
-double meterUnitsUsed({
-  required double previousReading,
-  double? currentReading,
-}) {
-  if (currentReading == null) return 0;
-  if (currentReading >= previousReading) return currentReading - previousReading;
-  return (10000 - previousReading) + currentReading;
-}
 
 class ElectricityRecord {
   final String? id;
@@ -350,13 +184,16 @@ class ElectricityRecord {
   });
 
   // Returns true when meter wrapped around from 9999 → 0000
-  bool get isOverflow => currentReading != null && currentReading! < previousReading;
+  bool get isOverflow =>
+      currentReading != null && currentReading! < previousReading;
 
   // Handles 4-digit meter overflow: (10000 - prev) + current
-  double get unitsUsed => meterUnitsUsed(
-        previousReading: previousReading,
-        currentReading: currentReading,
-      );
+  double get unitsUsed {
+    if (currentReading == null) return 0;
+    if (currentReading! >= previousReading)
+      return currentReading! - previousReading;
+    return (10000 - previousReading) + currentReading!;
+  }
 
   double get amount => unitsUsed * unitRate;
 
@@ -425,7 +262,6 @@ class ChatMessage {
   final MessageType type;
   final String? attachmentUrl;
   final int? maintenanceRequestId;
-  final int? invoiceId;
 
   ChatMessage({
     required this.id,
@@ -436,7 +272,6 @@ class ChatMessage {
     this.type = MessageType.text,
     this.attachmentUrl,
     this.maintenanceRequestId,
-    this.invoiceId,
   });
 }
 
@@ -446,6 +281,7 @@ class ChatPreview {
   final String floor;
   final String tenantName;
   final String lastMessage;
+  final DateTime? lastMessageAt;
   final int unreadCount;
 
   ChatPreview({
@@ -454,6 +290,7 @@ class ChatPreview {
     required this.floor,
     required this.tenantName,
     required this.lastMessage,
+    this.lastMessageAt,
     required this.unreadCount,
   });
 }
@@ -510,42 +347,61 @@ class DormitoryInfo {
       (landlordEmail != null && landlordEmail!.trim().isNotEmpty);
 }
 
-/// ช่องทางรับเงินของหอหนึ่งแห่ง มาจากตาราง dormitory_payment_channels
+/// บิลหนึ่งใบในมุมมองของผู้เช่า
 ///
-/// ไม่มีค่าตั้งต้น และไม่มีตัวอย่าง — ถ้าเจ้าของหอยังไม่ได้ตั้งค่า ผู้เรียกจะได้
-/// null แล้วแผ่นชำระเงินบอกผู้เช่าตามตรงว่ายังไม่มีข้อมูล การเดาเลขบัญชีให้
-/// อันตรายกว่าการไม่มีอะไรให้เลย
+/// [invoice] คือรายการค่าใช้จ่ายจริงที่คำนวณจากมิเตอร์ ส่วน [status] /
+/// [dueDate] / [paidAt] / [slipUrl] ยังเป็นค่าจำลอง เพราะยังไม่มีตาราง
+/// invoices — ฟีเจอร์ถัดไป "Invoice Generation" จะมาแทนที่เฉพาะส่วนนี้
+/// โดยที่ UI ไม่ต้องแก้ (ดู lib/services/tenant_billing_source.dart)
+class TenantBill {
+  final Invoice invoice;
+  final InvoiceStatus status;
+  final DateTime? dueDate;
+  final DateTime? paidAt;
+  final String? slipUrl;
+
+  const TenantBill({
+    required this.invoice,
+    required this.status,
+    this.dueDate,
+    this.paidAt,
+    this.slipUrl,
+  });
+
+  String get id => invoice.id;
+  DateTime get period => invoice.date;
+  double get total => invoice.total;
+
+  TenantBill copyWith({
+    InvoiceStatus? status,
+    DateTime? dueDate,
+    DateTime? paidAt,
+    String? slipUrl,
+  }) {
+    return TenantBill(
+      invoice: invoice,
+      status: status ?? this.status,
+      dueDate: dueDate ?? this.dueDate,
+      paidAt: paidAt ?? this.paidAt,
+      slipUrl: slipUrl ?? this.slipUrl,
+    );
+  }
+}
+
+/// ช่องทางรับชำระเงินของหอพัก (ยังเป็นค่าจำลอง)
 class PaymentChannel {
-  /// เลขพร้อมเพย์ 10 หรือ 13 หลัก · ใช้สร้าง QR ที่ฝังยอดของบิลไว้แล้ว
-  final String? promptPayId;
-
-  /// ช่องทางสำรองด้วยเลขบัญชี · หอที่ใช้พร้อมเพย์อย่างเดียวปล่อยว่างได้
-  final String? bankName;
-  final String? accountNo;
-
-  /// ผู้เช่าต้องเห็นชื่อปลายทางเพื่อเทียบก่อนกดโอน จึงมีเสมอ
+  final String promptPayId;
   final String accountName;
 
   const PaymentChannel({
+    required this.promptPayId,
     required this.accountName,
-    this.promptPayId,
-    this.bankName,
-    this.accountNo,
   });
-
-  bool get hasPromptPay =>
-      promptPayId != null && promptPayId!.trim().isNotEmpty;
-
-  bool get hasBankAccount =>
-      bankName != null &&
-      bankName!.trim().isNotEmpty &&
-      accountNo != null &&
-      accountNo!.trim().isNotEmpty;
 }
 
 enum MaintenanceRequestType { repair, cleaning }
 
-enum MaintenanceStatus { pending, inProgress, completed }
+enum MaintenanceStatus { pending, inProgress, completed, cancelled }
 
 class MaintenanceRequest {
   final int id;
