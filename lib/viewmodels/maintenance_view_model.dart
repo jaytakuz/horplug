@@ -11,6 +11,8 @@ String maintenanceStatusLabel(MaintenanceStatus status) {
       return 'กำลังดำเนินการ';
     case MaintenanceStatus.completed:
       return 'เสร็จสิ้น';
+    case MaintenanceStatus.cancelled:
+      return 'ยกเลิก';
   }
 }
 
@@ -22,6 +24,14 @@ String maintenanceRequestTypeLabel(MaintenanceRequestType type) {
       return 'ทำความสะอาด';
   }
 }
+
+const maintenanceHistoryStatusFilters = [
+  'ทั้งหมด',
+  'รอดำเนินการ',
+  'กำลังดำเนินการ',
+  'เสร็จสิ้น',
+  'ยกเลิก',
+];
 
 class MaintenanceViewModel extends ChangeNotifier {
   MaintenanceViewModel({
@@ -38,6 +48,34 @@ class MaintenanceViewModel extends ChangeNotifier {
   String? errorMessage;
   List<MaintenanceRequest> requests = [];
   bool isUpdating = false;
+  String searchQuery = '';
+  String selectedStatusFilter = maintenanceHistoryStatusFilters.first;
+
+  List<MaintenanceRequest> get filteredRequests {
+    final query = searchQuery.trim().toLowerCase();
+    return requests.where((request) {
+      final matchesStatus =
+          selectedStatusFilter == maintenanceHistoryStatusFilters.first ||
+              maintenanceStatusLabel(request.status) == selectedStatusFilter;
+      final searchableText = [
+        request.description,
+        maintenanceRequestTypeLabel(request.requestType),
+      ].join(' ').toLowerCase();
+      return matchesStatus && (query.isEmpty || searchableText.contains(query));
+    }).toList();
+  }
+
+  void setSearchQuery(String value) {
+    if (searchQuery == value) return;
+    searchQuery = value;
+    notifyListeners();
+  }
+
+  void setStatusFilter(String value) {
+    if (selectedStatusFilter == value) return;
+    selectedStatusFilter = value;
+    notifyListeners();
+  }
 
   Future<void> loadRequests() async {
     isLoading = true;
@@ -51,6 +89,28 @@ class MaintenanceViewModel extends ChangeNotifier {
     } catch (error) {
       errorMessage = error.toString();
       isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateStatus(
+      MaintenanceRequest request, MaintenanceStatus status) async {
+    if (isUpdating) return;
+
+    isUpdating = true;
+    notifyListeners();
+
+    try {
+      await _service.updateMaintenanceStatus(
+        requestId: request.id,
+        roomId: roomId,
+        landlordId: landlordId,
+        status: status,
+        requestType: request.requestType,
+      );
+      await loadRequests();
+    } finally {
+      isUpdating = false;
       notifyListeners();
     }
   }

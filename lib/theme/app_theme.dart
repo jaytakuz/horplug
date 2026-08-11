@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'breakpoints.dart';
+
 class AppColors {
   static const primary = Color(0xFF1B3A5C);
   static const primaryForeground = Colors.white;
@@ -62,6 +64,11 @@ ThemeData buildAppTheme() {
     ),
     dialogTheme: const DialogThemeData(
       backgroundColor: AppColors.card,
+      // กล่องโต้ตอบมีความกว้างเท่ากับลูกของมัน และลูกส่วนใหญ่เป็น TextField
+      // ซึ่งขอความกว้างเท่าที่มี — บนหน้าต่างเว็บ 1,400px จึงได้กล่องยาว 1,320px
+      // ที่มีช่องกรอกเดียว · กำหนดที่ธีมทีเดียวครอบทุกกล่องในแอป แทนที่จะไล่ใส่
+      // ตามจุดเรียกทั้งสิบกว่าแห่งแล้วลืมบางแห่ง
+      constraints: BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
       titleTextStyle: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.bold,
@@ -71,6 +78,11 @@ ThemeData buildAppTheme() {
         fontSize: 14,
         color: AppColors.primary,
       ),
+    ),
+    // เหตุผลเดียวกับกล่องโต้ตอบ · แผ่นที่ทอดยาวเต็มจอกว้างทำให้ปุ่มยืนยันไป
+    // อยู่คนละมุมจอกับเนื้อหาที่มันยืนยัน
+    bottomSheetTheme: const BottomSheetThemeData(
+      constraints: BoxConstraints(maxWidth: 640),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,

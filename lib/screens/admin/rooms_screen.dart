@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/action_result.dart';
 import '../../viewmodels/rooms_view_model.dart';
+import '../../widgets/create_rooms_dialog.dart';
 import '../../widgets/reusable_widgets.dart';
 import 'maintenance_history_screen.dart';
 import '../../utils/formatters.dart';
@@ -106,13 +108,21 @@ class _RoomsViewState extends State<_RoomsView> {
               ),
               const SizedBox(height: 8),
               Text(
-                'เริ่มต้นโดยการเพิ่มห้องพักใหม่',
+                'สร้างห้องทั้งตึกรวดเดียว หรือเพิ่มทีละห้องก็ได้',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 20),
+              // หอที่ยังไม่มีห้องเลยแทบไม่มีใครอยากเพิ่มทีละห้อง ปุ่มหลักจึงเป็น
+              // การสร้างทั้งชุด ส่วนการเพิ่มทีละห้องยังอยู่เป็นทางเลือกรอง
               PrimaryButton(
-                label: 'เพิ่มห้องพัก',
-                icon: Icons.add,
+                label: 'สร้างห้องหลายห้อง',
+                icon: Icons.grid_view,
+                onPressed: () => _openCreateRoomsDialog(context, viewModel),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('เพิ่มทีละห้อง'),
                 onPressed: () => _showAddRoomDialog(context, viewModel),
               ),
             ],
@@ -125,12 +135,15 @@ class _RoomsViewState extends State<_RoomsView> {
       onRefresh: viewModel.loadData,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        child: Column(
-          children: [
-            _buildRoomStatsSection(context, viewModel, stats),
-            _buildFilterSection(context, viewModel),
-            _buildRoomsListSection(context, viewModel, filteredRooms),
-          ],
+        child: ContentBounds(
+          gutter: 0,
+          child: Column(
+            children: [
+              _buildRoomStatsSection(context, viewModel, stats),
+              _buildFilterSection(context, viewModel),
+              _buildRoomsListSection(context, viewModel, filteredRooms),
+            ],
+          ),
         ),
       ),
     );
@@ -143,61 +156,67 @@ class _RoomsViewState extends State<_RoomsView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
+          // หัวข้อกับปุ่มอยู่คนละแถว — Wrap ที่เป็นลูกแบบไม่ยืดหยุ่นของ Row
+          // จะได้ maxWidth เป็นอนันต์ มันจึงไม่มีวันขึ้นบรรทัดใหม่และล้นออกนอกจอ
+          // แทนที่จะ wrap · ปุ่มสามอันรวมกันกว้างเกินจอโทรศัพท์ทั่วไปอยู่แล้ว
+          Text(
+            'ห้องพักทั้งหมด (${stats['total']})',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Expanded(
-                child: Text(
-                  'ห้องพักทั้งหมด (${stats['total']})',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+              PrimaryButton(
+                label: 'เพิ่มห้อง',
+                icon: Icons.add,
+                onPressed: () => _showAddRoomDialog(context, viewModel),
               ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.end,
-                children: [
-                  PrimaryButton(
-                    label: 'เพิ่มห้อง',
-                    icon: Icons.add,
-                    onPressed: () => _showAddRoomDialog(context, viewModel),
-                  ),
-                  PrimaryButton(
-                    label: 'จัดการ',
-                    icon: Icons.people_alt_outlined,
-                    onPressed: () =>
-                        _showTenantManagementSheet(context, viewModel),
-                  ),
-                ],
+              // หอที่มีห้องอยู่แล้วยังต่อเติมชั้นใหม่ได้ การสร้างเป็นชุดจึงไม่ใช่
+              // เรื่องของตอนเปิดหอครั้งแรกอย่างเดียว
+              PrimaryButton(
+                label: 'สร้างหลายห้อง',
+                icon: Icons.grid_view,
+                onPressed: () => _openCreateRoomsDialog(context, viewModel),
+              ),
+              PrimaryButton(
+                label: 'จัดการ',
+                icon: Icons.people_alt_outlined,
+                onPressed: () =>
+                    _showTenantManagementSheet(context, viewModel),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            height: 180,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
-                return GridView.count(
-                  crossAxisCount: crossAxisCount,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 2.5,
-                  children: [
-                    _buildStatTile(context, 'ทั้งหมด',
-                        stats['total'].toString(), AppColors.primary),
-                    _buildStatTile(context, 'มีคนอยู่',
-                        stats['occupied'].toString(), AppColors.primary),
-                    _buildStatTile(context, 'ว่าง', stats['vacant'].toString(),
-                        AppColors.success),
-                    _buildStatTile(context, 'ซ่อมบำรุง',
-                        stats['maintenance'].toString(), AppColors.destructive),
-                  ],
-                );
-              },
-            ),
+          // ไม่มี SizedBox ความสูงตายตัวครอบอีกแล้ว — 180px พอดีกับสองแถวเท่านั้น
+          // พอจอกว้างจนเหลือแถวเดียวก็เหลือที่ว่างค้างไว้ครึ่งหนึ่ง และถ้าผู้ใช้
+          // ขยายขนาดตัวอักษรของระบบจนแถวสูงเกิน 180 ช่องก็ถูกตัดทิ้งเงียบๆ
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: cardGridDelegate(
+                  context,
+                  availableWidth: constraints.maxWidth,
+                  minItemWidth: 140,
+                  itemHeight: 80,
+                  itemCount: 4,
+                  spacing: 8,
+                ),
+                children: [
+                  _buildStatTile(context, 'ทั้งหมด', stats['total'].toString(),
+                      AppColors.primary),
+                  _buildStatTile(context, 'มีคนอยู่',
+                      stats['occupied'].toString(), AppColors.primary),
+                  _buildStatTile(context, 'ว่าง', stats['vacant'].toString(),
+                      AppColors.success),
+                  _buildStatTile(context, 'ซ่อมบำรุง',
+                      stats['maintenance'].toString(), AppColors.destructive),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -284,14 +303,31 @@ class _RoomsViewState extends State<_RoomsView> {
   Widget _buildCompactFilterSection(
       BuildContext context, RoomsViewModel viewModel) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: PaperCard(
-        padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 0),
+        padding: EdgeInsets.zero,
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: _buildSearchSection(context, viewModel),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'ค้นหาห้อง',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: viewModel.searchQuery.trim().isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () {
+                            _searchController.clear();
+                            viewModel.setSearchQuery('');
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onChanged: viewModel.setSearchQuery,
+              ),
             ),
             TextButton.icon(
               onPressed: () => _showFilterSheet(context, viewModel),
@@ -441,37 +477,6 @@ class _RoomsViewState extends State<_RoomsView> {
     );
   }
 
-  Widget _buildSearchSection(BuildContext context, RoomsViewModel viewModel) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
-      child: PaperCard(
-        padding: const EdgeInsets.all(0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                labelText: 'ค้นหาห้อง',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: viewModel.searchQuery.trim().isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () {
-                          _searchController.clear();
-                          viewModel.setSearchQuery('');
-                        },
-                      )
-                    : null,
-              ),
-              onChanged: viewModel.setSearchQuery,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildFilterGroup(
     BuildContext context, {
     required String title,
@@ -481,9 +486,10 @@ class _RoomsViewState extends State<_RoomsView> {
     String? note,
   }) {
     final isFloorGroup = title == 'ชั้น';
-    final shouldUseDropdown = isFloorGroup &&
-        options.length > 8 &&
-        MediaQuery.of(context).size.width < 600;
+    // ใช้จุดตัดกลางของแอป ไม่ใช่ 600 ที่เขียนไว้ตรงนี้เอง — ตัวเลขที่กระจายอยู่
+    // หลายที่จะเลื่อนออกจากกันทันทีที่มีใครแก้ที่เดียว
+    final shouldUseDropdown =
+        isFloorGroup && options.length > 8 && context.isCompact;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -495,7 +501,7 @@ class _RoomsViewState extends State<_RoomsView> {
             initialValue: selectedValue,
             decoration: InputDecoration(
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -1143,6 +1149,18 @@ class _RoomsViewState extends State<_RoomsView> {
       },
     );
   }
+
+  /// จำนวนชั้นที่กรอกไว้ตอนสมัครใช้เป็นค่าเริ่มต้นของกล่องเท่านั้น ไม่ผูกกับ
+  /// ห้องจริง — หอต่อเติมชั้นได้ และเจ้าของหออาจอยากสร้างทีละชั้น
+  Future<void> _openCreateRoomsDialog(
+    BuildContext context,
+    RoomsViewModel viewModel,
+  ) =>
+      showCreateRoomsDialog(
+        context,
+        viewModel: viewModel,
+        defaultTopFloor: AuthScope.of(context).dormitoryTotalFloors,
+      );
 
   void _showAddRoomDialog(BuildContext context, RoomsViewModel viewModel) {
     final roomNumberController = TextEditingController();

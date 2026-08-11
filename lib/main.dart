@@ -1,8 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'config/app_config.dart';
 import 'viewmodels/auth_view_model.dart';
 import 'models/models.dart';
 import 'screens/admin/admin_shell.dart';
@@ -10,6 +12,7 @@ import 'screens/admin/billing_screen.dart';
 import 'screens/admin/chat_screen.dart';
 import 'screens/admin/dashboard_screen.dart';
 import 'screens/admin/lease_screen.dart';
+import 'screens/admin/maintenance_overview_screen.dart';
 import 'screens/admin/meter_screen.dart';
 import 'screens/admin/rooms_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
@@ -22,21 +25,29 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
 
-  final supabaseUrl = dotenv.env['SUPABASE_URL'];
-  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+  // URL แบบไม่มี # บนเว็บ · ต้องเรียกก่อน runApp
+  //
+  // ไม่ใช่แค่ความสวยงาม — Supabase ส่งลิงก์รีเซ็ตรหัสผ่านกลับมาพร้อม token ใน
+  // fragment (`#access_token=...`) ถ้า go_router ใช้ fragment เป็นเส้นทางด้วย
+  // สองอย่างจะแย่ง `#` กันเอง แล้วลิงก์รีเซ็ตจะพังบนเว็บทั้งหมด
+  //
+  // แลกกับการที่เซิร์ฟเวอร์ต้อง rewrite ทุก path มาที่ index.html — ดู
+  // vercel.json ที่รากโปรเจกต์
+  usePathUrlStrategy();
 
-  if (supabaseUrl == null ||
-      supabaseUrl.isEmpty ||
-      supabaseAnonKey == null ||
-      supabaseAnonKey.isEmpty) {
-    throw Exception('Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env');
+  await AppConfig.loadDotEnvIfPresent();
+
+  // ค่าไม่ครบไม่ควรทำให้แอปตายเงียบๆ เป็นหน้าขาว · แสดงหน้าที่บอกว่าขาดอะไรและ
+  // ต้องทำอะไรแทน ซึ่งเป็นข้อความเดียวกับที่คนตั้งค่า Vercel ต้องการเห็นที่สุด
+  if (!AppConfig.isConfigured) {
+    runApp(const _MisconfiguredApp());
+    return;
   }
 
   await Supabase.initialize(
-    url: supabaseUrl,
-    anonKey: supabaseAnonKey,
+    url: AppConfig.supabaseUrl,
+    anonKey: AppConfig.supabaseAnonKey,
     authOptions: const FlutterAuthClientOptions(
       authFlowType: AuthFlowType.implicit,
     ),
@@ -46,6 +57,47 @@ Future<void> main() async {
   await authController.initialize();
 
   runApp(HorPlugApp(authController: authController));
+}
+
+/// หน้าที่แสดงแทนแอปทั้งตัวเมื่อยังไม่ได้ตั้งค่า Supabase
+class _MisconfiguredApp extends StatelessWidget {
+  const _MisconfiguredApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'HorPlug',
+      theme: buildAppTheme(),
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.settings_outlined,
+                      size: 48, color: AppColors.mutedForeground),
+                  const SizedBox(height: 16),
+                  Text(
+                    'ตั้งค่าไม่ครบ',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    AppConfig.missingConfigMessage,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class HorPlugApp extends StatelessWidget {
@@ -61,13 +113,32 @@ class HorPlugApp extends StatelessWidget {
     return AuthScope(
       controller: authController,
       child: MaterialApp.router(
-        title: 'HorPlug Admin Portal',
+        title: 'HorPlug — ระบบจัดการหอพัก',
         theme: buildAppTheme(),
+        scrollBehavior: const _AppScrollBehavior(),
         routerConfig: _buildRouter(authController),
         debugShowCheckedModeBanner: false,
       ),
     );
   }
+}
+
+/// พฤติกรรมการเลื่อนที่รองรับเมาส์
+///
+/// Flutter ไม่นับเมาส์เป็นอุปกรณ์ที่ลากเพื่อเลื่อนได้ตามค่าเริ่มต้น เพราะบนเดสก์ท็อป
+/// ปกติจะใช้ล้อหรือแถบเลื่อน · แต่แถวชิปตัวกรองที่เลื่อนแนวนอนในหน้าบิลกับหน้า
+/// มิเตอร์ไม่มีแถบเลื่อนให้จับ และล้อเมาส์เลื่อนแนวตั้งอย่างเดียว ผู้ใช้เว็บจึง
+/// เลื่อนแถวพวกนั้นไม่ได้เลยสักทาง
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  const _AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
 }
 
 GoRouter _buildRouter(AuthViewModel authController) {
@@ -176,6 +247,13 @@ GoRouter _buildRouter(AuthViewModel authController) {
           GoRoute(
             path: '/landlord/lease',
             builder: (context, state) => const LeaseScreen(),
+          ),
+          GoRoute(
+            path: '/landlord/maintenance',
+            builder: (context, state) {
+              final dormitoryId = AuthScope.of(context).dormitoryId;
+              return MaintenanceOverviewScreen(dormitoryId: dormitoryId ?? 0);
+            },
           ),
         ],
       ),

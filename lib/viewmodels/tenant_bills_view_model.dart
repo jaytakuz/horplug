@@ -1,13 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
 import '../services/tenant_billing_source.dart';
-import 'action_result.dart';
 import 'error_message.dart';
 import 'tenant_dashboard_view_model.dart' show billStatusLabel;
 import 'safe_notifier.dart';
+import 'tenant_slip_submission.dart';
 
 const tenantBillFilters = [
   'ทั้งหมด',
@@ -16,25 +14,26 @@ const tenantBillFilters = [
   'ชำระแล้ว',
 ];
 
-List<TenantBill> filterBills(List<TenantBill> bills, String filter) {
+List<Invoice> filterBills(List<Invoice> bills, String filter) {
   if (filter == 'ทั้งหมด') return bills;
   return bills.where((bill) => billStatusLabel(bill.status) == filter).toList();
 }
 
-double totalOutstanding(List<TenantBill> bills) => bills
+double totalOutstanding(List<Invoice> bills) => bills
     .where((bill) => bill.status == InvoiceStatus.unpaid)
     .fold<double>(0, (sum, bill) => sum + bill.total);
 
-double totalPaidInYear(List<TenantBill> bills, int year) => bills
+double totalPaidInYear(List<Invoice> bills, int year) => bills
     .where((bill) => bill.status == InvoiceStatus.paid && bill.period.year == year)
     .fold<double>(0, (sum, bill) => sum + bill.total);
 
-class TenantBillsViewModel extends ChangeNotifier with SafeNotifier {
+class TenantBillsViewModel extends ChangeNotifier
+    with SafeNotifier, TenantSlipSubmission {
   TenantBillsViewModel({
     required this.roomId,
     required this.dormitoryId,
     TenantBillingSource? source,
-  }) : _source = source ?? MockTenantBillingSource();
+  }) : _source = source ?? SupabaseTenantBillingSource();
 
   final int? roomId;
   final int? dormitoryId;
@@ -43,13 +42,17 @@ class TenantBillsViewModel extends ChangeNotifier with SafeNotifier {
   /// true เฉพาะการโหลดครั้งแรก — pull-to-refresh ไม่ควรล้างรายการบิลทิ้ง
   bool isLoading = true;
   bool _hasLoadedOnce = false;
-  bool isSubmittingSlip = false;
   String? errorMessage;
-  List<TenantBill> bills = [];
-  PaymentChannel? paymentChannel;
+  List<Invoice> bills = [];
   String selectedFilter = 'ทั้งหมด';
 
-  List<TenantBill> get filteredBills => filterBills(bills, selectedFilter);
+  @override
+  TenantBillingSource get billingSource => _source;
+
+  @override
+  Future<void> reloadAfterSlip() => load();
+
+  List<Invoice> get filteredBills => filterBills(bills, selectedFilter);
   double get outstanding => totalOutstanding(bills);
   double get paidThisYear => totalPaidInYear(bills, DateTime.now().year);
 
@@ -73,42 +76,12 @@ class TenantBillsViewModel extends ChangeNotifier with SafeNotifier {
 
     try {
       bills = await _source.fetchBillHistory(roomDbId: room, monthCount: 6);
-
-      final dorm = dormitoryId;
-      if (dorm != null) {
-        // ช่องทางชำระเงินไม่ critical — ล้มก็แค่ไม่โชว์ QR
-        try {
-          paymentChannel = await _source.fetchPaymentChannel(dormitoryId: dorm);
-        } catch (_) {}
-      }
+      await loadPaymentChannel(dormitoryId);
     } catch (error) {
       errorMessage = formatErrorMessage(error);
     } finally {
       isLoading = false;
       _hasLoadedOnce = true;
-      notifyListeners();
-    }
-  }
-
-  Future<ActionResult> submitSlip({
-    required String billId,
-    required File slip,
-  }) async {
-    isSubmittingSlip = true;
-    notifyListeners();
-
-    try {
-      final result =
-          await _source.submitPaymentSlip(billId: billId, slip: slip);
-      if (result.success) await load();
-      return result;
-    } catch (error) {
-      return ActionResult(
-        success: false,
-        message: 'ส่งสลิปไม่สำเร็จ: ${formatErrorMessage(error)}',
-      );
-    } finally {
-      isSubmittingSlip = false;
       notifyListeners();
     }
   }

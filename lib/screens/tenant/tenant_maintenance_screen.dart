@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_maintenance_view_model.dart';
 import '../../widgets/maintenance_request_card.dart';
@@ -61,9 +62,10 @@ class _TenantMaintenanceView extends StatelessWidget {
 
     return RefreshIndicator(
       onRefresh: viewModel.loadRequests,
-      child: ListView(
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: contentInsets(context, availableWidth: constraints.maxWidth),
         children: [
           Row(
             children: [
@@ -118,6 +120,7 @@ class _TenantMaintenanceView extends StatelessWidget {
           const SizedBox(height: 16),
           ..._buildList(context, viewModel),
         ],
+        ),
       ),
     );
   }

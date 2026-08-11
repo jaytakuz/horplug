@@ -2,152 +2,131 @@ import 'dart:io';
 
 import '../models/models.dart';
 import '../viewmodels/action_result.dart';
+import 'invoice_service.dart';
+import 'payment_channel_service.dart';
 import 'supabase_service.dart';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MOCK — ระบบชำระเงินยังไม่เชื่อมต่อจริง
-//
-// รายการค่าใช้จ่ายในบิล (ค่าห้อง/ไฟ/น้ำ/ทำความสะอาด) เป็นข้อมูล "จริง" จาก
-// มิเตอร์ — ที่จำลองคือ "สถานะการชำระ" เท่านั้น เพราะยังไม่มีตาราง invoices
-//
-// จะถูกแทนที่ในฟีเจอร์ถัดไป "Invoice Generation" โดยไม่ต้องแก้ ViewModel/UI:
-//   • ลบ MockPaymentLedger + MockTenantBillingSource ทิ้ง
-//   • เขียน SupabaseTenantBillingSource ที่อ่าน invoices.status / paid_at /
-//     slip_url แทน แล้วเปลี่ยนค่า default ของ ViewModel
-//   • signature ของ TenantBillingSource คงเดิมทุกตัว
-// ═══════════════════════════════════════════════════════════════════════════
-
+/// ช่องทางที่ฝั่งผู้เช่าใช้เข้าถึงบิลของตัวเอง
+///
+/// คงไว้เป็น abstract เพื่อให้ ViewModel ทดสอบได้ด้วย fake โดยไม่ต้องมี
+/// Supabase client — เหตุผลเดียวกับที่ formatters.dart อธิบายไว้
 abstract class TenantBillingSource {
-  Future<TenantBill?> fetchCurrentBill({
+  Future<Invoice?> fetchCurrentBill({
     required int roomDbId,
     required int month,
     required int year,
   });
 
-  Future<List<TenantBill>> fetchBillHistory({
+  Future<List<Invoice>> fetchBillHistory({
     required int roomDbId,
     int monthCount,
   });
 
-  Future<PaymentChannel> fetchPaymentChannel({required int dormitoryId});
+  /// null เมื่อหอนี้ยังไม่ได้ตั้งค่าช่องทางชำระเงิน
+  Future<PaymentChannel?> fetchPaymentChannel({required int dormitoryId});
 
   Future<ActionResult> submitPaymentSlip({
-    required String billId,
+    required Invoice bill,
     required File slip,
   });
+
+  /// ผู้เช่าแจ้งว่าจ่ายเงินสดให้เจ้าของหอแล้ว — ไม่มีสลิป เจ้าของหอต้องยืนยันเอง
+  Future<ActionResult> submitCashPayment({required Invoice bill});
+
+  /// ถอนการแจ้งจ่ายเงินสดที่ยังไม่ถูกยืนยัน — กดผิดได้ ไม่ควรต้องรอให้อีกฝ่าย
+  /// ปฏิเสธให้
+  Future<ActionResult> cancelCashPayment({required Invoice bill});
 }
 
-/// สถานะการชำระเงินจำลอง — เก็บใน memory เท่านั้น (หายเมื่อปิดแอป)
-///
-/// เป็น pure logic ล้วน ไม่แตะเครือข่าย จึงเขียน unit test ได้ตรงๆ
-class MockPaymentLedger {
-  final Map<String, InvoiceStatus> _overrides = {};
-
-  /// กฎเริ่มต้น: งวดปัจจุบัน = ค้างชำระ, งวดก่อนหน้า = ชำระแล้ว
-  InvoiceStatus statusFor(Invoice invoice, {DateTime? now}) {
-    final override = _overrides[invoice.id];
-    if (override != null) return override;
-
-    final today = now ?? DateTime.now();
-    final isCurrentPeriod =
-        invoice.date.year == today.year && invoice.date.month == today.month;
-
-    return isCurrentPeriod ? InvoiceStatus.unpaid : InvoiceStatus.paid;
-  }
-
-  /// ครบกำหนดวันที่ 5 ของเดือนถัดไป
-  ///
-  /// DateTime รองรับ month = 13 โดยขึ้นปีใหม่ให้เอง
-  static DateTime dueDateFor(DateTime period) =>
-      DateTime(period.year, period.month + 1, 5);
-
-  void markPending(String billId) =>
-      _overrides[billId] = InvoiceStatus.pending;
-
-  void reset() => _overrides.clear();
-}
-
-/// สถานะจำลองต้องอยู่รอดข้ามการสลับแท็บภายใน session เดียวกัน
-/// จึงเก็บเป็น singleton ระดับไฟล์
-final MockPaymentLedger _sharedLedger = MockPaymentLedger();
-
-class MockTenantBillingSource implements TenantBillingSource {
-  MockTenantBillingSource({
+class SupabaseTenantBillingSource implements TenantBillingSource {
+  SupabaseTenantBillingSource({
+    InvoiceService? invoiceService,
     SupabaseService? service,
-    MockPaymentLedger? ledger,
-  })  : _injectedService = service,
-        _ledger = ledger ?? _sharedLedger;
+  })  : _injectedInvoices = invoiceService,
+        _injectedService = service;
 
+  final InvoiceService? _injectedInvoices;
   final SupabaseService? _injectedService;
+  InvoiceService? _resolvedInvoices;
   SupabaseService? _resolvedService;
-  final MockPaymentLedger _ledger;
+  PaymentChannelService? _resolvedChannels;
 
-  /// สร้าง SupabaseService แบบ lazy: constructor ของมันอ่าน
-  /// Supabase.instance ทันที ซึ่ง assert ใน unit test — การหน่วงไว้ทำให้
-  /// เทสต์ส่วนที่ไม่แตะเครือข่าย (เช่น submitPaymentSlip) รันได้
+  /// สร้างแบบ lazy: constructor ของทั้งสองตัวอ่าน Supabase.instance ทันที
+  /// ซึ่ง assert ใน unit test การหน่วงไว้ทำให้ทดสอบส่วนที่ไม่แตะเครือข่ายได้
+  InvoiceService get _invoices =>
+      _resolvedInvoices ??= (_injectedInvoices ?? InvoiceService());
   SupabaseService get _service =>
       _resolvedService ??= (_injectedService ?? SupabaseService());
-
-  TenantBill _wrap(Invoice invoice) {
-    final status = _ledger.statusFor(invoice);
-    return TenantBill(
-      invoice: invoice,
-      status: status,
-      dueDate: MockPaymentLedger.dueDateFor(invoice.date),
-      paidAt: status == InvoiceStatus.paid
-          ? MockPaymentLedger.dueDateFor(invoice.date)
-          : null,
-    );
-  }
+  PaymentChannelService get _channels =>
+      _resolvedChannels ??= PaymentChannelService(service: _service);
 
   @override
-  Future<TenantBill?> fetchCurrentBill({
+  Future<Invoice?> fetchCurrentBill({
     required int roomDbId,
     required int month,
     required int year,
-  }) async {
-    final invoice = await _service.fetchInvoiceForRoom(
-      roomDbId: roomDbId,
-      month: month,
-      year: year,
-    );
-    return invoice == null ? null : _wrap(invoice);
-  }
+  }) =>
+      _invoices.fetchCurrentForRoom(
+        roomDbId: roomDbId,
+        month: month,
+        year: year,
+      );
 
   @override
-  Future<List<TenantBill>> fetchBillHistory({
+  Future<List<Invoice>> fetchBillHistory({
     required int roomDbId,
     int monthCount = 6,
-  }) async {
-    final invoices = await _service.fetchInvoiceHistoryForRoom(
-      roomDbId: roomDbId,
-      monthCount: monthCount,
-    );
-    return invoices.map(_wrap).toList();
-  }
+  }) =>
+      _invoices.fetchForRoom(roomDbId: roomDbId, monthCount: monthCount);
 
   @override
-  Future<PaymentChannel> fetchPaymentChannel({required int dormitoryId}) async {
-    final dorm = await _service.fetchDormitoryInfo(dormitoryId: dormitoryId);
-    return PaymentChannel(
-      promptPayId: '0XX-XXX-XXXX',
-      accountName: dorm?.landlordName ?? dorm?.name ?? 'เจ้าของหอ',
-    );
-  }
+  /// อ่านช่องทางที่เจ้าของหอตั้งไว้ · null เมื่อยังไม่ได้ตั้ง
+  ///
+  /// เคย hardcode เลขบัญชีเดียวให้ทุกหอ โดยหยิบชื่อเจ้าของหอจริงมาแสดงคู่กัน
+  /// ผู้เช่าของหออื่นจึงเห็นชื่อที่ถูกต้องข้างเลขบัญชีของคนอื่น ซึ่งอ่านแล้ว
+  /// เหมือนข้อมูลที่ผ่านการยืนยันมาแล้ว
+  @override
+  Future<PaymentChannel?> fetchPaymentChannel({
+    required int dormitoryId,
+  }) =>
+      _channels.fetch(dormitoryId: dormitoryId);
 
-  /// ไม่ได้อัปโหลดไฟล์จริง — แค่หน่วงเวลาให้เห็น loading state แล้วเปลี่ยน
-  /// สถานะบิลเป็น "รอตรวจสลิป"
+  /// อัปโหลดก่อนแล้วค่อยบันทึก ถ้าบันทึกล้มให้ลบไฟล์ที่เพิ่งอัปทิ้ง
+  /// ไม่งั้นจะเหลือไฟล์ที่ไม่มีแถวไหนอ้างถึงค้างอยู่ใน storage
   @override
   Future<ActionResult> submitPaymentSlip({
-    required String billId,
+    required Invoice bill,
     required File slip,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 600));
-    _ledger.markPending(billId);
+    final path = await _invoices.uploadSlip(invoice: bill, file: slip);
+    try {
+      await _invoices.submitSlip(invoiceId: bill.dbId, slipPath: path);
+    } catch (error) {
+      await _invoices.discardSlip(path);
+      rethrow;
+    }
 
     return const ActionResult(
       success: true,
       message: 'ส่งสลิปแล้ว รอเจ้าของหอตรวจสอบ',
+    );
+  }
+
+  @override
+  Future<ActionResult> submitCashPayment({required Invoice bill}) async {
+    await _invoices.submitCashPayment(invoiceId: bill.dbId);
+    return const ActionResult(
+      success: true,
+      message: 'แจ้งชำระเงินสดแล้ว รอเจ้าของหอยืนยันการรับเงิน',
+    );
+  }
+
+  @override
+  Future<ActionResult> cancelCashPayment({required Invoice bill}) async {
+    await _invoices.cancelCashPayment(invoiceId: bill.dbId);
+    return const ActionResult(
+      success: true,
+      message: 'ยกเลิกการแจ้งชำระเงินสดแล้ว',
     );
   }
 }

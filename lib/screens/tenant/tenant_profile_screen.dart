@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_profile_view_model.dart';
 import '../../widgets/reusable_widgets.dart';
@@ -54,9 +55,10 @@ class _TenantProfileView extends StatelessWidget {
         await auth.refreshProfile();
         await viewModel.load();
       },
-      child: ListView(
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: contentInsets(context, availableWidth: constraints.maxWidth),
         children: [
           Row(
             children: [
@@ -137,6 +139,7 @@ class _TenantProfileView extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }

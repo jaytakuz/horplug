@@ -29,43 +29,6 @@ class MockData {
     ),
   ];
 
-  static List<Invoice> invoices = [
-    Invoice(
-        id: "INV001",
-        roomNumber: "305",
-        tenantName: "คุณฟ้า",
-        waterUnits: 12,
-        electricityUnits: 85,
-        roomPrice: 3500,
-        waterCost: 216,
-        electricityCost: 680,
-        status: InvoiceStatus.pending,
-        date: DateTime.now(),
-        hasSlip: true),
-    Invoice(
-        id: "INV002",
-        roomNumber: "101",
-        tenantName: "คุณตั้ม",
-        waterUnits: 8,
-        electricityUnits: 120,
-        roomPrice: 3500,
-        waterCost: 144,
-        electricityCost: 960,
-        status: InvoiceStatus.unpaid,
-        date: DateTime.now()),
-    Invoice(
-        id: "INV003",
-        roomNumber: "201",
-        tenantName: "คุณบี",
-        waterUnits: 10,
-        electricityUnits: 95,
-        roomPrice: 3700,
-        waterCost: 180,
-        electricityCost: 760,
-        status: InvoiceStatus.paid,
-        date: DateTime.now()),
-  ];
-
   static List<ElectricityRecord> mockElectricityReadings = rooms
       .where((r) => r.status == RoomStatus.occupied)
       .map((r) => ElectricityRecord(

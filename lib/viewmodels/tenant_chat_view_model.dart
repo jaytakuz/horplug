@@ -5,17 +5,26 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
+import '../services/invoice_service.dart';
 import '../services/supabase_service.dart';
+import '../services/tenant_billing_source.dart';
 import 'error_message.dart';
 import 'safe_notifier.dart';
+import 'tenant_slip_submission.dart';
 
-class TenantChatViewModel extends ChangeNotifier with SafeNotifier {
+class TenantChatViewModel extends ChangeNotifier
+    with SafeNotifier, TenantSlipSubmission {
   TenantChatViewModel({
     required this.roomId,
     required this.tenantId,
     required this.tenantName,
+    this.dormitoryId,
     SupabaseService? service,
-  }) : _service = service ?? SupabaseService();
+    InvoiceService? invoiceService,
+    TenantBillingSource? billingSource,
+  })  : _service = service ?? SupabaseService(),
+        _invoiceService = invoiceService ?? InvoiceService(),
+        _billingSource = billingSource ?? SupabaseTenantBillingSource();
 
   static const int _pageSize = 10;
   static const String _ownerLabel = 'เจ้าของหอ';
@@ -23,13 +32,25 @@ class TenantChatViewModel extends ChangeNotifier with SafeNotifier {
   final int roomId;
   final String tenantId;
   final String tenantName;
+  final int? dormitoryId;
   final SupabaseService _service;
+  final InvoiceService _invoiceService;
+  final TenantBillingSource _billingSource;
 
   bool isLoading = true;
   bool isSending = false;
   bool isUploadingImage = false;
   bool isRequestingMaintenance = false;
   String? errorMessage;
+
+  Map<int, Invoice> invoicesById = {};
+
+  @override
+  TenantBillingSource get billingSource => _billingSource;
+
+  /// รีเฟรชบิลของห้องหลังส่งสลิป เพื่อให้ป้ายสถานะบนการ์ดในแชทเปลี่ยนทันที
+  @override
+  Future<void> reloadAfterSlip() => _loadInvoices();
 
   /// error จากการ "ส่ง" (ต่างจาก errorMessage ที่เป็น error ของการโหลดแชท)
   /// View อ่านค่านี้ไปขึ้น SnackBar แล้วเรียก clearSendError()
@@ -56,6 +77,25 @@ class TenantChatViewModel extends ChangeNotifier with SafeNotifier {
     // ทำให้ badge นับได้ 0 ตลอดและข้อความที่เข้ามาตอนแอปปิดไม่เคยแจ้งเตือน
     // ให้ TenantShellViewModel.markChatRead() เป็นเจ้าของเรื่องนี้คนเดียว
     // (เรียกเมื่ออยู่แท็บแชทจริง)
+    _loadInvoices();
+    _loadPaymentChannel();
+  }
+
+  // โหลดครั้งเดียวตอนเปิดแชท แล้ว resolve ตาม invoiceId — เพิ่ม query เดียว
+  // แลกกับการไม่มีการ์ดค้างที่ยังบอกว่าค้างชำระทั้งที่จ่ายไปแล้วเมื่อวาน
+  Future<void> _loadInvoices() async {
+    try {
+      invoicesById = await _invoiceService.invoicesByIdForRoom(roomDbId: roomId);
+    } catch (_) {
+      // การ์ดจะ fallback ไปแสดงข้อความสำรอง แชทต้องไม่พังเพราะบิลโหลดไม่ได้
+      invoicesById = {};
+    }
+    notifyListeners();
+  }
+
+  Future<void> _loadPaymentChannel() async {
+    await loadPaymentChannel(dormitoryId);
+    notifyListeners();
   }
 
   void _subscribeToMessages() {

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
@@ -9,6 +7,7 @@ import '../widgets/reusable_widgets.dart';
 import 'action_result.dart';
 import 'error_message.dart';
 import 'safe_notifier.dart';
+import 'tenant_slip_submission.dart';
 
 // ── Pure helpers ────────────────────────────────────────────────────────────
 // อยู่นอกคลาสเพราะ SupabaseService สร้าง client ตอน field initializer ทำให้
@@ -71,15 +70,33 @@ String thaiMonthName(int month) {
   return _thaiMonthNames[month - 1];
 }
 
+/// ป้ายสถานะจากสถานะอย่างเดียว
+///
+/// `pending` ใช้คำกลางๆ ว่า "รอยืนยัน" เพราะครอบทั้งบิลที่แนบสลิปมาและบิลที่แจ้ง
+/// จ่ายเงินสด · ฟังก์ชันนี้ถูกใช้เป็นตัวกรองรายการด้วย ([filterBills]) ข้อความ
+/// จึงต้องตรงกับชิปตัวกรอง ถ้าอยากได้คำที่เจาะจงกว่าให้ใช้ [billStatusLabelOf]
 String billStatusLabel(InvoiceStatus status) {
   switch (status) {
     case InvoiceStatus.unpaid:
       return 'ค้างชำระ';
     case InvoiceStatus.pending:
-      return 'รอตรวจสลิป';
+      return 'รอยืนยัน';
     case InvoiceStatus.paid:
       return 'ชำระแล้ว';
+    case InvoiceStatus.voided:
+      return 'ยกเลิกแล้ว';
   }
+}
+
+/// ป้ายสถานะที่รู้ด้วยว่าผู้เช่าแจ้งชำระมาด้วยวิธีไหน
+///
+/// บิลที่ `pending` มีสองหน้าตาที่เจ้าของหอต้องทำคนละอย่าง — ตรวจสลิป กับ
+/// ยืนยันรับเงินสด · ป้ายที่บอกว่า "รอตรวจสลิป" บนบิลที่จ่ายสดมาทำให้ทั้งสอง
+/// ฝ่ายไปตามหาสลิปที่ไม่มีอยู่
+String billStatusLabelOf(Invoice invoice) {
+  if (invoice.awaitsCashConfirmation) return 'รอยืนยันรับเงินสด';
+  if (invoice.awaitsSlipReview) return 'รอตรวจสลิป';
+  return billStatusLabel(invoice.status);
 }
 
 BadgeVariant billStatusVariant(InvoiceStatus status) {
@@ -90,12 +107,15 @@ BadgeVariant billStatusVariant(InvoiceStatus status) {
       return BadgeVariant.warning;
     case InvoiceStatus.paid:
       return BadgeVariant.success;
+    case InvoiceStatus.voided:
+      return BadgeVariant.muted;
   }
 }
 
 // ── ViewModel ───────────────────────────────────────────────────────────────
 
-class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
+class TenantDashboardViewModel extends ChangeNotifier
+    with SafeNotifier, TenantSlipSubmission {
   TenantDashboardViewModel({
     required this.roomId,
     this.dormitoryId,
@@ -104,7 +124,7 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
     SupabaseService? service,
     TenantBillingSource? billingSource,
   })  : _service = service ?? SupabaseService(),
-        _billingSource = billingSource ?? MockTenantBillingSource();
+        _billingSource = billingSource ?? SupabaseTenantBillingSource();
 
   final int? roomId;
   final int? dormitoryId;
@@ -129,12 +149,16 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
   String? maintenanceErrorMessage;
   String? chatErrorMessage;
 
-  TenantBill? currentBill;
-  PaymentChannel? paymentChannel;
+  Invoice? currentBill;
+
+  @override
+  TenantBillingSource get billingSource => _billingSource;
+
+  @override
+  Future<void> reloadAfterSlip() => load();
 
   /// การใช้ไฟเดือนนี้เทียบเดือนก่อน — null เมื่อมีประวัติไม่ถึง 2 เดือน
   UtilityTrend? electricityTrend;
-  bool get hasMeterRecord => currentBill != null;
 
   List<MaintenanceRequest> openRequests = [];
   ChatMessage? latestMessage;
@@ -184,22 +208,16 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
         year: now.year,
       );
 
-      final dorm = dormitoryId;
-      if (dorm != null) {
-        try {
-          paymentChannel =
-              await _billingSource.fetchPaymentChannel(dormitoryId: dorm);
-        } catch (_) {
-          // ไม่ critical — แค่ไม่มีเลขพร้อมเพย์ให้แสดง
-        }
-      }
+      await loadPaymentChannel(dormitoryId);
     } catch (error) {
       billErrorMessage = formatErrorMessage(error);
     }
 
     // แนวโน้มการใช้ไฟดึงแยก เพื่อให้บิลเดือนนี้ยังแสดงได้แม้ประวัติล้ม
+    // หน่วยไฟมาจากบิลที่ออกแล้ว ไม่ใช่มิเตอร์สด ตัวเลขที่ผู้เช่าเห็นจึงตรงกับ
+    // ตัวเลขที่ถูกเรียกเก็บจริงเสมอ
     try {
-      final history = await _service.fetchInvoiceHistoryForRoom(
+      final history = await _billingSource.fetchBillHistory(
         roomDbId: room,
         monthCount: 2,
       );
@@ -220,7 +238,9 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
     try {
       final all = await _service.fetchMaintenanceRequests(roomId: roomId!);
       openRequests = all
-          .where((request) => request.status != MaintenanceStatus.completed)
+          .where((request) =>
+              request.status != MaintenanceStatus.completed &&
+              request.status != MaintenanceStatus.cancelled)
           .toList();
     } catch (error) {
       maintenanceErrorMessage = formatErrorMessage(error);
@@ -238,23 +258,6 @@ class TenantDashboardViewModel extends ChangeNotifier with SafeNotifier {
       );
     } catch (error) {
       chatErrorMessage = formatErrorMessage(error);
-    }
-  }
-
-  Future<ActionResult> submitSlip({
-    required String billId,
-    required File slip,
-  }) async {
-    try {
-      final result =
-          await _billingSource.submitPaymentSlip(billId: billId, slip: slip);
-      if (result.success) await load();
-      return result;
-    } catch (error) {
-      return ActionResult(
-        success: false,
-        message: 'ส่งสลิปไม่สำเร็จ: ${formatErrorMessage(error)}',
-      );
     }
   }
 

@@ -1,10 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_chat_view_model.dart';
+import '../../viewmodels/tenant_dashboard_view_model.dart' show billStatusLabelOf;
 import '../../widgets/chat_conversation_view.dart';
+import '../../widgets/payment_sheet.dart';
 
 class TenantChatScreen extends StatelessWidget {
   /// [embedded] = true เมื่อถูกวางเป็นแท็บใน TenantShell ซึ่งมี Scaffold และ
@@ -53,6 +58,7 @@ class TenantChatScreen extends StatelessWidget {
         roomId: roomId,
         tenantId: profile!.id,
         tenantName: tenantName,
+        dormitoryId: profile.dormitoryId,
       )..start(),
       child: _TenantChatView(embedded: embedded),
     );
@@ -63,6 +69,34 @@ class _TenantChatView extends StatelessWidget {
   const _TenantChatView({required this.embedded});
 
   final bool embedded;
+
+  Future<void> _handleOpenInvoice(
+    BuildContext context,
+    TenantChatViewModel viewModel,
+    Invoice invoice,
+  ) async {
+    // showPaymentSheet ปฏิเสธบิลที่ไม่ใช่ unpaid อยู่แล้ว แต่ถามผ่าน
+    // canOpenPaymentSheet ก่อนเพื่อบอกผู้เช่าว่าทำไมถึงกดแล้วไม่มีอะไรขึ้น —
+    // การเงียบไปเฉยๆ ทำให้ดูเหมือนแอปค้าง
+    if (!canOpenPaymentSheet(invoice)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'บิล ${invoice.invoiceNo} · ${billStatusLabelOf(invoice)}',
+          ),
+        ),
+      );
+      return;
+    }
+
+    await showPaymentSheet(
+      context,
+      bill: invoice,
+      channel: viewModel.paymentChannel,
+      onSubmit: (File slip) => viewModel.submitSlip(bill: invoice, slip: slip),
+      onSubmitCash: () => viewModel.submitCash(bill: invoice),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +147,14 @@ class _TenantChatView extends StatelessWidget {
                   isUploadingImage: viewModel.isUploadingImage,
                   onRequestMaintenance: viewModel.requestMaintenance,
                   isRequestingMaintenance: viewModel.isRequestingMaintenance,
+                  invoicesById: viewModel.invoicesById,
+                  onOpenInvoice: (invoice) =>
+                      _handleOpenInvoice(context, viewModel, invoice),
+                  // ช่องทางชำระเงินถูกโหลดไว้แล้วตอนเปิดแชท (ผ่าน
+                  // TenantSlipSubmission) การ์ดบิลจึงมี QR ได้โดยไม่ต้องยิง
+                  // เครือข่ายเพิ่ม · null เมื่อหอยังไม่ได้ตั้งเลขพร้อมเพย์ ซึ่ง
+                  // การ์ดจัดการเองด้วยการไม่วาด QR
+                  promptPayId: viewModel.paymentChannel?.promptPayId,
                 );
 
     if (embedded) return body;

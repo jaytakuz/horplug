@@ -1,12 +1,13 @@
 {
-    "name": "horplug",
-    "short_name": "horplug",
-    "start_url": ".",
+    "name": "HorPlug — ระบบจัดการหอพัก",
+    "short_name": "HorPlug",
+    "start_url": "/",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#F5F7FA",
+    "theme_color": "#1B3A5C",
+    "description": "ออกบิลค่าเช่า ค่าน้ำค่าไฟ รับชำระผ่านพร้อมเพย์ และคุยกับผู้เช่าในที่เดียว",
+    "lang": "th",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
+import '../../widgets/issue_invoices_dialog.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../viewmodels/meter_view_model.dart';
@@ -99,48 +100,42 @@ class _MeterViewState extends State<_MeterView>
     _getFocusNode(nextKey).requestFocus();
   }
 
+  /// บันทึกมิเตอร์แล้วเสนอออกบิลของงวดนั้นต่อทันที
+  ///
+  /// การจดมิเตอร์เสร็จคือจังหวะที่ข้อมูลของงวดนั้นครบพอจะเรียกเก็บเงินได้ กล่อง
+  /// เดิมที่เด้งตรงนี้ถามแค่ว่า "จะไปหน้าจัดการบิลไหม" ซึ่งเป็นการชี้ทางไปยัง
+  /// หน้าที่ต้องกดต่ออีกปุ่ม ไม่ใช่การทำงานให้จบ · ยังคงต้องยืนยันก่อนออกจริง
+  /// เพราะบิลตรึงตัวเลข ณ วันออก เลขมิเตอร์ที่พิมพ์ผิดหลักเดียวจึงแก้ไม่ได้
+  /// นอกจากยกเลิกใบนั้นแล้วออกใหม่ หลังผู้เช่าเห็นการ์ดที่ยอดผิดในแชทไปแล้ว
   Future<void> _handleSave(MeterViewModel viewModel) async {
+    final messenger = ScaffoldMessenger.of(context);
     final success = await viewModel.saveAll();
     if (!mounted || !success) return;
-    _showSuccessDialog();
-  }
 
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: AppColors.success),
-            SizedBox(width: 8),
-            Text('บันทึกสำเร็จ', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: const Text(
-          'บันทึกข้อมูลมิเตอร์เรียบร้อยแล้ว คุณต้องการไปตรวจสอบความถูกต้องที่หน้าจัดการบิลหรือไม่?',
-          style: TextStyle(color: AppColors.mutedForeground),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(foregroundColor: AppColors.mutedForeground),
-            child: const Text('อยู่หน้านี้ต่อ'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              context.go('/landlord/billing');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('ไปหน้าจัดการบิล'),
-          ),
-        ],
-      ),
+    // แจ้งผลการบันทึกทันที ไม่รอผลการตรวจร่างบิลซึ่งต้องยิงเครือข่ายอีกรอบ —
+    // สิ่งที่เจ้าของหอเพิ่งกดคือปุ่มบันทึก เขาควรรู้ผลของมันก่อนเรื่องอื่น
+    messenger.showSnackBar(
+      const SnackBar(content: Text('บันทึกข้อมูลมิเตอร์เรียบร้อยแล้ว')),
     );
+
+    final outcome = await maybeShowIssueInvoicesDialog(
+      context,
+      dormitoryId: viewModel.dormitoryId,
+      month: viewModel.selectedMonth,
+      year: viewModel.selectedYear,
+    );
+
+    if (!mounted) return;
+    if (outcome == IssuePromptOutcome.checkFailed) {
+      // เงียบตรงนี้ไม่ได้ — ถ้าไม่บอก เจ้าของหอจะอ่านความเงียบว่า "ไม่มีห้องไหน
+      // ต้องออกบิลแล้ว" ซึ่งเป็นคนละเรื่องกับ "ยังไม่รู้ว่ามีห้องไหนต้องออก"
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('ตรวจสอบห้องที่ออกบิลได้ไม่สำเร็จ '
+              'ลองออกบิลอีกครั้งที่หน้าบิล'),
+        ),
+      );
+    }
   }
 
   @override
@@ -152,7 +147,9 @@ class _MeterViewState extends State<_MeterView>
       _resetFieldControllers();
     }
 
-    return Column(
+    return ContentBounds(
+      gutter: 0,
+      child: Column(
       children: [
         _buildHeader(viewModel),
         _buildPeriodSelector(viewModel),
@@ -180,6 +177,7 @@ class _MeterViewState extends State<_MeterView>
                 ),
         ),
       ],
+      ),
     );
   }
 

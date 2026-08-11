@@ -3,15 +3,23 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
+import '../../models/quick_action.dart';
+import '../../services/invoice_pdf.dart';
+import '../../services/quick_action_store.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
+import '../../viewmodels/error_message.dart';
 import '../../viewmodels/maintenance_view_model.dart'
     show maintenanceStatusLabel;
+import '../../viewmodels/quick_actions_view_model.dart';
 import '../../viewmodels/tenant_dashboard_view_model.dart';
 import '../../viewmodels/tenant_shell_view_model.dart';
 import '../../widgets/maintenance_request_dialog.dart';
 import '../../widgets/payment_sheet.dart';
+import '../../widgets/quick_actions_editor.dart';
 import '../../widgets/reusable_widgets.dart';
+import '../../utils/chat_preview.dart';
 import '../../utils/formatters.dart';
 
 class TenantDashboardScreen extends StatelessWidget {
@@ -21,16 +29,28 @@ class TenantDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final profile = AuthScope.of(context).profile;
 
-    return ChangeNotifierProvider(
+    return MultiProvider(
       key: ValueKey(profile?.roomId),
-      create: (_) => TenantDashboardViewModel(
-        roomId: profile?.roomId,
-        dormitoryId: profile?.dormitoryId,
-        tenantId: profile?.id,
-        tenantName: profile?.fullName.isNotEmpty == true
-            ? profile!.fullName
-            : 'ผู้พักอาศัย',
-      )..load(),
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => TenantDashboardViewModel(
+            roomId: profile?.roomId,
+            dormitoryId: profile?.dormitoryId,
+            tenantId: profile?.id,
+            tenantName: profile?.fullName.isNotEmpty == true
+                ? profile!.fullName
+                : 'ผู้พักอาศัย',
+          )..load(),
+        ),
+        // แยก provider เพราะทางลัดอ่านจากดิสก์ ไม่ใช่เครือข่าย — การรีเฟรช
+        // แดชบอร์ดจึงไม่ทำให้ปุ่มกระพริบ และการจัดปุ่มไม่ทำให้ต้องโหลดบิลใหม่
+        ChangeNotifierProvider(
+          create: (_) => QuickActionsViewModel<QuickAction>(
+            userId: profile?.id ?? 'guest',
+            store: QuickActionStore(catalog: tenantQuickActions),
+          )..load(),
+        ),
+      ],
       child: const _TenantDashboardView(),
     );
   }
@@ -71,17 +91,19 @@ class _TenantDashboardView extends StatelessWidget {
         await auth.refreshProfile();
         await viewModel.load();
       },
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        children: [
-          _Greeting(profile: profile),
-          const SizedBox(height: 16),
-          if (profile?.roomId == null)
-            ..._buildNoRoomSections(context, viewModel)
-          else
-            ..._buildDashboardSections(context, viewModel),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: contentInsets(context, availableWidth: constraints.maxWidth),
+          children: [
+            _Greeting(profile: profile),
+            const SizedBox(height: 16),
+            if (profile?.roomId == null)
+              ..._buildNoRoomSections(context, viewModel)
+            else
+              ..._buildDashboardSections(context, viewModel),
+          ],
+        ),
       ),
     );
   }
@@ -159,15 +181,18 @@ class _TenantDashboardView extends StatelessWidget {
         _buildJoinRequestSection(context, viewModel),
         const SizedBox(height: 16),
       ],
+      // เรียงตามความถี่ที่ผู้เช่าต้องการ: ยอดที่ต้องจ่าย → ค่าน้ำค่าไฟงวดนี้ →
+      // ข้อความล่าสุด → ปุ่มที่กดบ่อย → ประวัติที่ย้อนดูเป็นครั้งคราว
+      // ประวัติแจ้งซ่อมลงล่างสุดเพราะเป็นสิ่งที่เปิดดูน้อยที่สุดในหน้านี้
       _BillHeroCard(viewModel: viewModel),
       const SizedBox(height: 16),
       _UsageSection(viewModel: viewModel),
       const SizedBox(height: 16),
-      _MaintenanceSummary(viewModel: viewModel),
-      const SizedBox(height: 16),
       _LatestMessageCard(viewModel: viewModel),
       const SizedBox(height: 16),
       _QuickActions(viewModel: viewModel),
+      const SizedBox(height: 16),
+      _MaintenanceSummary(viewModel: viewModel),
     ];
   }
 
@@ -286,19 +311,52 @@ class _TenantDashboardView extends StatelessWidget {
 // การ์ดที่สำคัญที่สุดของหน้า — ตอบคำถาม "ฉันต้องจ่ายเท่าไหร่" และให้จ่ายได้เลย
 // จากที่นี่โดยไม่ต้องเข้าแท็บบิล
 
+/// เปิดแผ่นชำระเงินของบิลใบหนึ่ง
+///
+/// อยู่นอกคลาสเพราะทั้งการ์ดยอดค้างและปุ่มทางลัดเรียกใช้ — สองที่บนหน้าจอ
+/// เดียวกันที่ต้องเปิดแผ่นแบบเดียวกันเป๊ะ
+Future<void> _openPaymentSheet(
+  BuildContext context,
+  TenantDashboardViewModel viewModel,
+  Invoice bill,
+) =>
+    showPaymentSheet(
+      context,
+      bill: bill,
+      channel: viewModel.paymentChannel,
+      onSubmit: (slip) => viewModel.submitSlip(bill: bill, slip: slip),
+      onSubmitCash: () => viewModel.submitCash(bill: bill),
+    );
+
+/// บันทึกบิลเป็น PDF · ใช้ร่วมกับปุ่มทางลัด
+Future<void> _saveBillPdf(
+  BuildContext context,
+  TenantDashboardViewModel viewModel,
+  Invoice bill,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final dormitoryName = AuthScope.of(context).dormitoryName ?? 'หอพัก';
+
+  try {
+    await shareInvoicePdf(
+      invoice: bill,
+      dormitoryName: dormitoryName,
+      channel: viewModel.paymentChannel,
+    );
+  } catch (error) {
+    messenger.showSnackBar(SnackBar(
+      content: Text('สร้างไฟล์ PDF ไม่สำเร็จ: ${formatErrorMessage(error)}'),
+    ));
+  }
+}
+
 class _BillHeroCard extends StatelessWidget {
   const _BillHeroCard({required this.viewModel});
 
   final TenantDashboardViewModel viewModel;
 
-  Future<void> _pay(BuildContext context, TenantBill bill) async {
-    await showPaymentSheet(
-      context,
-      bill: bill,
-      channel: viewModel.paymentChannel,
-      onSubmit: (slip) => viewModel.submitSlip(billId: bill.id, slip: slip),
-    );
-  }
+  Future<void> _pay(BuildContext context, Invoice bill) =>
+      _openPaymentSheet(context, viewModel, bill);
 
   @override
   Widget build(BuildContext context) {
@@ -321,7 +379,7 @@ class _BillHeroCard extends StatelessWidget {
               ),
               if (bill != null)
                 StatusBadge(
-                  label: billStatusLabel(bill.status),
+                  label: billStatusLabelOf(bill),
                   variant: billStatusVariant(bill.status),
                 ),
             ],
@@ -348,11 +406,10 @@ class _BillHeroCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               )
             else ...[
-              if (bill.dueDate != null)
-                Text(
-                  'ครบกำหนด ${bill.dueDate!.day} ${thaiMonthName(bill.dueDate!.month)} ${bill.dueDate!.year}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+              Text(
+                'ครบกำหนด ${bill.dueDate.day} ${thaiMonthName(bill.dueDate.month)} ${bill.dueDate.year}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               const SizedBox(height: 12),
               _buildAction(context, bill),
             ],
@@ -362,7 +419,7 @@ class _BillHeroCard extends StatelessWidget {
     );
   }
 
-  Widget _buildAction(BuildContext context, TenantBill bill) {
+  Widget _buildAction(BuildContext context, Invoice bill) {
     switch (bill.status) {
       case InvoiceStatus.unpaid:
         return PrimaryButton(
@@ -377,7 +434,11 @@ class _BillHeroCard extends StatelessWidget {
             const Icon(Icons.hourglass_top, size: 16, color: AppColors.warning),
             const SizedBox(width: 8),
             Text(
-              'รอเจ้าของหอตรวจสลิป',
+              // จ่ายสดไม่มีสลิปให้ตรวจ — ข้อความที่พูดถึงสลิปทำให้ผู้เช่าไป
+              // ตามหาของที่ไม่มีอยู่ และขัดกับป้ายสถานะข้างบนการ์ดใบเดียวกัน
+              bill.awaitsCashConfirmation
+                  ? 'รอเจ้าของหอยืนยันรับเงินสด'
+                  : 'รอเจ้าของหอตรวจสลิป',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -399,6 +460,20 @@ class _BillHeroCard extends StatelessWidget {
             ),
           ],
         );
+      case InvoiceStatus.voided:
+        return Row(
+          children: [
+            const Icon(Icons.block, size: 16, color: AppColors.mutedForeground),
+            const SizedBox(width: 8),
+            Text(
+              'ยกเลิกแล้ว',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: AppColors.mutedForeground),
+            ),
+          ],
+        );
     }
   }
 }
@@ -412,7 +487,7 @@ class _UsageSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final invoice = viewModel.currentBill?.invoice;
+    final invoice = viewModel.currentBill;
     final hasRecord = invoice != null;
 
     return Column(
@@ -423,12 +498,18 @@ class _UsageSection extends StatelessWidget {
             Expanded(
               child: StatCard(
                 title: 'ค่าไฟ',
-                value: hasRecord
-                    ? formatBaht(invoice.electricityCost)
-                    : '—',
-                subtitle: hasRecord
-                    ? '${formatUnits(invoice.electricityUnits)} หน่วย'
-                    : 'ยังไม่ได้จดมิเตอร์',
+                value: hasRecord ? formatBaht(invoice.electricityCost) : '—',
+                // ตัวเลขมาจากบิลที่ออกแล้ว ไม่ใช่มิเตอร์สด — งวดที่จดมิเตอร์แล้ว
+                // แต่ยังไม่ออกบิลจึงยังว่างอยู่ ข้อความต้องไม่โทษการจดมิเตอร์
+                //
+                // "฿0 · 0 หน่วย" อ่านเหมือนระบบคำนวณพลาด ทั้งที่แปลว่าบิลงวดนี้
+                // ออกมาโดยไม่มีค่าไฟจริงๆ (ยังไม่ได้จดมิเตอร์ตอนออกบิล) บอกตรงๆ
+                // ดีกว่าปล่อยให้ผู้เช่าเดาว่าตัวเลขหายไปไหน
+                subtitle: !hasRecord
+                    ? 'รอเจ้าของหอออกบิล'
+                    : invoice.electricityUnits > 0
+                        ? '${formatUnits(invoice.electricityUnits)} หน่วย'
+                        : 'ไม่มีค่าไฟในบิลงวดนี้',
                 icon: Icons.bolt,
                 variant: BadgeVariant.warning,
               ),
@@ -437,17 +518,21 @@ class _UsageSection extends StatelessWidget {
             Expanded(
               child: StatCard(
                 title: 'ค่าน้ำ',
-                value:
-                    hasRecord ? formatBaht(invoice.waterCost) : '—',
-                subtitle:
-                    hasRecord ? 'เหมาจ่ายรายเดือน' : 'ยังไม่ได้จดมิเตอร์',
+                value: hasRecord ? formatBaht(invoice.waterCost) : '—',
+                subtitle: hasRecord ? 'เหมาจ่ายรายเดือน' : 'รอเจ้าของหอออกบิล',
                 icon: Icons.water_drop,
                 variant: BadgeVariant.primary,
               ),
             ),
           ],
         ),
-        if (viewModel.usageErrorMessage != null) ...[
+        // ซ่อนเมื่อข้อความซ้ำกับกล่อง error ของบิลด้านบน — ทั้งสองส่วนอ่านจาก
+        // ตาราง invoices เหมือนกัน เวลาชั้นฐานข้อมูลล้มจึงได้ข้อความเดียวกัน
+        // แล้วผู้เช่าเห็นกล่องแดงสองใบซ้อนกันในหน้าจอเดียว · ยังแยก field ไว้
+        // ใน ViewModel เพราะสองส่วนนี้ล้มคนละเหตุผลได้จริง (เช่นบิลโหลดผ่านแต่
+        // ประวัติ 2 เดือนไม่ผ่าน) กรณีนั้นยังต้องเห็นทั้งคู่
+        if (viewModel.usageErrorMessage != null &&
+            viewModel.usageErrorMessage != viewModel.billErrorMessage) ...[
           const SizedBox(height: 8),
           SectionErrorNote(
             message: viewModel.usageErrorMessage!,
@@ -531,7 +616,10 @@ class _MaintenanceSummary extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text('แจ้งซ่อม/ทำความสะอาด',
+                // ชื่อเดิม "แจ้งซ่อม/ทำความสะอาด" อ่านเหมือนปุ่มสำหรับแจ้งเรื่อง
+                // ใหม่ ทั้งที่การ์ดนี้แสดงของที่แจ้งไปแล้ว ส่วนการแจ้งจริงอยู่ที่
+                // ปุ่มทางลัดด้านบน
+                child: Text('ประวัติการแจ้งซ่อม/ทำความสะอาด',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium),
@@ -613,7 +701,9 @@ class _OpenRequestRow extends StatelessWidget {
             label: maintenanceStatusLabel(request.status),
             variant: request.status == MaintenanceStatus.pending
                 ? BadgeVariant.warning
-                : BadgeVariant.primary,
+                : request.status == MaintenanceStatus.cancelled
+                    ? BadgeVariant.destructive
+                    : BadgeVariant.primary,
           ),
         ],
       ),
@@ -628,21 +718,12 @@ class _LatestMessageCard extends StatelessWidget {
 
   final TenantDashboardViewModel viewModel;
 
-  String _relativeTime(DateTime timestamp) {
-    final diff = DateTime.now().difference(timestamp.toLocal());
-    if (diff.inMinutes < 1) return 'เมื่อสักครู่';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} นาทีที่แล้ว';
-    if (diff.inHours < 24) return '${diff.inHours} ชม.ที่แล้ว';
-    if (diff.inDays < 7) return '${diff.inDays} วันที่แล้ว';
-    final local = timestamp.toLocal();
-    return '${local.day}/${local.month}/${local.year}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final message = viewModel.latestMessage;
     // อ่านจาก shell VM ตัวเดียวกับ badge บน nav เพื่อให้ตัวเลขตรงกันเสมอ
-    final unreadCount = context.watch<TenantShellViewModel>().unreadMessageCount;
+    final unreadCount =
+        context.watch<TenantShellViewModel>().unreadMessageCount;
 
     return PaperCard(
       onTap: () => context.go('/tenant/chat'),
@@ -679,9 +760,10 @@ class _LatestMessageCard extends StatelessWidget {
                       Text(
                         message == null
                             ? 'ยังไม่มีข้อความ — แตะเพื่อเริ่มแชท'
-                            : (message.text.trim().isEmpty
-                                ? 'ส่งรูปภาพ'
-                                : message.text),
+                            // ผู้เช่าเป็นคนดู จึงเห็น "คุณ:" เมื่อตัวเองเป็น
+                            // คนส่งล่าสุด ซึ่งบอกได้ทันทีว่ากำลังรอเจ้าของหอ
+                            // ตอบอยู่ โดยไม่ต้องเปิดห้องแชทเข้าไปดู
+                            : chatPreviewLine(message, viewerIsOwner: false),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
@@ -699,7 +781,7 @@ class _LatestMessageCard extends StatelessWidget {
                       else
                         const SizedBox(height: 16),
                       const SizedBox(height: 4),
-                      Text(_relativeTime(message.timestamp),
+                      Text(chatTimestampLabel(message.timestamp),
                           style: Theme.of(context).textTheme.labelSmall),
                     ],
                   ),
@@ -736,9 +818,96 @@ class _QuickActions extends StatelessWidget {
         .showSnackBar(SnackBar(content: Text(result.message)));
   }
 
+  /// สิ่งที่เกิดขึ้นเมื่อกดทางลัดแต่ละอัน · null แปลว่ากดไม่ได้ตอนนี้
+  ///
+  /// ทางลัดที่ต้องใช้บิลจะกดไม่ได้เมื่อยังไม่มีบิล — ปุ่มยังอยู่ที่เดิมแต่จาง
+  /// ลง ดีกว่าหายไปมาโผล่มาเอง ซึ่งทำให้ตำแหน่งที่ผู้เช่าจำไว้ขยับทุกครั้งที่
+  /// สถานะบิลเปลี่ยน
+  VoidCallback? _handlerFor(BuildContext context, QuickAction action) {
+    final bill = viewModel.currentBill;
+
+    switch (action) {
+      case QuickAction.reportRepair:
+        return () => _request(context, MaintenanceRequestType.repair);
+      case QuickAction.requestCleaning:
+        return () => _request(context, MaintenanceRequestType.cleaning);
+      case QuickAction.payLatestBill:
+        // เปิดได้เฉพาะบิลที่ยังค้างชำระ ตามกฎเดียวกับ canOpenPaymentSheet
+        if (bill == null || !canOpenPaymentSheet(bill)) return null;
+        return () => _openPaymentSheet(context, viewModel, bill);
+      case QuickAction.saveLatestBillPdf:
+        if (bill == null) return null;
+        return () => _saveBillPdf(context, viewModel, bill);
+      case QuickAction.openBills:
+        return () => context.go('/tenant/bills');
+      case QuickAction.openMaintenance:
+        return () => context.go('/tenant/maintenance');
+      case QuickAction.openChat:
+        return () => context.go('/tenant/chat');
+      case QuickAction.openProfile:
+        return () => context.go('/tenant/profile');
+    }
+  }
+
+  IconData _iconFor(QuickAction action) => switch (action) {
+        QuickAction.reportRepair => Icons.build,
+        QuickAction.requestCleaning => Icons.cleaning_services,
+        QuickAction.payLatestBill => Icons.qr_code_2,
+        QuickAction.saveLatestBillPdf => Icons.picture_as_pdf_outlined,
+        QuickAction.openBills => Icons.receipt_long,
+        QuickAction.openMaintenance => Icons.handyman_outlined,
+        QuickAction.openChat => Icons.chat_bubble,
+        QuickAction.openProfile => Icons.person_outline,
+      };
+
+  Color _colorFor(QuickAction action) => switch (action) {
+        QuickAction.reportRepair => AppColors.warning,
+        QuickAction.requestCleaning => AppColors.ring,
+        QuickAction.payLatestBill => AppColors.primary,
+        QuickAction.saveLatestBillPdf => AppColors.mutedForeground,
+        QuickAction.openBills => AppColors.primary,
+        QuickAction.openMaintenance => AppColors.warning,
+        QuickAction.openChat => AppColors.success,
+        QuickAction.openProfile => AppColors.mutedForeground,
+      };
+
   @override
   Widget build(BuildContext context) {
-    final unreadCount = context.watch<TenantShellViewModel>().unreadMessageCount;
+    final unreadCount =
+        context.watch<TenantShellViewModel>().unreadMessageCount;
+    final quickActions = context.watch<QuickActionsViewModel<QuickAction>>();
+
+    if (quickActions.isLoading) return const SizedBox.shrink();
+
+    // ลบจนหมดแล้วเหลือแค่แถบบางๆ ไม่ใช่ซ่อนทั้งการ์ด — ปุ่ม ⚙︎ บนหัวการ์ดคือ
+    // ทางเดียวที่จะเข้าตัวจัดการทางลัด ซ่อนการ์ดทั้งใบจึงเท่ากับลบทางลัดทิ้ง
+    // แบบถาวรโดยไม่มีทางเอากลับมา
+    if (quickActions.actions.isEmpty) {
+      return PaperCard(
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'ยังไม่มีทางลัด',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.mutedForeground,
+                    ),
+              ),
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.tune, size: 18),
+              label: const Text('จัดการทางลัด'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.mutedForeground,
+                visualDensity: VisualDensity.compact,
+              ),
+              onPressed: () =>
+                  showQuickActionsEditor(context, viewModel: quickActions),
+            ),
+          ],
+        ),
+      );
+    }
 
     return PaperCard(
       child: Column(
@@ -759,50 +928,48 @@ class _QuickActions extends StatelessWidget {
                 Text('กำลังส่งคำขอ...',
                     style: Theme.of(context).textTheme.bodySmall),
               ],
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.tune, size: 18),
+                tooltip: 'จัดการทางลัด',
+                color: AppColors.mutedForeground,
+                visualDensity: VisualDensity.compact,
+                onPressed: () =>
+                    showQuickActionsEditor(context, viewModel: quickActions),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
-          // แบ่งความกว้างเท่ากันแทนความกว้างคงที่ — 4 × 76px = 304px ล้นจอ
-          // 360dp ที่มีพื้นที่แค่ W−64 = 296px
-          // crossAxisAlignment.start กันแถวบิดเมื่อบางป้ายขึ้นสองบรรทัด
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _QuickActionItem(
-                  icon: Icons.build,
-                  label: 'แจ้งซ่อม',
-                  color: AppColors.warning,
-                  onTap: () => _request(context, MaintenanceRequestType.repair),
-                ),
-              ),
-              Expanded(
-                child: _QuickActionItem(
-                  icon: Icons.cleaning_services,
-                  label: 'ทำความสะอาด',
-                  color: AppColors.ring,
-                  onTap: () =>
-                      _request(context, MaintenanceRequestType.cleaning),
-                ),
-              ),
-              Expanded(
-                child: _QuickActionItem(
-                  icon: Icons.receipt_long,
-                  label: 'ดูบิล',
-                  color: AppColors.primary,
-                  onTap: () => context.go('/tenant/bills'),
-                ),
-              ),
-              Expanded(
-                child: _QuickActionItem(
-                  icon: Icons.chat_bubble,
-                  label: 'แชท',
-                  color: AppColors.success,
-                  badgeCount: unreadCount,
-                  onTap: () => context.go('/tenant/chat'),
-                ),
-              ),
-            ],
+          const SizedBox(height: 8),
+          // Wrap แทน Row เพราะจำนวนปุ่มไม่คงที่แล้ว — เกินสี่อันต้องขึ้นแถวใหม่
+          // ไม่ใช่บีบจนป้ายอ่านไม่ออก · ความกว้างคิดจากสี่ปุ่มต่อแถวเท่าเดิม
+          // ผ่านตัวช่วยตัวเดียวกับฝั่งเจ้าของหอ
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const spacing = 8.0;
+              final itemWidth = quickActionWidth(
+                availableWidth: constraints.maxWidth,
+                spacing: spacing,
+              );
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: 12,
+                children: [
+                  for (final action in quickActions.actions)
+                    SizedBox(
+                      width: itemWidth,
+                      child: _QuickActionItem(
+                        icon: _iconFor(action),
+                        label: action.label,
+                        color: _colorFor(action),
+                        badgeCount:
+                            action == QuickAction.openChat ? unreadCount : 0,
+                        onTap: _handlerFor(context, action),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -822,70 +989,82 @@ class _QuickActionItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
-  final VoidCallback onTap;
+
+  /// null = กดไม่ได้ตอนนี้ (เช่นทางลัดชำระบิลตอนไม่มีบิลค้าง)
+  final VoidCallback? onTap;
   final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
+    // จางลงแทนที่จะหายไป — ปุ่มที่โผล่มาหายไปตามสถานะบิลทำให้ตำแหน่งที่ผู้เช่า
+    // จำไว้ขยับทุกครั้ง ซึ่งแย่กว่าปุ่มที่กดไม่ได้ชั่วคราว
+    final enabled = onTap != null;
+    final tint = enabled ? color : AppColors.mutedForeground;
+
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: tint.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, size: 24, color: tint),
                   ),
-                  child: Icon(icon, size: 24, color: color),
-                ),
-                if (badgeCount > 0)
-                  Positioned(
-                    top: -4,
-                    right: -4,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      constraints:
-                          const BoxConstraints(minWidth: 18, minHeight: 18),
-                      decoration: const BoxDecoration(
-                        color: AppColors.destructive,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        '$badgeCount',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                  if (badgeCount > 0)
+                    Positioned(
+                      top: -4,
+                      right: -4,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        constraints:
+                            const BoxConstraints(minWidth: 18, minHeight: 18),
+                        decoration: const BoxDecoration(
+                          color: AppColors.destructive,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '$badgeCount',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            // ไม่ล็อกความกว้าง — กว้างตามช่อง Expanded และขึ้นบรรทัดที่สองได้
-            // เมื่อผู้ใช้ตั้งขนาดตัวอักษรใหญ่ แทนที่จะโดนตัดเป็น '…' เงียบๆ
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.primary,
-                  ),
-            ),
-          ],
+                ],
+              ),
+              const SizedBox(height: 6),
+              // ไม่ล็อกความกว้าง — กว้างตามช่อง Expanded และขึ้นบรรทัดที่สองได้
+              // เมื่อผู้ใช้ตั้งขนาดตัวอักษรใหญ่ แทนที่จะโดนตัดเป็น '…' เงียบๆ
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: enabled
+                          ? AppColors.primary
+                          : AppColors.mutedForeground,
+                    ),
+              ),
+            ],
+          ),
         ),
       ),
     );

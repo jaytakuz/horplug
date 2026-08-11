@@ -2,11 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_view_model.dart';
+import '../../models/landlord_quick_action.dart';
 import '../../models/models.dart';
+import '../../services/quick_action_store.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/dashboard_view_model.dart';
+import '../../viewmodels/quick_actions_view_model.dart';
+import '../../widgets/quick_actions_editor.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../utils/formatters.dart';
+import 'payment_channel_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   final int dormitoryId;
@@ -15,10 +21,24 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => DashboardViewModel(dormitoryId: dormitoryId)
-        ..loadRooms()
-        ..startWatchingRoomChanges(),
+    final profile = AuthScope.of(context).profile;
+
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => DashboardViewModel(dormitoryId: dormitoryId)
+            ..loadRooms()
+            ..startWatchingRoomChanges(),
+        ),
+        // แยก provider ด้วยเหตุผลเดียวกับฝั่งผู้เช่า — ทางลัดอ่านจากดิสก์
+        // ไม่ใช่เครือข่าย การรีเฟรชแดชบอร์ดจึงไม่ควรทำให้ปุ่มกระพริบ
+        ChangeNotifierProvider(
+          create: (_) => QuickActionsViewModel<LandlordQuickAction>(
+            userId: profile?.id ?? 'landlord',
+            store: QuickActionStore(catalog: landlordQuickActions),
+          )..load(),
+        ),
+      ],
       child: const _DashboardView(),
     );
   }
@@ -76,138 +96,116 @@ class _DashboardView extends StatelessWidget {
       onRefresh: viewModel.loadRooms,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.4,
-              children: [
-                StatCard(
-                  title: 'รายได้คาดการณ์',
-                  value: formatBaht(viewModel.estimatedMonthlyRevenue),
-                  subtitle: 'จากห้องที่มีผู้พักอาศัย',
-                  icon: Icons.account_balance_wallet,
-                  variant: BadgeVariant.primary,
-                ),
-                StatCard(
-                  title: 'อัตราเข้าพัก',
-                  value: '${viewModel.occupancyRate}%',
-                  subtitle: '${viewModel.occupiedCount}/${viewModel.totalRooms} ห้อง',
-                  icon: Icons.home,
-                  variant: BadgeVariant.success,
-                ),
-                StatCard(
-                  title: 'ผู้พักอาศัยทั้งหมด',
-                  value: '${viewModel.occupiedCount}',
-                  icon: Icons.people,
-                ),
-                StatCard(
-                  title: 'ห้องว่าง',
-                  value: '${viewModel.vacantCount}',
-                  icon: Icons.meeting_room_outlined,
-                  variant: BadgeVariant.warning,
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('แผนผังห้องพัก',
-                    style: Theme.of(context).textTheme.titleMedium),
-                TextButton(
-                  onPressed: () =>
-                      context.go('/landlord/rooms'),
-                  child: const Text('จัดการห้อง →',
-                      style: TextStyle(color: AppColors.ring)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            PaperCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: ContentBounds(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // การ์ดสรุปสี่ใบ: สองแถวบนมือถือ แถวเดียวเมื่อมีที่พอ · ความสูง
+              // เป็นค่าคงที่ ไม่ใช่สัดส่วนของความกว้าง — ไม่งั้นจอที่แคบจนเหลือ
+              // คอลัมน์เดียวจะได้การ์ดสูงเกือบ 300 ที่มีตัวเลขบรรทัดเดียวอยู่บนสุด
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return GridView(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: cardGridDelegate(
+                      context,
+                      availableWidth: constraints.maxWidth,
+                      // งบต่อคอลัมน์ของมือถือคือราว 200 · ตั้งขั้นต่ำไว้เกินนั้น
+                      // เมื่อไหร่ มือถือก็ตกไปเหลือคอลัมน์เดียวทันที
+                      minItemWidth: 140,
+                      itemHeight: 132,
+                      itemCount: 4,
+                    ),
                     children: [
-                      _LegendItem(label: 'มีคนอยู่', color: AppColors.primary),
-                      SizedBox(width: 12),
-                      _LegendItem(label: 'ว่าง', color: AppColors.success),
-                      SizedBox(width: 12),
-                      _LegendItem(label: 'ซ่อม', color: AppColors.destructive),
+                      StatCard(
+                        title: 'รายได้คาดการณ์',
+                        value: formatBaht(viewModel.estimatedMonthlyRevenue),
+                        subtitle: 'จากห้องที่มีผู้พักอาศัย',
+                        icon: Icons.account_balance_wallet,
+                        variant: BadgeVariant.primary,
+                      ),
+                      StatCard(
+                        title: 'อัตราเข้าพัก',
+                        value: '${viewModel.occupancyRate}%',
+                        subtitle:
+                            '${viewModel.occupiedCount}/${viewModel.totalRooms} ห้อง',
+                        icon: Icons.home,
+                        variant: BadgeVariant.success,
+                      ),
+                      StatCard(
+                        title: 'ผู้พักอาศัยทั้งหมด',
+                        value: '${viewModel.occupiedCount}',
+                        icon: Icons.people,
+                      ),
+                      StatCard(
+                        title: 'ห้องว่าง',
+                        value: '${viewModel.vacantCount}',
+                        icon: Icons.meeting_room_outlined,
+                        variant: BadgeVariant.warning,
+                      ),
                     ],
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('แผนผังห้องพัก',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  TextButton(
+                    onPressed: () => context.go('/landlord/rooms'),
+                    child: const Text('จัดการห้อง →',
+                        style: TextStyle(color: AppColors.ring)),
                   ),
-                  const SizedBox(height: 20),
-                  if (floorNumbers.isEmpty)
-                    Text(
-                      'ยังไม่มีข้อมูลห้องพัก',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    )
-                  else
-                    ...floorNumbers.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final floor = entry.value;
-                      final roomsOnFloor = viewModel.roomsOnFloor(floor);
-
-                      return Column(
-                        children: [
-                          if (index > 0) const SizedBox(height: 16),
-                          _buildFloorSection(
-                              context, viewModel, 'ชั้น $floor', roomsOnFloor),
-                        ],
-                      );
-                    }),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-            Text('เมนูด่วน', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 4,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              children: [
-                _QuickActionItem(
-                  icon: Icons.speed,
-                  label: 'บันทึกมิเตอร์',
-                  color: AppColors.primary,
-                  onTap: () => context.go('/landlord/meter'),
+              const SizedBox(height: 8),
+              PaperCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        _LegendItem(
+                            label: 'มีคนอยู่', color: AppColors.primary),
+                        SizedBox(width: 12),
+                        _LegendItem(label: 'ว่าง', color: AppColors.success),
+                        SizedBox(width: 12),
+                        _LegendItem(
+                            label: 'ซ่อม', color: AppColors.destructive),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    if (floorNumbers.isEmpty)
+                      Text(
+                        'ยังไม่มีข้อมูลห้องพัก',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    else
+                      ...floorNumbers.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final floor = entry.value;
+                        final roomsOnFloor = viewModel.roomsOnFloor(floor);
+
+                        return Column(
+                          children: [
+                            if (index > 0) const SizedBox(height: 16),
+                            _buildFloorSection(context, viewModel,
+                                'ชั้น $floor', roomsOnFloor),
+                          ],
+                        );
+                      }),
+                  ],
                 ),
-                _QuickActionItem(
-                  icon: Icons.receipt_long,
-                  label: 'สร้างบิล',
-                  color: AppColors.success,
-                  badge: '5',
-                  onTap: () => context.go('/landlord/billing'),
-                ),
-                _QuickActionItem(
-                  icon: Icons.description,
-                  label: 'สัญญาเช่า',
-                  color: AppColors.warning,
-                  onTap: () => context.go('/landlord/lease'),
-                ),
-                _QuickActionItem(
-                  icon: Icons.chat_bubble_outline,
-                  label: 'แชท',
-                  color: AppColors.ring,
-                  badge: viewModel.unreadMessageCount > 0
-                      ? '${viewModel.unreadMessageCount}'
-                      : null,
-                  onTap: () => context.go('/landlord/chat'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-          ],
+              ),
+              const SizedBox(height: 24),
+              const _QuickActions(),
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );
@@ -287,8 +285,7 @@ class _DashboardView extends StatelessWidget {
               _TenantDetailRow(label: 'ชั้น', value: room.floor),
               _TenantDetailRow(label: 'สถานะ', value: statusText),
               _TenantDetailRow(
-                  label: 'ราคา',
-                  value: '${formatBaht(room.price)}/เดือน'),
+                  label: 'ราคา', value: '${formatBaht(room.price)}/เดือน'),
               if (room.status == RoomStatus.occupied) ...[
                 const SizedBox(height: 12),
                 Text(
@@ -386,8 +383,8 @@ class _DashboardView extends StatelessWidget {
         builder: (context, _) => StatefulBuilder(
           builder: (dialogContext, setDialogState) => AlertDialog(
             backgroundColor: AppColors.card,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             content: SizedBox(
               width: 420,
               child: Column(
@@ -491,27 +488,30 @@ class _DashboardView extends StatelessWidget {
                         ? 'กำลังส่งคำขอ...'
                         : 'ส่งคำขอ',
                     fullWidth: true,
-                    onPressed: viewModel.isUpdatingTenant || selectedTenant == null
-                        ? null
-                        : () async {
-                            final navigator = Navigator.of(dialogContext);
-                            final landlordId = AuthScope.of(context).profile?.id;
+                    onPressed:
+                        viewModel.isUpdatingTenant || selectedTenant == null
+                            ? null
+                            : () async {
+                                final navigator = Navigator.of(dialogContext);
+                                final landlordId =
+                                    AuthScope.of(context).profile?.id;
 
-                            final result = await viewModel.createTenantJoinRequest(
-                              landlordId: landlordId,
-                              room: room,
-                              tenant: selectedTenant!,
-                            );
+                                final result =
+                                    await viewModel.createTenantJoinRequest(
+                                  landlordId: landlordId,
+                                  room: room,
+                                  tenant: selectedTenant!,
+                                );
 
-                            if (!context.mounted) return;
+                                if (!context.mounted) return;
 
-                            if (result.success) {
-                              navigator.pop();
-                            }
-                            messenger.showSnackBar(
-                              SnackBar(content: Text(result.message)),
-                            );
-                          },
+                                if (result.success) {
+                                  navigator.pop();
+                                }
+                                messenger.showSnackBar(
+                                  SnackBar(content: Text(result.message)),
+                                );
+                              },
                   ),
                 ],
               ),
@@ -595,13 +595,11 @@ class _DashboardView extends StatelessWidget {
                       Expanded(
                         child: Text(
                           'คุณต้องการลบผู้พักอาศัยออกจากห้องนี้ใช่หรือไม่? ห้องนี้จะกลับเป็นห้องว่างและไม่ผูกกับผู้เช่าคนเดิมอีกต่อไป',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                color: AppColors.destructive,
-                                fontWeight: FontWeight.w500,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppColors.destructive,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                         ),
                       ),
                     ],
@@ -843,6 +841,160 @@ class _RoomTile extends StatelessWidget {
   String _shortTenantName(String? fullName) {
     if (fullName == null || fullName.trim().isEmpty) return '';
     return fullName.trim().split(RegExp(r'\s+')).first;
+  }
+}
+
+/// การ์ดทางลัดบนแดชบอร์ดเจ้าของหอ — จัดเองได้แบบเดียวกับฝั่งผู้เช่า
+///
+/// ใช้คำว่า "ทางลัด" เหมือนกันทั้งสองฝั่ง สองฝั่งเรียกของอย่างเดียวกันคนละชื่อ
+/// เมื่อไหร่ มันจะดูเหมือนคนละฟีเจอร์ทั้งที่เป็นอันเดียวกัน
+class _QuickActions extends StatelessWidget {
+  const _QuickActions();
+
+  IconData _iconFor(LandlordQuickAction action) => switch (action) {
+        LandlordQuickAction.recordMeter => Icons.speed,
+        LandlordQuickAction.issueInvoice => Icons.receipt_long,
+        LandlordQuickAction.reviewSlips => Icons.fact_check_outlined,
+        LandlordQuickAction.manageRooms => Icons.meeting_room_outlined,
+        LandlordQuickAction.lease => Icons.description,
+        LandlordQuickAction.chat => Icons.chat_bubble_outline,
+        LandlordQuickAction.maintenanceHistory => Icons.handyman_outlined,
+        LandlordQuickAction.paymentChannel => Icons.qr_code_2,
+      };
+
+  Color _colorFor(LandlordQuickAction action) => switch (action) {
+        LandlordQuickAction.recordMeter => AppColors.primary,
+        LandlordQuickAction.issueInvoice => AppColors.success,
+        LandlordQuickAction.reviewSlips => AppColors.warning,
+        LandlordQuickAction.manageRooms => AppColors.primary,
+        LandlordQuickAction.lease => AppColors.warning,
+        LandlordQuickAction.chat => AppColors.ring,
+        LandlordQuickAction.maintenanceHistory => AppColors.destructive,
+        LandlordQuickAction.paymentChannel => AppColors.mutedForeground,
+      };
+
+  VoidCallback _handlerFor(
+    BuildContext context,
+    DashboardViewModel viewModel,
+    LandlordQuickAction action,
+  ) =>
+      switch (action) {
+        LandlordQuickAction.recordMeter => () => context.go('/landlord/meter'),
+        // ออกบิลกับตรวจสลิปไปหน้าเดียวกัน ต่างกันที่สิ่งที่ไปทำ — หน้าบิลมี
+        // ทั้งปุ่มออกบิลและชิปกรองสถานะอยู่แล้ว
+        LandlordQuickAction.issueInvoice ||
+        LandlordQuickAction.reviewSlips =>
+          () => context.go('/landlord/billing'),
+        LandlordQuickAction.manageRooms => () => context.go('/landlord/rooms'),
+        LandlordQuickAction.lease => () => context.go('/landlord/lease'),
+        LandlordQuickAction.chat => () => context.go('/landlord/chat'),
+        LandlordQuickAction.maintenanceHistory => () =>
+            context.go('/landlord/maintenance'),
+        LandlordQuickAction.paymentChannel => () => showPaymentChannelScreen(
+              context,
+              dormitoryId: viewModel.dormitoryId,
+            ),
+      };
+
+  /// ตัวเลขบน badge · 0 = ไม่มี badge
+  ///
+  /// มาจากข้อมูลจริงทั้งสองตัว — ปุ่มออกบิลเคยมีเลข '5' เขียนตายตัวไว้ในโค้ด
+  /// ซึ่งไม่เคยตรงกับอะไรเลย และสอนให้เจ้าของหอเลิกเชื่อ badge ทั้งหน้า
+  int _badgeFor(DashboardViewModel viewModel, LandlordQuickAction action) =>
+      switch (action) {
+        LandlordQuickAction.chat => viewModel.unreadMessageCount,
+        LandlordQuickAction.reviewSlips => viewModel.pendingSlipCount,
+        _ => 0,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = context.watch<DashboardViewModel>();
+    final quickActions =
+        context.watch<QuickActionsViewModel<LandlordQuickAction>>();
+
+    if (quickActions.isLoading) return const SizedBox.shrink();
+
+    // ลบจนหมดแล้วเหลือแถบบางๆ ไม่ใช่ซ่อนทั้งการ์ด — ปุ่มจัดการคือทางเดียวที่จะ
+    // เอาทางลัดกลับมา ซ่อนทั้งการ์ดเท่ากับลบทิ้งถาวร
+    if (quickActions.actions.isEmpty) {
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              'ยังไม่มีทางลัด',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.mutedForeground,
+                  ),
+            ),
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.tune, size: 18),
+            label: const Text('จัดการทางลัด'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.mutedForeground,
+              visualDensity: VisualDensity.compact,
+            ),
+            onPressed: () =>
+                showQuickActionsEditor(context, viewModel: quickActions),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('ทางลัด', style: Theme.of(context).textTheme.titleMedium),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.tune, size: 18),
+              tooltip: 'จัดการทางลัด',
+              color: AppColors.mutedForeground,
+              visualDensity: VisualDensity.compact,
+              onPressed: () =>
+                  showQuickActionsEditor(context, viewModel: quickActions),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Wrap ไม่ใช่ Row เพราะจำนวนปุ่มไม่คงที่แล้ว — เกินหนึ่งแถวต้องขึ้น
+        // บรรทัดใหม่ ไม่ใช่บีบจนป้ายอ่านไม่ออก · ความกว้างคิดจากสี่ปุ่มต่อแถว
+        // ผ่านตัวช่วยตัวเดียวกับฝั่งผู้เช่า
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const spacing = 8.0;
+            final itemWidth = quickActionWidth(
+              availableWidth: constraints.maxWidth,
+              spacing: spacing,
+            );
+
+            return Wrap(
+              spacing: spacing,
+              runSpacing: 12,
+              children: [
+                for (final action in quickActions.actions)
+                  SizedBox(
+                    width: itemWidth,
+                    child: _QuickActionItem(
+                      icon: _iconFor(action),
+                      label: action.label,
+                      color: _colorFor(action),
+                      badge: switch (_badgeFor(viewModel, action)) {
+                        0 => null,
+                        final count => '$count',
+                      },
+                      onTap: _handlerFor(context, viewModel, action),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
   }
 }
 

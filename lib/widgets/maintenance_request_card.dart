@@ -17,15 +17,20 @@ class MaintenanceRequestCard extends StatelessWidget {
     required this.request,
     required this.readOnly,
     this.onEditCleaningFee,
+    this.onUpdateStatus,
     this.isUpdating = false,
   });
 
   final MaintenanceRequest request;
 
-  /// มุมมองผู้เช่า: ซ่อนปุ่มแก้ค่าทำความสะอาด เจ้าของหอเท่านั้นที่กำหนดได้
+  /// มุมมองผู้เช่า: ซ่อนปุ่มแก้ค่าทำความสะอาดและการแตะเปลี่ยนสถานะ
+  /// เจ้าของหอเท่านั้นที่ทำสองอย่างนี้ได้
   final bool readOnly;
 
   final Future<void> Function(double fee)? onEditCleaningFee;
+
+  /// เจ้าของหอเท่านั้น: แตะที่การ์ดเพื่อเปลี่ยนสถานะคำขอ
+  final Future<void> Function(MaintenanceStatus status)? onUpdateStatus;
   final bool isUpdating;
 
   @override
@@ -41,69 +46,163 @@ class MaintenanceRequestCard extends StatelessWidget {
       case MaintenanceStatus.completed:
         variant = BadgeVariant.success;
         break;
+      case MaintenanceStatus.cancelled:
+        variant = BadgeVariant.destructive;
+        break;
     }
 
-    return PaperCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Icon(
-                      request.requestType == MaintenanceRequestType.repair
-                          ? Icons.build_outlined
-                          : Icons.cleaning_services_outlined,
-                      size: 18,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        maintenanceRequestTypeLabel(request.requestType),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
+    final canUpdateStatus = !readOnly && onUpdateStatus != null;
+
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(
+                    request.requestType == MaintenanceRequestType.repair
+                        ? Icons.build_outlined
+                        : Icons.cleaning_services_outlined,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      maintenanceRequestTypeLabel(request.requestType),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              StatusBadge(
-                label: maintenanceStatusLabel(request.status),
-                variant: variant,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(request.description,
-              style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 8),
+            ),
+            StatusBadge(
+              label: maintenanceStatusLabel(request.status),
+              variant: variant,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(request.description,
+            style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: 8),
+        Text(
+          'แจ้งโดย ${request.tenantName} • ${_formatDate(request.requestedAt)}',
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: AppColors.mutedForeground),
+        ),
+        if (request.completedAt != null)
           Text(
-            'แจ้งโดย ${request.tenantName} • ${_formatDate(request.requestedAt)}',
+            'เสร็จสิ้นเมื่อ ${_formatDate(request.completedAt!)}',
             style: Theme.of(context)
                 .textTheme
                 .bodySmall
                 ?.copyWith(color: AppColors.mutedForeground),
           ),
-          if (request.completedAt != null)
-            Text(
-              'เสร็จสิ้นเมื่อ ${_formatDate(request.completedAt!)}',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: AppColors.mutedForeground),
-            ),
-          if (request.requestType == MaintenanceRequestType.cleaning &&
-              (!readOnly || request.cleaningFee > 0))
-            _buildCleaningFeeRow(context),
+        if (canUpdateStatus) ...[
+          const SizedBox(height: 4),
+          Text('แตะเพื่ออัปเดตสถานะ',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppColors.mutedForeground,
+                    fontSize: 10,
+                  )),
         ],
+        if (request.requestType == MaintenanceRequestType.cleaning &&
+            (!readOnly || request.cleaningFee > 0))
+          _buildCleaningFeeRow(context),
+      ],
+    );
+
+    if (!canUpdateStatus) {
+      return PaperCard(child: content);
+    }
+
+    // เหตุผลเดียวกับปุ่มแก้ค่าทำความสะอาด — ต้องมี Material ผิวโปร่งใสของ
+    // ตัวเอง ไม่งั้น ripple ของ InkWell จะโดน Container ทึบของ PaperCard บัง
+    return PaperCard(
+      padding: EdgeInsets.zero,
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: isUpdating ? null : () => _handleUpdateStatus(context),
+          child: Padding(padding: const EdgeInsets.all(16), child: content),
+        ),
       ),
     );
+  }
+
+  Future<void> _handleUpdateStatus(BuildContext context) async {
+    final onUpdateStatus = this.onUpdateStatus;
+    if (onUpdateStatus == null) return;
+
+    final status = await showModalBottomSheet<MaintenanceStatus>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('เปลี่ยนสถานะแจ้งซ่อม',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.pending_outlined,
+                    color: AppColors.warning),
+                title: const Text('รอดำเนินการ'),
+                onTap: () =>
+                    Navigator.of(sheetContext).pop(MaintenanceStatus.pending),
+              ),
+              ListTile(
+                leading:
+                    const Icon(Icons.build_outlined, color: AppColors.primary),
+                title: const Text('กำลังดำเนินการ'),
+                onTap: () => Navigator.of(sheetContext)
+                    .pop(MaintenanceStatus.inProgress),
+              ),
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline,
+                    color: AppColors.success),
+                title: const Text('เสร็จสิ้น'),
+                onTap: () =>
+                    Navigator.of(sheetContext).pop(MaintenanceStatus.completed),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cancel_outlined,
+                    color: AppColors.destructive),
+                title: const Text('ยกเลิก'),
+                onTap: () =>
+                    Navigator.of(sheetContext).pop(MaintenanceStatus.cancelled),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (status != null) {
+      await onUpdateStatus(status);
+    }
   }
 
   Widget _buildCleaningFeeRow(BuildContext context) {

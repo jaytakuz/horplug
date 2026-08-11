@@ -50,3 +50,15 @@ pubspec.lock
 pubspec.lock
 documents
 ios/Podfile.lock
+MIGRATION_SUMMARY.md
+ROOM_MANAGEMENT_FEATURE.md
+devtools_options.yaml
+
+# ข้อมูลผู้เช่าจริงที่ export มาจากฐานข้อมูล — ชื่อ เบอร์โทร เลขห้อง
+# ห้ามเข้า git เด็ดขาด ไฟล์ที่เคยขึ้นไปแล้วลบทีหลังยังอยู่ในประวัติตลอดไป
+database/csv/
+sample_documents/
+
+# ไฟล์ที่ส่วนขยายของ editor สร้างเอง ไม่ใช่ของโปรเจกต์นี้ (java-upgrade ในโปรเจกต์
+# Flutter) · ถ้าวันไหนเพิ่ม GitHub Actions จริง ให้ยกเว้น .github/workflows/ ออกมา
+.github/

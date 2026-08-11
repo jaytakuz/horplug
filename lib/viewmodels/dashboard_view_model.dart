@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
+import '../services/invoice_service.dart';
 import '../services/supabase_service.dart';
 import 'action_result.dart';
 import 'error_message.dart';
@@ -11,10 +12,13 @@ class DashboardViewModel extends ChangeNotifier {
   DashboardViewModel({
     required this.dormitoryId,
     SupabaseService? service,
-  }) : _service = service ?? SupabaseService();
+    InvoiceService? invoices,
+  })  : _service = service ?? SupabaseService(),
+        _invoices = invoices ?? InvoiceService();
 
   final int dormitoryId;
   final SupabaseService _service;
+  final InvoiceService _invoices;
 
   bool isLoading = true;
   bool isUpdatingTenant = false;
@@ -22,6 +26,12 @@ class DashboardViewModel extends ChangeNotifier {
   List<Room> rooms = [];
   List<Tenant> availableTenants = [];
   int unreadMessageCount = 0;
+
+  /// บิลที่ผู้เช่าแจ้งชำระแล้วและรอเจ้าของหอตรวจ — ใช้เป็น badge บนทางลัด
+  ///
+  /// นับไม่สำเร็จให้เป็น 0 คือไม่มี badge · ไม่ทำให้ทั้งแดชบอร์ดล้ม เพราะตัวเลข
+  /// บนปุ่มทางลัดไม่คุ้มกับการที่แผนผังห้องกับการ์ดสรุปหายไปทั้งหน้า
+  int pendingSlipCount = 0;
 
   StreamSubscription<List<Map<String, dynamic>>>? _roomChangesSubscription;
 
@@ -69,12 +79,27 @@ class DashboardViewModel extends ChangeNotifier {
       rooms = fetchedRooms;
       availableTenants = tenants;
       unreadMessageCount = unread;
+      pendingSlipCount = await _countPendingSlips();
       isLoading = false;
       notifyListeners();
     } catch (error) {
       errorMessage = formatErrorMessage(error);
       isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// นับบิลที่รอตรวจ · คืน 0 เมื่อนับไม่ได้ ไม่ปล่อยให้ล้มทั้ง [loadRooms]
+  ///
+  /// ฐานข้อมูลที่ยังไม่ได้รัน migration ของตาราง invoices จะตอบ error ที่นี่
+  /// การปล่อยให้ทะลุขึ้นไปแปลว่าแดชบอร์ดทั้งหน้าขึ้น "โหลดข้อมูลไม่สำเร็จ"
+  /// เพราะตัวเลขบน badge ปุ่มเดียว
+  Future<int> _countPendingSlips() async {
+    try {
+      return await _invoices.countAwaitingReview(dormitoryId: dormitoryId);
+    } catch (error) {
+      debugPrint('นับบิลที่รอตรวจไม่สำเร็จ ข้ามไป: $error');
+      return 0;
     }
   }
 

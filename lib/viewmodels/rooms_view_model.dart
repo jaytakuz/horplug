@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
+import '../services/room_batch.dart';
 import '../services/supabase_service.dart';
 import 'action_result.dart';
 import 'error_message.dart';
@@ -217,6 +218,65 @@ class RoomsViewModel extends ChangeNotifier {
     } finally {
       isUpdatingTenant = false;
       notifyListeners();
+    }
+  }
+
+  /// ดูล่วงหน้าว่าการสร้างเป็นชุดจะได้ห้องอะไรบ้าง และข้ามห้องไหน
+  ///
+  /// เรียกทุกครั้งที่ผู้ใช้พิมพ์ จึงต้องไม่แตะเครือข่าย — เทียบกับ [rooms]
+  /// ที่โหลดไว้แล้วเท่านั้น
+  RoomBatchPlan previewRoomBatch({
+    required int fromFloor,
+    required int toFloor,
+    required int roomsPerFloor,
+  }) {
+    return planRoomBatch(
+      candidates: generateRooms(
+        fromFloor: fromFloor,
+        toFloor: toFloor,
+        roomsPerFloor: roomsPerFloor,
+      ),
+      existingRoomNumbers: rooms.map((room) => room.id),
+    );
+  }
+
+  /// สร้างห้องทั้งชุดใน insert เดียว
+  Future<ActionResult> addRoomBatch({
+    required RoomBatchPlan plan,
+    required String basePriceInput,
+  }) async {
+    if (!plan.hasAnythingToCreate) {
+      return const ActionResult(
+        success: false,
+        message: 'ไม่มีห้องใหม่ให้สร้าง — เลขห้องทั้งหมดมีอยู่แล้ว',
+      );
+    }
+
+    final basePrice = double.tryParse(basePriceInput.trim());
+    if (basePrice == null || basePrice < 0) {
+      return const ActionResult(success: false, message: 'ราคาไม่ถูกต้อง');
+    }
+
+    try {
+      await _service.addRooms(
+        dormitoryId: dormitoryId,
+        rooms: plan.toCreate,
+        basePrice: basePrice,
+      );
+      await loadData();
+
+      final skippedNote = plan.skipped.isEmpty
+          ? ''
+          : ' (ข้าม ${plan.skipped.length} ห้องที่มีอยู่แล้ว)';
+      return ActionResult(
+        success: true,
+        message: 'สร้าง ${plan.toCreate.length} ห้องแล้ว$skippedNote',
+      );
+    } catch (error) {
+      return ActionResult(
+        success: false,
+        message: 'สร้างห้องไม่สำเร็จ: ${formatErrorMessage(error)}',
+      );
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/lease_view_model.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../utils/formatters.dart';
@@ -25,10 +26,15 @@ class _LeaseView extends StatelessWidget {
   Widget build(BuildContext context) {
     final viewModel = context.watch<LeaseViewModel>();
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: viewModel.isPreview
-          ? _buildPreviewView(context, viewModel)
-          : _buildFormView(context, viewModel),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      // สัญญาเช่าเป็นฟอร์มที่กรอกทีละช่อง ไม่ใช่ตาราง จึงจำกัดให้แคบกว่าหน้าอื่น
+      // — ช่องกรอกที่ลากยาวเต็มจอทำให้ป้ายกำกับกับค่าที่พิมพ์อยู่คนละฟากสายตา
+      child: ContentBounds(
+        maxWidth: 720,
+        child: viewModel.isPreview
+            ? _buildPreviewView(context, viewModel)
+            : _buildFormView(context, viewModel),
+      ),
     );
   }
 

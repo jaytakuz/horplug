@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
+import '../../services/invoice_pdf.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
+import '../../viewmodels/error_message.dart';
 import '../../viewmodels/tenant_bills_view_model.dart';
 import '../../widgets/payment_sheet.dart';
 import '../../widgets/reusable_widgets.dart';
@@ -34,14 +37,48 @@ class _TenantBillsView extends StatelessWidget {
   Future<void> _handlePay(
     BuildContext context,
     TenantBillsViewModel viewModel,
-    TenantBill bill,
+    Invoice bill,
   ) async {
     await showPaymentSheet(
       context,
       bill: bill,
       channel: viewModel.paymentChannel,
-      onSubmit: (slip) => viewModel.submitSlip(billId: bill.id, slip: slip),
+      onSubmit: (slip) => viewModel.submitSlip(bill: bill, slip: slip),
+      onSubmitCash: () => viewModel.submitCash(bill: bill),
     );
+  }
+
+  Future<void> _handleCancelCash(
+    BuildContext context,
+    TenantBillsViewModel viewModel,
+    Invoice bill,
+  ) async {
+    final result = await viewModel.cancelCash(bill: bill);
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
+  }
+
+  Future<void> _handleSavePdf(
+    BuildContext context,
+    TenantBillsViewModel viewModel,
+    Invoice bill,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final dormitoryName = AuthScope.of(context).dormitoryName ?? 'หอพัก';
+
+    try {
+      await shareInvoicePdf(
+        invoice: bill,
+        dormitoryName: dormitoryName,
+        channel: viewModel.paymentChannel,
+      );
+    } catch (error) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('สร้างไฟล์ PDF ไม่สำเร็จ: ${formatErrorMessage(error)}'),
+      ));
+    }
   }
 
   @override
@@ -59,9 +96,10 @@ class _TenantBillsView extends StatelessWidget {
 
     return RefreshIndicator(
       onRefresh: viewModel.load,
-      child: ListView(
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: contentInsets(context, availableWidth: constraints.maxWidth),
         children: [
           Text('บิลของฉัน', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
@@ -99,6 +137,7 @@ class _TenantBillsView extends StatelessWidget {
           const SizedBox(height: 16),
           ..._buildList(context, viewModel),
         ],
+        ),
       ),
     );
   }
@@ -166,6 +205,8 @@ class _TenantBillsView extends StatelessWidget {
         TenantBillCard(
           bill: bill,
           onPay: () => _handlePay(context, viewModel, bill),
+          onSavePdf: () => _handleSavePdf(context, viewModel, bill),
+          onCancelCash: () => _handleCancelCash(context, viewModel, bill),
         ),
         const SizedBox(height: 12),
       ],

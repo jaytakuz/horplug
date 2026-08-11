@@ -3,8 +3,9 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../theme/breakpoints.dart';
+import 'invoice_chat_card.dart';
 import 'maintenance_request_dialog.dart';
-
 
 class ChatConversationView extends StatefulWidget {
   const ChatConversationView({
@@ -21,6 +22,9 @@ class ChatConversationView extends StatefulWidget {
     this.onRequestMaintenance,
     this.isRequestingMaintenance = false,
     this.onUpdateMaintenanceStatus,
+    this.invoicesById = const {},
+    this.onOpenInvoice,
+    this.promptPayId,
   });
 
   final List<ChatMessage> messages;
@@ -54,8 +58,19 @@ class ChatConversationView extends StatefulWidget {
   /// Landlord-only: called when they pick a new status for a maintenance
   /// bubble. Omit to make maintenance bubbles non-interactive.
   final Future<void> Function(
-      int requestId, MaintenanceStatus status, MaintenanceRequestType type)?
+          int requestId, MaintenanceStatus status, MaintenanceRequestType type)?
       onUpdateMaintenanceStatus;
+
+  /// บิลของห้องนี้ map ด้วย id — ใช้ resolve สถานะสดของการ์ดบิลในแชท
+  final Map<int, Invoice> invoicesById;
+
+  /// เรียกเมื่อแตะการ์ดบิล — ฝั่งผู้เช่าเปิดแผ่นชำระเงิน ฝั่งเจ้าของหอเปิด
+  /// รายละเอียดบิล (Task 7) ส่ง null เพื่อทำให้การ์ดบิลแตะไม่ได้
+  final void Function(Invoice invoice)? onOpenInvoice;
+
+  /// ฝั่งผู้เช่า: เลขพร้อมเพย์ของหอ ทำให้การ์ดบิลที่ยังค้างชำระมี QR ระบุยอด
+  /// ให้สแกนจ่ายได้ในแชทเลย · ฝั่งเจ้าของหอไม่ส่งมา
+  final String? promptPayId;
 
   @override
   State<ChatConversationView> createState() => _ChatConversationViewState();
@@ -129,8 +144,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                 leading: const Icon(Icons.photo_camera_outlined,
                     color: AppColors.primary),
                 title: const Text('ถ่ายรูป'),
-                onTap: () =>
-                    Navigator.of(sheetContext).pop(ImageSource.camera),
+                onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
               ),
               const SizedBox(height: 8),
             ],
@@ -181,24 +195,32 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                 ),
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.pending_outlined, color: AppColors.warning),
+                leading: const Icon(Icons.pending_outlined,
+                    color: AppColors.warning),
                 title: const Text('รอดำเนินการ'),
                 onTap: () =>
                     Navigator.of(sheetContext).pop(MaintenanceStatus.pending),
               ),
               ListTile(
-                leading: const Icon(Icons.build_outlined, color: AppColors.primary),
+                leading:
+                    const Icon(Icons.build_outlined, color: AppColors.primary),
                 title: const Text('กำลังดำเนินการ'),
-                onTap: () =>
-                    Navigator.of(sheetContext).pop(MaintenanceStatus.inProgress),
+                onTap: () => Navigator.of(sheetContext)
+                    .pop(MaintenanceStatus.inProgress),
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.check_circle_outline, color: AppColors.success),
+                leading: const Icon(Icons.check_circle_outline,
+                    color: AppColors.success),
                 title: const Text('เสร็จสิ้น'),
                 onTap: () =>
                     Navigator.of(sheetContext).pop(MaintenanceStatus.completed),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cancel_outlined,
+                    color: AppColors.destructive),
+                title: const Text('ยกเลิก'),
+                onTap: () =>
+                    Navigator.of(sheetContext).pop(MaintenanceStatus.cancelled),
               ),
               const SizedBox(height: 8),
             ],
@@ -233,7 +255,13 @@ class _ChatConversationViewState extends State<ChatConversationView> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    // ห่อทั้ง Stack ไม่ใช่เฉพาะรายการข้อความ — แถบพิมพ์ต้องกว้างเท่ากับสาย
+    // สนทนา ไม่งั้นบนจอกว้างช่องพิมพ์จะทอดยาวเต็มจอในขณะที่ข้อความอยู่ตรงกลาง
+    // เป็นคอลัมน์แคบๆ ดูเหมือนเป็นคนละหน้าจอกัน
+    return ContentBounds(
+      maxWidth: 900,
+      gutter: 0,
+      child: Stack(
       children: [
         // ครอบเฉพาะพื้นที่ข้อความ ไม่ครอบแถบพิมพ์ — แตะที่ว่างเพื่อปิดแป้นพิมพ์
         //
@@ -293,6 +321,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
           child: _buildInputBar(),
         ),
       ],
+      ),
     );
   }
 
@@ -320,6 +349,11 @@ class _ChatConversationViewState extends State<ChatConversationView> {
         requestType != null &&
         message.maintenanceRequestId != null &&
         widget.onUpdateMaintenanceStatus != null;
+    final invoiceOfMessage = message.type == MessageType.invoice
+        ? widget.invoicesById[message.invoiceId]
+        : null;
+    final canOpenInvoice =
+        invoiceOfMessage != null && widget.onOpenInvoice != null;
 
     final bubble = Container(
       padding: isImage ? EdgeInsets.zero : const EdgeInsets.all(12),
@@ -351,11 +385,18 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                         message.maintenanceRequestId!, requestType),
                     child: bubble,
                   )
-                : bubble,
+                : canOpenInvoice
+                    ? GestureDetector(
+                        onTap: () =>
+                            widget.onOpenInvoice!(invoiceOfMessage),
+                        child: bubble,
+                      )
+                    : bubble,
             const SizedBox(height: 2),
             Text(
               '${localTimestamp.hour.toString().padLeft(2, '0')}:${localTimestamp.minute.toString().padLeft(2, '0')} น.',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 8),
+              style:
+                  Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 8),
             ),
           ],
         ),
@@ -406,13 +447,12 @@ class _ChatConversationViewState extends State<ChatConversationView> {
         children: [
           Row(
             children: [
-              Icon(
-                  isCleaning ? Icons.cleaning_services : Icons.build,
-                  size: 16,
-                  color: AppColors.warning),
+              Icon(isCleaning ? Icons.cleaning_services : Icons.build,
+                  size: 16, color: AppColors.warning),
               const SizedBox(width: 8),
               Text(isCleaning ? 'ขอทำความสะอาด' : 'แจ้งซ่อม',
-                  style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                  style:
+                      TextStyle(color: textColor, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 4),
@@ -428,23 +468,49 @@ class _ChatConversationViewState extends State<ChatConversationView> {
 
     if (message.type == MessageType.maintenanceUpdate ||
         message.type == MessageType.cleaningUpdate) {
+      final isCancelled = message.text.contains(': ยกเลิก');
+      final messageLines = message.text.split('\n');
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.check_circle, size: 16, color: AppColors.success),
+              Icon(
+                isCancelled ? Icons.cancel : Icons.check_circle,
+                size: 16,
+                color:
+                    isCancelled ? AppColors.destructive : AppColors.success,
+              ),
               const SizedBox(width: 8),
               Expanded(
-                  child: Text(message.text, style: TextStyle(color: textColor))),
+                child: Text(messageLines.first,
+                    style: TextStyle(color: textColor)),
+              ),
             ],
           ),
+          if (messageLines.length > 1) ...[
+            const SizedBox(height: 4),
+            Text(
+              messageLines.skip(1).join('\n'),
+              style: TextStyle(color: textColor),
+            ),
+          ],
           if (canUpdateMaintenance) ...[
             const SizedBox(height: 4),
             Text('แตะเพื่ออัปเดตสถานะ',
                 style: TextStyle(color: hintColor, fontSize: 10)),
           ],
         ],
+      );
+    }
+
+    if (message.type == MessageType.invoice) {
+      return InvoiceChatCard(
+        invoice: widget.invoicesById[message.invoiceId],
+        fallbackText: message.text,
+        textColor: textColor,
+        onOpen: widget.onOpenInvoice == null ? null : () {},
+        promptPayId: widget.promptPayId,
       );
     }
 
@@ -475,7 +541,8 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                           )
                         : const Icon(Icons.image_outlined,
                             color: AppColors.primary),
-                    onPressed: widget.isUploadingImage ? null : _handlePickImage,
+                    onPressed:
+                        widget.isUploadingImage ? null : _handlePickImage,
                   ),
                 if (widget.onRequestMaintenance != null) ...[
                   IconButton(
@@ -555,5 +622,4 @@ class _ChatConversationViewState extends State<ChatConversationView> {
       ),
     );
   }
-
 }

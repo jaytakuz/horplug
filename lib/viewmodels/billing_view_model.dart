@@ -1,33 +1,48 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
-import '../services/supabase_service.dart';
+import '../services/invoice_service.dart';
+import 'error_message.dart';
 
 class BillingViewModel extends ChangeNotifier {
-  BillingViewModel({required this.dormitoryId, SupabaseService? service})
-      : _service = service ?? SupabaseService();
+  BillingViewModel({required this.dormitoryId, InvoiceService? service})
+      : _service = service ?? InvoiceService();
 
   final int dormitoryId;
-  final SupabaseService _service;
+  final InvoiceService _service;
 
   bool isLoading = true;
   List<Invoice> invoices = [];
+
+  /// จำนวนห้องที่มิเตอร์พร้อมแล้วแต่ยังไม่ได้ออกบิล — ใช้แยกสาเหตุรายการว่าง
+  int readyToIssueCount = 0;
   String selectedFilter = 'ทั้งหมด';
   int selectedMonth = DateTime.now().month;
   int selectedYear = DateTime.now().year;
 
-  String? _pendingError;
+  /// error ของการโหลดล่าสุด · null แปลว่าโหลดสำเร็จ
+  ///
+  /// เดิมเป็น one-shot ที่ View อ่านแล้วยิง SnackBar ทันที ซึ่งพังกับ
+  /// `IndexedStack` ใน AdminShell — ทุกแท็บถูก build พร้อมกันตั้งแต่เปิดแอป
+  /// หน้าบิลจึงโหลดและยิง SnackBar ทับหน้าหลักทั้งที่ผู้ใช้ยังไม่ได้เปิดแท็บบิล
+  /// เลยสักครั้ง เก็บเป็นสถานะถาวรแล้วให้หน้าจอวาดเองจึงถูกกว่า ทั้งไม่ข้ามแท็บ
+  /// ไม่หายไปเองใน 4 วินาที และมีที่ให้วางปุ่มลองใหม่
+  String? errorMessage;
 
   List<Invoice> get filteredInvoices {
     switch (selectedFilter) {
       case 'ค้างชำระ':
-        return invoices.where((inv) => inv.status == InvoiceStatus.unpaid).toList();
+        return invoices.where((i) => i.status == InvoiceStatus.unpaid).toList();
       case 'รอตรวจสลิป':
-        return invoices.where((inv) => inv.status == InvoiceStatus.pending).toList();
+        return invoices.where((i) => i.status == InvoiceStatus.pending).toList();
       case 'ชำระแล้ว':
-        return invoices.where((inv) => inv.status == InvoiceStatus.paid).toList();
+        return invoices.where((i) => i.status == InvoiceStatus.paid).toList();
+      case 'ยกเลิกแล้ว':
+        return invoices.where((i) => i.isVoided).toList();
       default:
-        return invoices;
+        // ใบที่ยกเลิกไม่โผล่ในรายการปกติ ไม่งั้นงวดที่ออกใบแทนจะดูเหมือน
+        // ค้างชำระสองใบ
+        return invoices.where((i) => !i.isVoided).toList();
     }
   }
 
@@ -38,6 +53,7 @@ class BillingViewModel extends ChangeNotifier {
 
   Future<void> loadInvoices() async {
     isLoading = true;
+    errorMessage = null;
     notifyListeners();
     try {
       invoices = await _service.fetchInvoices(
@@ -45,11 +61,16 @@ class BillingViewModel extends ChangeNotifier {
         month: selectedMonth,
         year: selectedYear,
       );
+      final preview = await _service.previewDrafts(
+        dormitoryId: dormitoryId,
+        month: selectedMonth,
+        year: selectedYear,
+      );
+      readyToIssueCount = preview.drafts.length;
+    } catch (error) {
+      errorMessage = formatErrorMessage(error);
+    } finally {
       isLoading = false;
-      notifyListeners();
-    } catch (e) {
-      isLoading = false;
-      _pendingError = 'โหลดข้อมูลบิลไม่สำเร็จ: $e';
       notifyListeners();
     }
   }
@@ -58,13 +79,5 @@ class BillingViewModel extends ChangeNotifier {
     if (month != null) selectedMonth = month;
     if (year != null) selectedYear = year;
     await loadInvoices();
-  }
-
-  /// One-shot read: returns the pending error (if any) and clears it, so a
-  /// listener doesn't re-show the same SnackBar on every later notify.
-  String? consumeError() {
-    final error = _pendingError;
-    _pendingError = null;
-    return error;
   }
 }
