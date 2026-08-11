@@ -194,18 +194,17 @@ class _RoomsViewState extends State<_RoomsView> {
           // ขยายขนาดตัวอักษรของระบบจนแถวสูงเกิน 180 ช่องก็ถูกตัดทิ้งเงียบๆ
           LayoutBuilder(
             builder: (context, constraints) {
-              final columns = gridColumnsFor(
-                availableWidth: constraints.maxWidth,
-                minItemWidth: 180,
-              );
-
-              return GridView.count(
+              return GridView(
                 shrinkWrap: true,
-                crossAxisCount: columns,
                 physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: 2.5,
+                gridDelegate: cardGridDelegate(
+                  context,
+                  availableWidth: constraints.maxWidth,
+                  minItemWidth: 140,
+                  itemHeight: 80,
+                  itemCount: 4,
+                  spacing: 8,
+                ),
                 children: [
                   _buildStatTile(context, 'ทั้งหมด', stats['total'].toString(),
                       AppColors.primary),

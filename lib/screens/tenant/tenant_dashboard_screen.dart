@@ -939,12 +939,14 @@ class _QuickActions extends StatelessWidget {
           const SizedBox(height: 8),
           // Wrap แทน Row เพราะจำนวนปุ่มไม่คงที่แล้ว — เกินสี่อันต้องขึ้นแถวใหม่
           // ไม่ใช่บีบจนป้ายอ่านไม่ออก · ความกว้างคิดจากสี่ปุ่มต่อแถวเท่าเดิม
+          // ผ่านตัวช่วยตัวเดียวกับฝั่งเจ้าของหอ
           LayoutBuilder(
             builder: (context, constraints) {
-              const perRow = 4;
               const spacing = 8.0;
-              final itemWidth =
-                  (constraints.maxWidth - spacing * (perRow - 1)) / perRow;
+              final itemWidth = quickActionWidth(
+                availableWidth: constraints.maxWidth,
+                spacing: spacing,
+              );
 
               return Wrap(
                 spacing: spacing,

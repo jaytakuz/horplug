@@ -3,12 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:horplug/theme/breakpoints.dart';
 
 /// วาง widget ใต้ MediaQuery ที่กำหนดความกว้างเอง แล้วคืน BuildContext ข้างใน
-Future<BuildContext> _contextAtWidth(WidgetTester tester, double width) async {
+Future<BuildContext> _contextAtWidth(
+  WidgetTester tester,
+  double width, {
+  double textScale = 1.0,
+}) async {
   late BuildContext captured;
 
   await tester.pumpWidget(
     MediaQuery(
-      data: MediaQueryData(size: Size(width, 800)),
+      data: MediaQueryData(
+        size: Size(width, 800),
+        textScaler: TextScaler.linear(textScale),
+      ),
       child: Builder(
         builder: (context) {
           captured = context;
@@ -19,6 +26,28 @@ Future<BuildContext> _contextAtWidth(WidgetTester tester, double width) async {
   );
 
   return captured;
+}
+
+/// gridDelegate ที่ได้จาก [cardGridDelegate] ในรูปแบบที่อ่านค่าออกมาตรวจได้
+Future<SliverGridDelegateWithFixedCrossAxisCount> _cardGrid(
+  WidgetTester tester, {
+  required double windowWidth,
+  required double availableWidth,
+  double minItemWidth = 140,
+  double itemHeight = 132,
+  int itemCount = 4,
+  double textScale = 1.0,
+}) async {
+  final context =
+      await _contextAtWidth(tester, windowWidth, textScale: textScale);
+
+  return cardGridDelegate(
+    context,
+    availableWidth: availableWidth,
+    minItemWidth: minItemWidth,
+    itemHeight: itemHeight,
+    itemCount: itemCount,
+  ) as SliverGridDelegateWithFixedCrossAxisCount;
 }
 
 void main() {
@@ -135,6 +164,81 @@ void main() {
             availableWidth: 1000, minItemWidth: 100, maxColumns: 3),
         3,
       );
+    });
+  });
+
+  group('cardGridDelegate', () {
+    testWidgets('ความสูงของช่องไม่ผูกกับความกว้างของจอ', (tester) async {
+      // หัวใจของบั๊ก · childAspectRatio ผูกความสูงไว้กับความกว้างต่อช่อง
+      // พอจำนวนคอลัมน์เปลี่ยนตามจอ ความกว้างต่อช่องก็เปลี่ยน ความสูงจึงเปลี่ยน
+      // ตามไปด้วย — การ์ดที่ออกแบบไว้สูง 132 บนมือถือกลายเป็นสูง 291
+      final phone =
+          await _cardGrid(tester, windowWidth: 440, availableWidth: 408);
+      final tablet =
+          await _cardGrid(tester, windowWidth: 834, availableWidth: 730);
+      final desktop =
+          await _cardGrid(tester, windowWidth: 1920, availableWidth: 1080);
+
+      expect(phone.mainAxisExtent, 132);
+      expect(tablet.mainAxisExtent, 132);
+      expect(desktop.mainAxisExtent, 132);
+    });
+
+    testWidgets('มือถือได้สองคอลัมน์ ไม่ใช่คอลัมน์เดียว', (tester) async {
+      // ค่า minItemWidth ต้องคิดจากงบความกว้างต่อคอลัมน์ที่มือถือมีจริง
+      // ไม่ใช่จากความกว้างที่การ์ดอยากได้บนเดสก์ท็อป
+      for (final width in [320.0, 360.0, 390.0, 440.0]) {
+        final grid = await _cardGrid(
+          tester,
+          windowWidth: width,
+          availableWidth: width - 32,
+        );
+
+        expect(grid.crossAxisCount, 2, reason: 'จอกว้าง $width');
+      }
+    });
+
+    testWidgets('แถวสุดท้ายไม่เหลือช่องเดียวห้อยอยู่', (tester) async {
+      // ของสี่ชิ้นเรียงสามคอลัมน์ได้ 3+1 · แถวล่างที่มีใบเดียวดูเหมือนหลุดมา
+      // มากกว่าเป็นส่วนหนึ่งของชุด จึงถอยลงมาหนึ่งคอลัมน์ให้ลงตัว
+      final grid = await _cardGrid(
+        tester,
+        windowWidth: 700,
+        availableWidth: 620,
+        minItemWidth: 180,
+        itemCount: 4,
+      );
+
+      expect(grid.crossAxisCount, 2);
+    });
+
+    testWidgets('ขยายตัวอักษรของระบบแล้วช่องสูงขึ้นตาม', (tester) async {
+      // ความสูงคงที่ตัดข้อความทิ้งเงียบๆ เมื่อผู้ใช้ตั้งตัวอักษรใหญ่ขึ้น
+      final normal =
+          await _cardGrid(tester, windowWidth: 440, availableWidth: 408);
+      final large = await _cardGrid(tester,
+          windowWidth: 440, availableWidth: 408, textScale: 1.5);
+
+      expect(large.mainAxisExtent, greaterThan(normal.mainAxisExtent!));
+    });
+  });
+
+  group('quickActionWidth', () {
+    test('มือถือได้สี่ปุ่มต่อแถวเสมอ', () {
+      // ปุ่มทางลัดสี่อันเป็นชุดที่ผู้ใช้จำเป็นภาพรวมทั้งแถว · การตัดเหลือสาม
+      // แล้วให้อันที่สี่ตกไปแถวล่างทำให้ชุดเดียวดูเหมือนสองกลุ่ม
+      for (final available in [288.0, 328.0, 358.0, 408.0]) {
+        final width = quickActionWidth(availableWidth: available);
+        final rowWidth = width * 4 + 8 * 3;
+
+        expect(rowWidth, lessThanOrEqualTo(available + 0.01),
+            reason: 'ที่ว่าง $available');
+        expect(width, greaterThan(56), reason: 'ที่ว่าง $available');
+      }
+    });
+
+    test('จอกว้างไม่ยืดปุ่มจนไอคอนลอยกลางช่องว่าง', () {
+      expect(quickActionWidth(availableWidth: 1080), 120);
     });
   });
 }

@@ -82,23 +82,23 @@ class _DashboardView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            // การ์ดสรุปสี่ใบ: สองแถวบนมือถือ แถวเดียวเมื่อมีที่พอ · ปล่อยให้
-            // สองคอลัมน์ยืดออกบนจอกว้างทำให้การ์ดสูงเท่าจอครึ่งหนึ่งโดยมีตัวเลข
-            // อยู่ตรงกลางเพียงตัวเดียว
+            // การ์ดสรุปสี่ใบ: สองแถวบนมือถือ แถวเดียวเมื่อมีที่พอ · ความสูง
+            // เป็นค่าคงที่ ไม่ใช่สัดส่วนของความกว้าง — ไม่งั้นจอที่แคบจนเหลือ
+            // คอลัมน์เดียวจะได้การ์ดสูงเกือบ 300 ที่มีตัวเลขบรรทัดเดียวอยู่บนสุด
             LayoutBuilder(
               builder: (context, constraints) {
-                final columns = gridColumnsFor(
-                  availableWidth: constraints.maxWidth,
-                  minItemWidth: 240,
-                );
-
-                return GridView.count(
+                return GridView(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: columns,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.4,
+                  gridDelegate: cardGridDelegate(
+                    context,
+                    availableWidth: constraints.maxWidth,
+                    // งบต่อคอลัมน์ของมือถือคือราว 200 · ตั้งขั้นต่ำไว้เกินนั้น
+                    // เมื่อไหร่ มือถือก็ตกไปเหลือคอลัมน์เดียวทันที
+                    minItemWidth: 140,
+                    itemHeight: 132,
+                    itemCount: 4,
+                  ),
                   children: [
                 StatCard(
                   title: 'รายได้คาดการณ์',
@@ -185,45 +185,53 @@ class _DashboardView extends StatelessWidget {
             // ("เมนูด่วน" กับ "ทางลัด") ทำให้ดูเหมือนคนละฟีเจอร์ทั้งที่เหมือนกัน
             Text('ทางลัด', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            // สี่ปุ่มเรียงแถวเดียวบนมือถือกำลังพอดี · บนจอกว้างสี่คอลัมน์ทำให้
-            // ปุ่มบานเป็นสี่เหลี่ยมจัตุรัสใหญ่ที่มีไอคอนเล็กๆ ลอยอยู่ตรงกลาง
-            // จึงกำหนดความกว้างสูงสุดต่อปุ่มแทนที่จะกำหนดจำนวนคอลัมน์
-            GridView.extent(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              maxCrossAxisExtent: 160,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              children: [
-                _QuickActionItem(
-                  icon: Icons.speed,
-                  label: 'บันทึกมิเตอร์',
-                  color: AppColors.primary,
-                  onTap: () => context.go('/landlord/meter'),
-                ),
-                _QuickActionItem(
-                  icon: Icons.receipt_long,
-                  label: 'สร้างบิล',
-                  color: AppColors.success,
-                  badge: '5',
-                  onTap: () => context.go('/landlord/billing'),
-                ),
-                _QuickActionItem(
-                  icon: Icons.description,
-                  label: 'สัญญาเช่า',
-                  color: AppColors.warning,
-                  onTap: () => context.go('/landlord/lease'),
-                ),
-                _QuickActionItem(
-                  icon: Icons.chat_bubble_outline,
-                  label: 'แชท',
-                  color: AppColors.ring,
-                  badge: viewModel.unreadMessageCount > 0
-                      ? '${viewModel.unreadMessageCount}'
-                      : null,
-                  onTap: () => context.go('/landlord/chat'),
-                ),
-              ],
+            // สี่ปุ่มเรียงแถวเดียวเสมอ · ความกว้างสูงสุดต่อปุ่มกันไม่ให้บาน
+            // เป็นสี่เหลี่ยมใหญ่ที่มีไอคอนเล็กๆ ลอยกลางบนจอกว้าง ส่วนความสูง
+            // ปล่อยตามเนื้อหา ป้ายสองบรรทัดจึงไม่ถูกตัด · ใช้ Wrap แบบเดียวกับ
+            // ทางลัดฝั่งผู้เช่า เพื่อให้สองฝั่งเพี้ยนหรือถูกต้องไปด้วยกัน
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final itemWidth =
+                    quickActionWidth(availableWidth: constraints.maxWidth);
+
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 12,
+                  children: [
+                    for (final action in <Widget>[
+                      _QuickActionItem(
+                        icon: Icons.speed,
+                        label: 'บันทึกมิเตอร์',
+                        color: AppColors.primary,
+                        onTap: () => context.go('/landlord/meter'),
+                      ),
+                      _QuickActionItem(
+                        icon: Icons.receipt_long,
+                        label: 'สร้างบิล',
+                        color: AppColors.success,
+                        badge: '5',
+                        onTap: () => context.go('/landlord/billing'),
+                      ),
+                      _QuickActionItem(
+                        icon: Icons.description,
+                        label: 'สัญญาเช่า',
+                        color: AppColors.warning,
+                        onTap: () => context.go('/landlord/lease'),
+                      ),
+                      _QuickActionItem(
+                        icon: Icons.chat_bubble_outline,
+                        label: 'แชท',
+                        color: AppColors.ring,
+                        badge: viewModel.unreadMessageCount > 0
+                            ? '${viewModel.unreadMessageCount}'
+                            : null,
+                        onTap: () => context.go('/landlord/chat'),
+                      ),
+                    ])
+                      SizedBox(width: itemWidth, child: action),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
             ],

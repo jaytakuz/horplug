@@ -146,3 +146,77 @@ int gridColumnsFor({
   final fits = availableWidth ~/ minItemWidth;
   return fits.clamp(1, maxColumns);
 }
+
+/// การจัดกริดของการ์ดที่ "ความสูงไม่ผูกกับความกว้าง"
+///
+/// `childAspectRatio` กำหนดความสูงเป็นสัดส่วนของความกว้างต่อช่อง — พอจำนวน
+/// คอลัมน์แปรตามความกว้างที่มี ความกว้างต่อช่องก็แปรตาม แล้วความสูงก็แปรตาม
+/// ไปด้วยทั้งที่เนื้อหาในการ์ดเท่าเดิม · การ์ดสรุปที่ออกแบบไว้สูงราว 130 บน
+/// มือถือสองคอลัมน์จึงพองเป็นสูง 291 ทันทีที่เหลือคอลัมน์เดียว เหลือที่ว่าง
+/// เปล่าใต้ตัวเลขค่อนใบ
+///
+/// [itemHeight] เป็นความสูงคงที่แทน จำนวนคอลัมน์จึงเปลี่ยนได้อย่างอิสระโดย
+/// การ์ดยังสูงเท่าเดิมทุกขนาดจอ
+///
+/// [itemCount] ใช้กันแถวสุดท้ายที่เหลือช่องเดียวห้อยอยู่ · ส่งมาเมื่อรู้จำนวน
+/// ที่แน่นอน
+SliverGridDelegate cardGridDelegate(
+  BuildContext context, {
+  required double availableWidth,
+  required double minItemWidth,
+  required double itemHeight,
+  int? itemCount,
+  int maxColumns = 4,
+  double spacing = 12,
+}) {
+  var columns = gridColumnsFor(
+    availableWidth: availableWidth,
+    minItemWidth: minItemWidth,
+    maxColumns: maxColumns,
+  );
+
+  // ของสี่ชิ้นเรียงสามคอลัมน์ได้ 3+1 · แถวล่างที่มีใบเดียวอ่านเหมือนของที่
+  // หลุดออกมาจากชุด มากกว่าจะเป็นสมาชิกลำดับสุดท้าย
+  if (itemCount != null) {
+    while (columns > 1 && itemCount > columns && itemCount % columns == 1) {
+      columns--;
+    }
+  }
+
+  return SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: columns,
+    mainAxisSpacing: spacing,
+    crossAxisSpacing: spacing,
+    mainAxisExtent: itemHeight * textScaleFactorOf(context),
+  );
+}
+
+/// ตัวคูณความสูงตามขนาดตัวอักษรที่ผู้ใช้ตั้งไว้ในระบบ
+///
+/// กล่องที่สูงคงที่จะตัดข้อความข้างในทิ้งเงียบๆ เมื่อผู้ใช้ขยายตัวอักษร ·
+/// วัดจากขนาดอ้างอิงหนึ่งค่าแทนการเรียก `TextScaler.scale` ด้วยความสูงตรงๆ
+/// เพราะ [TextScaler] เป็นเส้นโค้งที่ออกแบบมาสำหรับขนาดตัวอักษร ไม่ใช่ความสูง
+/// ของกล่อง — ป้อนเลข 132 เข้าไปจะได้ค่าที่ไม่มีความหมาย
+double textScaleFactorOf(BuildContext context) {
+  const reference = 14.0;
+  return MediaQuery.textScalerOf(context).scale(reference) / reference;
+}
+
+/// ความกว้างของปุ่มทางลัดหนึ่งอันเมื่อวางเรียงด้วย `Wrap`
+///
+/// ทางลัดเป็นชุดที่ผู้ใช้จำเป็นภาพรวมทั้งแถว การตัดเหลือสามอันแล้วให้อันที่สี่
+/// ตกไปแถวล่างจึงทำให้ชุดเดียวดูเหมือนสองกลุ่ม · คิดความกว้างจาก [perRow]
+/// โดยตรงแทนการปล่อยให้กริดคำนวณเอง เพราะกริดคิดจากความกว้างขั้นต่ำต่อช่อง
+/// ซึ่งบนจอแคบให้ผลเป็นสามคอลัมน์
+///
+/// [maxWidth] กันไม่ให้ปุ่มยืดจนไอคอน 48px ลอยอยู่กลางช่องว่างบนจอกว้าง
+double quickActionWidth({
+  required double availableWidth,
+  int perRow = 4,
+  double spacing = 8,
+  double maxWidth = 120,
+}) {
+  final fromRow = (availableWidth - spacing * (perRow - 1)) / perRow;
+  if (fromRow <= 0) return maxWidth;
+  return fromRow < maxWidth ? fromRow : maxWidth;
+}

@@ -183,15 +183,28 @@ class StatCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18),
+          // ตัวเลขย่อลงเมื่อไม่พอ ไม่ตัดบรรทัดและไม่ตัดท้ายด้วย … — "฿137,5…"
+          // อ่านผิดเป็นจำนวนเงินคนละก้อน ซึ่งแย่กว่าตัวเลขที่เล็กลงนิดหน่อย
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style:
+                  Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18),
+            ),
           ),
           if (subtitle != null) ...[
             const SizedBox(height: 2),
+            // จำกัดบรรทัดเหมือนหัวการ์ดข้างบน · การ์ดสรุปอยู่ในกริดที่ทุกใบสูง
+            // เท่ากัน คำบรรยายที่ตัดขึ้นบรรทัดที่สามบนจอแคบจึงดันเนื้อหาล้น
+            // ออกนอกใบ ขึ้นเป็นแถบเหลืองดำแทนที่จะเป็นตัวเลข
             Text(
               subtitle!,
               style: Theme.of(context).textTheme.labelSmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ],
