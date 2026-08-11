@@ -324,22 +324,49 @@ class InvoiceService {
 
     final rows = invoices
         .where((invoice) => !notified.contains(invoice.dbId))
-        .map((invoice) => {
-              'room_id': invoice.roomDbId,
-              'sender_id': senderId,
-              'is_from_owner': true,
-              'body': 'ออกบิลค่าเช่างวด'
-                  '${thaiMonthName(invoice.billingMonth)} '
-                  '${invoice.billingYear} แล้ว',
-              'message_type': MessageType.invoice.name,
-              'invoice_id': invoice.dbId,
-            })
+        .map((invoice) => _invoiceCardRow(invoice: invoice, senderId: senderId))
         .toList();
 
     if (rows.isEmpty) return 0;
     await _client.from('messages').insert(rows);
     return rows.length;
   }
+
+  /// ส่งการ์ดบิลใบเดียวเข้าแชทอีกครั้ง แม้เคยส่งไปแล้ว
+  ///
+  /// จงใจไม่ใช้ [postIssueNotices] ซึ่งข้ามใบที่เคยแจ้งแล้ว — ที่นั่นต้องกันซ้ำ
+  /// เพราะเป็นการแจ้งรอบแรกของบิลทั้งชุดและปุ่ม "ส่งอีกครั้ง" ตอนแจ้งเตือนล้ม
+  /// ต้องไม่สร้างข้อความซ้อนให้ห้องที่ผ่านไปแล้ว
+  ///
+  /// ที่นี่คนละเจตนา: เจ้าของหอกดเพื่อทวง การกันซ้ำจึงเท่ากับปุ่มที่กดแล้วไม่มี
+  /// อะไรเกิดขึ้นเลย ซึ่งอ่านไม่ออกว่าส่งไม่สำเร็จหรือส่งไปแล้ว
+  Future<void> sendInvoiceCard({required Invoice invoice}) async {
+    final senderId = _client.auth.currentUser?.id;
+    if (senderId == null) throw Exception('ยังไม่ได้เข้าสู่ระบบ');
+
+    await _client
+        .from('messages')
+        .insert(_invoiceCardRow(invoice: invoice, senderId: senderId));
+  }
+
+  /// แถวข้อความของการ์ดบิล — ตัวเดียวที่ทั้งการแจ้งตอนออกบิลและการส่งซ้ำใช้
+  ///
+  /// `body` เป็นข้อความสำรองที่แสดงเมื่อฝั่งผู้รับ resolve บิลไม่ได้ จึงเขียนให้
+  /// จริงกับทั้งสองเส้นทาง ไม่ใช่คำทวงซึ่งจะกลายเป็นคำโกหกเมื่อบิลเพิ่งออก
+  Map<String, dynamic> _invoiceCardRow({
+    required Invoice invoice,
+    required String senderId,
+  }) =>
+      {
+        'room_id': invoice.roomDbId,
+        'sender_id': senderId,
+        'is_from_owner': true,
+        'body': 'ออกบิลค่าเช่างวด'
+            '${thaiMonthName(invoice.billingMonth)} '
+            '${invoice.billingYear} แล้ว',
+        'message_type': MessageType.invoice.name,
+        'invoice_id': invoice.dbId,
+      };
 
   /// บิลของห้องหนึ่ง map ด้วย id — ให้การ์ดในแชทแสดงสถานะสด ไม่ใช่สถานะตอนส่ง
   Future<Map<int, Invoice>> invoicesByIdForRoom({

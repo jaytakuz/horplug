@@ -61,6 +61,21 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
     Navigator.of(context).pop(true);
   }
 
+  /// ส่งการ์ดบิลใบนี้เข้าแชทห้องอีกครั้ง
+  ///
+  /// ไม่ปิดแผ่นหลังส่ง เพราะสถานะบิลไม่ได้เปลี่ยน — เจ้าของหอที่กดทวงแล้วอาจ
+  /// อยากยกเลิกบิลต่อในจังหวะเดียวกัน การเด้งออกไปทำให้ต้องเปิดกลับเข้ามาใหม่
+  Future<void> _sendCardToChat() async {
+    final actions = context.read<InvoiceActionsViewModel>();
+    if (actions.isBusy) return;
+
+    final result = await actions.sendCardToChat();
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
+  }
+
   /// ยกเลิกบิล (บังคับเหตุผล) แล้วถามแยกต่างหากว่าจะออกใบแทนหรือไม่ — สอง
   /// คำถามคนละก้อน เพราะบางกรณี (ผู้เช่าย้ายออกกลางคัน) เจ้าของหอต้องการแค่
   /// ยกเลิก ไม่ต้องมีใบใหม่
@@ -298,6 +313,22 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
                       icon: Icons.image_outlined,
                       fullWidth: true,
                       onPressed: _openSlipReview,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  // ทวงบิลได้เฉพาะใบที่ยังมีอะไรให้ทวง — บิลที่ชำระแล้วการส่ง
+                  // การ์ดซ้ำอ่านเหมือนถูกเรียกเก็บอีกรอบ
+                  if (invoice.status == InvoiceStatus.unpaid ||
+                      invoice.status == InvoiceStatus.pending) ...[
+                    OutlinedButton.icon(
+                      onPressed: actions.isBusy ? null : _sendCardToChat,
+                      icon: const Icon(Icons.forum_outlined),
+                      label: const Text('ส่งบิลเข้าแชท'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
                     ),
                     const SizedBox(height: 8),
                   ],

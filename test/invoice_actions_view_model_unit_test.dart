@@ -76,6 +76,12 @@ class _FakeInvoiceService extends InvoiceService {
     if (error != null) throw error!;
     return reissued;
   }
+
+  @override
+  Future<void> sendInvoiceCard({required Invoice invoice}) async {
+    calls.add('sendInvoiceCard:${invoice.invoiceNo}');
+    if (error != null) throw error!;
+  }
 }
 
 InvoiceActionsViewModel _viewModel(
@@ -114,6 +120,27 @@ void main() {
       expect(result.success, isTrue);
       expect(result.message, contains('INV-202608-301'));
       expect(service.calls, ['voidInvoice:จดมิเตอร์ผิด']);
+    });
+
+    test('ส่งบิลเข้าแชทเรียก sendInvoiceCard ไม่ใช่ postIssueNotices', () async {
+      // postIssueNotices ข้ามใบที่เคยแจ้งแล้ว การทวงจึงต้องไปทางอื่น ไม่งั้น
+      // ปุ่มนี้จะกดแล้วไม่มีอะไรเกิดขึ้นกับบิลทุกใบที่ถูกแจ้งตอนออกไปแล้ว
+      // ซึ่งก็คือบิลทุกใบที่มีอยู่
+      final service = _FakeInvoiceService();
+      final result = await _viewModel(service).sendCardToChat();
+
+      expect(result.success, isTrue);
+      expect(service.calls, ['sendInvoiceCard:INV-202608-301']);
+    });
+
+    test('ส่งบิลเข้าแชทไม่แตะสถานะบิล', () async {
+      final service = _FakeInvoiceService();
+      final viewModel = _viewModel(service);
+
+      await viewModel.sendCardToChat();
+
+      expect(viewModel.invoice.status, InvoiceStatus.pending);
+      expect(viewModel.isBusy, isFalse);
     });
   });
 

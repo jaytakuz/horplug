@@ -70,6 +70,15 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
         onFailure: 'ปฏิเสธไม่สำเร็จ',
       );
 
+  /// ส่งการ์ดบิลใบนี้เข้าแชทห้องอีกครั้ง — ใช้ทวงบิลที่ยังไม่จ่าย
+  ///
+  /// ไม่แตะสถานะบิลเลย ผู้เรียกจึงไม่ต้องปิดแผ่นหรือรีเฟรชรายการหลังกด
+  Future<ActionResult> sendCardToChat() => _run(
+        () => _service.sendInvoiceCard(invoice: invoice),
+        onSuccess: 'ส่งบิล ${invoice.invoiceNo} เข้าแชทแล้ว',
+        onFailure: 'ส่งบิลเข้าแชทไม่สำเร็จ',
+      );
+
   Future<ActionResult> voidBill(String reason) => _run(
         () => _service.voidInvoice(invoice: invoice, reason: reason.trim()),
         onSuccess: 'ยกเลิกบิล ${invoice.invoiceNo} แล้ว',
