@@ -9,7 +9,7 @@ import '../models/models.dart';
 /// ประกอบร่างบิลของห้องหนึ่งในงวดหนึ่ง
 ///
 /// [alreadyIssued] ให้ผู้เรียกเป็นคนบอก ฟังก์ชันนี้จึงไม่ต้องแตะฐานข้อมูล
-/// ลำดับการตัดสินเหตุผลที่ข้าม: ไม่มีผู้เช่า → ออกบิลไปแล้ว → ไม่มีข้อมูลคิดเงิน
+/// ลำดับการตัดสินเหตุผลที่ข้าม: ไม่มีผู้เช่า → ออกบิลไปแล้ว → ยังไม่จดมิเตอร์ไฟ
 InvoiceDraft buildDraft({
   required Room room,
   required int billingMonth,
@@ -29,7 +29,17 @@ InvoiceDraft buildDraft({
     skipReason = SkipReason.noTenant;
   } else if (alreadyIssued) {
     skipReason = SkipReason.alreadyIssued;
-  } else if (electricity == null && waterAmount == null && cleaningFee <= 0) {
+  } else if (electricity == null) {
+    // เลขมิเตอร์ไฟเป็นเงื่อนไขบังคับ ไม่ใช่หนึ่งในสามอย่างที่มีอย่างใดก็พอ
+    //
+    // เกณฑ์เดิมข้ามห้องก็ต่อเมื่อขาดครบทั้งไฟ น้ำ และค่าทำความสะอาด ห้องที่มีงาน
+    // ทำความสะอาดในงวดนั้นจึงได้บิลที่มีค่าไฟ ฿0 ทั้งที่ยังไม่มีใครอ่านมิเตอร์
+    // เลย และเพราะบิลตรึงตัวเลข ณ วันออก การแก้ทีหลังต้องยกเลิกใบนั้นแล้วออกใหม่
+    // ระหว่างนั้นผู้เช่าถือ QR ระบุยอดที่ยอดผิดอยู่ในมือแล้ว
+    //
+    // ค่าไฟเป็นก้อนที่ผันแปรที่สุดในบิล บิลที่ออกโดยยังไม่รู้ค่าไฟจึงไม่ใช่บิลที่
+    // ยังไม่ครบ แต่เป็นบิลที่ยอดผิดแน่นอน ส่วนค่าน้ำที่ยังไม่กรอกยังคิดเป็น 0
+    // ตามเดิม เพราะบางงวดหอไม่ได้เก็บค่าน้ำจริงๆ
     skipReason = SkipReason.noMeterReading;
   }
 
@@ -73,7 +83,7 @@ String skipReasonLabel(SkipReason reason) {
     case SkipReason.noTenant:
       return 'ห้องว่าง ไม่มีผู้เช่า';
     case SkipReason.noMeterReading:
-      return 'ยังไม่จดมิเตอร์';
+      return 'ยังไม่จดมิเตอร์ไฟ';
     case SkipReason.alreadyIssued:
       return 'ออกบิลงวดนี้ไปแล้ว';
   }

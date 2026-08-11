@@ -34,7 +34,7 @@ void main() {
       expect(draft.canIssue, isFalse);
     });
 
-    test('ไม่มีมิเตอร์และไม่มีค่าทำความสะอาด ถูกข้ามด้วย noMeterReading', () {
+    test('ไม่มีข้อมูลคิดเงินเลย ถูกข้ามด้วย noMeterReading', () {
       final draft = buildDraft(
         room: _room(),
         billingMonth: 8,
@@ -44,7 +44,10 @@ void main() {
       expect(draft.skipReason, SkipReason.noMeterReading);
     });
 
-    test('มีแต่ค่าทำความสะอาด ออกบิลได้ ไม่ถือว่าไม่มีมิเตอร์', () {
+    // เดิมห้องแบบนี้ออกบิลได้ เพราะกฎข้ามห้องต้องขาดครบทั้งไฟ น้ำ และค่าทำความ
+    // สะอาด ห้องที่มีงานทำความสะอาดในงวดนั้นจึงได้บิลที่มีค่าไฟ ฿0 ทั้งที่ยังไม่มี
+    // ใครอ่านมิเตอร์ แล้วผู้เช่าได้ QR ระบุยอดที่ยอดผิดตั้งแต่ต้น
+    test('มีแต่ค่าทำความสะอาด ยังออกบิลไม่ได้ เพราะยังไม่จดมิเตอร์ไฟ', () {
       final draft = buildDraft(
         room: _room(),
         billingMonth: 8,
@@ -52,8 +55,20 @@ void main() {
         cleaningFee: 200,
       );
 
-      expect(draft.canIssue, isTrue);
-      expect(draft.total, 3700);
+      expect(draft.skipReason, SkipReason.noMeterReading);
+      expect(draft.canIssue, isFalse);
+    });
+
+    test('มีแต่ค่าน้ำ ยังออกบิลไม่ได้ เพราะยังไม่จดมิเตอร์ไฟ', () {
+      final draft = buildDraft(
+        room: _room(),
+        billingMonth: 8,
+        billingYear: 2026,
+        waterAmount: 404,
+      );
+
+      expect(draft.skipReason, SkipReason.noMeterReading);
+      expect(draft.canIssue, isFalse);
     });
 
     test('ออกบิลงวดนี้ไปแล้ว ถูกข้ามด้วย alreadyIssued', () {
