@@ -22,12 +22,14 @@ dependencies:
   # แทนที่จะใช้ widget ของ promptpay_qrcode_generate ซึ่งวาดจาก payload ที่ยัง
   # ไม่ได้ซ่อม · ประกาศเป็น direct dependency เพราะพึ่งพาโดยตรง ไม่ใช่ผ่านตัวอื่น
   qr_flutter: ^4.1.0
+  # เก็บลำดับทางลัดที่ผู้เช่าจัดเอง · เคยอยู่ใต้ dev_dependencies ซึ่งใช้ได้ตอน
+  # รันเทสต์แต่ไม่ถูกรวมเข้าแอปจริง
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  shared_preferences: ^2.5.3
   test: ^1.29.0
 
 flutter:
