@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
+import '../models/thai_bank.dart';
 import '../services/payment_channel_service.dart';
 import '../services/promptpay.dart';
 import 'action_result.dart';
@@ -56,12 +57,18 @@ class PaymentChannelViewModel extends ChangeNotifier with SafeNotifier {
   String accountNo = '';
   String accountName = '';
 
-  /// payload สำหรับ QR ตัวอย่างในหน้าตั้งค่า · null เมื่อเบอร์ยังไม่ถูกต้อง
+  /// ยอดเริ่มต้นของคิวอาร์ตัวอย่าง
+  static const defaultPreviewAmount = 1234.56;
+
+  /// ยอดที่ใช้สร้างคิวอาร์ตัวอย่าง · ปรับได้
   ///
-  /// ใช้ยอดสมมติเพราะหน้านี้ไม่ผูกกับบิลใบไหน จุดประสงค์คือให้เจ้าของหอสแกน
-  /// ตรวจเองว่าเข้าบัญชีถูกใบก่อนบันทึก — เป็นทางเดียวที่จะจับเบอร์ที่พิมพ์ผิด
-  /// แต่ยังครบ 10 หลักได้ ซึ่ง validation ไม่มีทางรู้
-  static const previewAmount = 1234.56;
+  /// จุดประสงค์คือให้เจ้าของหอสแกนตรวจเองว่าเข้าบัญชีถูกใบก่อนบันทึก — เป็นทาง
+  /// เดียวที่จะจับเบอร์ที่พิมพ์ผิดแต่ยังครบ 10 หลักได้ ซึ่ง validation ไม่มีทางรู้
+  ///
+  /// ปรับได้เพราะการตรวจที่แน่นอนที่สุดคือ**โอนจริง**ด้วยยอดเล็กๆ แล้วดูว่าเงิน
+  /// เข้าบัญชีไหม ยอดตายตัว ฿1,234.56 บังคับให้ต้องโอนเงินจำนวนนั้นจริงเพื่อ
+  /// ทดสอบ ซึ่งไม่มีใครทำ
+  double previewAmount = defaultPreviewAmount;
 
   String? get previewPayload => promptPayId.trim().isEmpty
       ? null
@@ -103,6 +110,32 @@ class PaymentChannelViewModel extends ChangeNotifier with SafeNotifier {
     this.bankName = bankName ?? this.bankName;
     this.accountNo = accountNo ?? this.accountNo;
     this.accountName = accountName ?? this.accountName;
+    notifyListeners();
+  }
+
+  /// ตั้งยอดของคิวอาร์ตัวอย่าง · ค่าที่ใช้ไม่ได้จะกลับไปใช้ค่าเริ่มต้น
+  ///
+  /// ยอด 0 หรือติดลบสร้าง payload ที่ไม่มี tag 54 ซึ่งเป็นคิวอาร์คนละแบบกับที่
+  /// ผู้เช่าจะเห็นจริง การทดสอบด้วยของที่ไม่เหมือนของจริงไม่ได้พิสูจน์อะไร
+  void setPreviewAmount(String value) {
+    final parsed = double.tryParse(value.trim().replaceAll(',', ''));
+    previewAmount =
+        (parsed == null || parsed <= 0) ? defaultPreviewAmount : parsed;
+    notifyListeners();
+  }
+
+  /// ธนาคารที่เลือกไว้ · null เมื่อยังไม่เลือก หรือชื่อที่เก็บไว้ไม่ตรงรายการ
+  ThaiBank? get selectedBank => ThaiBank.fromName(bankName);
+
+  /// true เมื่อชื่อธนาคารที่เก็บไว้ไม่ตรงกับรายการที่มีให้เลือก
+  ///
+  /// เกิดกับหอที่ตั้งค่าไว้ตอนที่ช่องนี้ยังพิมพ์เองได้ · หน้าจอต้องแสดงค่าเดิม
+  /// ต่อไปได้ ไม่ใช่ทำเหมือนเจ้าของหอไม่เคยกรอกอะไรไว้
+  bool get hasUnlistedBank =>
+      bankName.trim().isNotEmpty && selectedBank == null;
+
+  void selectBank(ThaiBank? bank) {
+    bankName = bank?.displayName ?? '';
     notifyListeners();
   }
 

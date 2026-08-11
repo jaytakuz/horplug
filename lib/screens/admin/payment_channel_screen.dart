@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/thai_bank.dart';
 import '../../services/promptpay.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
@@ -157,14 +158,32 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
           // เข้าบัญชีถูกใบ ซึ่งเป็นทางเดียวที่จะจับเบอร์ที่พิมพ์ผิดแต่ครบ 10 หลัก
           if (payload != null) ...[
             Center(child: PromptPayQr(payload: payload, size: 180)),
+            const SizedBox(height: 12),
+            // ปรับยอดได้เพราะการตรวจที่แน่นอนที่สุดคือโอนจริงด้วยยอดเล็กๆ แล้วดู
+            // ว่าเงินเข้าบัญชีไหม · ยอดตายตัวบังคับให้ต้องโอนเงินจำนวนนั้นจริง
+            // เพื่อทดสอบ ซึ่งไม่มีใครทำ แล้วการตรวจก็เลยไม่เกิดขึ้นเลย
+            TextFormField(
+              initialValue: viewModel.previewAmount.toStringAsFixed(2),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'ยอดในคิวอาร์ตัวอย่าง',
+                prefixText: '฿ ',
+                helperText: 'ลองใส่ยอดน้อยๆ แล้วโอนจริงเพื่อตรวจว่าเงินเข้า'
+                    'บัญชีถูกใบ',
+                helperMaxLines: 2,
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: viewModel.setPreviewAmount,
+            ),
             const SizedBox(height: 8),
             Text(
-              'ลองสแกนด้วยแอปธนาคารเพื่อตรวจว่าเข้าบัญชีถูกต้อง '
-              '(ตัวอย่างยอด ${formatBaht(PaymentChannelViewModel.previewAmount)} '
-              'ยังไม่ต้องกดโอน)',
+              'คิวอาร์นี้เป็นของจริง — สแกนแล้วโอนได้ทันที '
+              'ยอด ${formatBaht(viewModel.previewAmount)} จะเข้าบัญชีนี้',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.mutedForeground,
+                    color: AppColors.warning,
                   ),
             ),
           ] else if (viewModel.promptPayId.trim().isNotEmpty)
@@ -197,18 +216,40 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
                 ),
           ),
           const SizedBox(height: 12),
-          TextFormField(
-            initialValue: viewModel.bankName,
-            decoration: const InputDecoration(
-              labelText: 'ชื่อธนาคาร',
-              hintText: 'ธนาคารกสิกรไทย',
-              border: OutlineInputBorder(),
+          // เลือกจากรายการแทนการพิมพ์เอง — ชื่อธนาคารที่สะกดต่างกันเล็กน้อย
+          // ("กสิกร" กับ "ธนาคารกสิกรไทย") ทำให้ผู้เช่าต้องเดาว่าหมายถึงที่เดียวกัน
+          // ไหม ตอนกำลังจะโอนเงิน
+          DropdownButtonFormField<ThaiBank>(
+            initialValue: viewModel.selectedBank,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: 'ธนาคาร',
+              border: const OutlineInputBorder(),
+              // หอที่ตั้งค่าไว้ตอนช่องนี้ยังพิมพ์เองได้ อาจมีชื่อที่ไม่ตรงรายการ
+              // บอกให้เห็นว่าค่าเดิมคืออะไร แทนที่จะทำเหมือนไม่เคยกรอก
+              helperText: viewModel.hasUnlistedBank
+                  ? 'ค่าเดิม "${viewModel.bankName}" ไม่อยู่ในรายการ '
+                      'เลือกใหม่เพื่อแทนที่'
+                  : null,
+              helperMaxLines: 2,
             ),
-            validator: (value) => validateBankPair(
-              bankName: value ?? '',
+            hint: const Text('เลือกธนาคาร'),
+            items: [
+              const DropdownMenuItem<ThaiBank>(
+                child: Text('— ไม่ระบุ —'),
+              ),
+              ...ThaiBank.values.map(
+                (bank) => DropdownMenuItem(
+                  value: bank,
+                  child: Text(bank.displayName, overflow: TextOverflow.ellipsis),
+                ),
+              ),
+            ],
+            validator: (_) => validateBankPair(
+              bankName: viewModel.bankName,
               accountNo: viewModel.accountNo,
             ),
-            onChanged: (value) => viewModel.update(bankName: value),
+            onChanged: viewModel.selectBank,
           ),
           const SizedBox(height: 12),
           TextFormField(
