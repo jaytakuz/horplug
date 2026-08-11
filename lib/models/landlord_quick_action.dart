@@ -13,6 +13,7 @@ enum LandlordQuickAction implements QuickActionSpec {
   manageRooms,
   lease,
   chat,
+  maintenanceHistory,
   paymentChannel;
 
   @override
@@ -23,6 +24,7 @@ enum LandlordQuickAction implements QuickActionSpec {
         LandlordQuickAction.manageRooms => 'จัดการห้อง',
         LandlordQuickAction.lease => 'สัญญาเช่า',
         LandlordQuickAction.chat => 'แชท',
+        LandlordQuickAction.maintenanceHistory => 'ประวัติแจ้งซ่อม',
         LandlordQuickAction.paymentChannel => 'ช่องทางรับเงิน',
       };
 
@@ -35,6 +37,8 @@ enum LandlordQuickAction implements QuickActionSpec {
         LandlordQuickAction.manageRooms => 'ไปหน้าจัดการห้องพัก',
         LandlordQuickAction.lease => 'ไปหน้าสัญญาเช่า',
         LandlordQuickAction.chat => 'ไปหน้าแชทกับผู้เช่า',
+        LandlordQuickAction.maintenanceHistory =>
+          'ดูห้องที่มีประวัติแจ้งซ่อม/ทำความสะอาดทั้งหอ',
         LandlordQuickAction.paymentChannel =>
           'ตั้งเลขพร้อมเพย์และบัญชีธนาคารของหอ',
       };

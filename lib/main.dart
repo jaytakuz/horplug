@@ -12,6 +12,7 @@ import 'screens/admin/billing_screen.dart';
 import 'screens/admin/chat_screen.dart';
 import 'screens/admin/dashboard_screen.dart';
 import 'screens/admin/lease_screen.dart';
+import 'screens/admin/maintenance_overview_screen.dart';
 import 'screens/admin/meter_screen.dart';
 import 'screens/admin/rooms_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
@@ -246,6 +247,13 @@ GoRouter _buildRouter(AuthViewModel authController) {
           GoRoute(
             path: '/landlord/lease',
             builder: (context, state) => const LeaseScreen(),
+          ),
+          GoRoute(
+            path: '/landlord/maintenance',
+            builder: (context, state) {
+              final dormitoryId = AuthScope.of(context).dormitoryId;
+              return MaintenanceOverviewScreen(dormitoryId: dormitoryId ?? 0);
+            },
           ),
         ],
       ),

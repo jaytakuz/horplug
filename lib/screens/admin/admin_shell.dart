@@ -12,6 +12,7 @@ import 'meter_screen.dart';
 import 'billing_screen.dart';
 import 'chat_screen.dart';
 import 'lease_screen.dart';
+import 'maintenance_overview_screen.dart';
 
 class AdminShell extends StatelessWidget {
   const AdminShell({super.key});
@@ -45,15 +46,20 @@ class _AdminShellView extends StatelessWidget {
       BillingScreen(dormitoryId: id),
       const ChatScreen(),
       const LeaseScreen(),
+      MaintenanceOverviewScreen(dormitoryId: id),
     ];
   }
 
+  /// หน้าที่เกินดัชนี 4 เข้าถึงได้จากทางลัดบนแดชบอร์ดเท่านั้น ไม่มีแท็บของตัวเอง
+  /// — bottom navigation เต็มที่ห้าช่องแล้ว การยัดช่องที่หกทำให้ทุกแท็บแคบลงจน
+  /// ป้ายอ่านไม่ออกบนจอ 360dp
   int _calculateSelectedIndex(String location) {
     if (location.endsWith('/rooms')) return 1;
     if (location.endsWith('/meter')) return 2;
     if (location.endsWith('/billing')) return 3;
     if (location.endsWith('/chat')) return 4;
     if (location.endsWith('/lease')) return 5;
+    if (location.endsWith('/maintenance')) return 6;
     return 0;
   }
 

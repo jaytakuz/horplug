@@ -858,6 +858,7 @@ class _QuickActions extends StatelessWidget {
         LandlordQuickAction.manageRooms => Icons.meeting_room_outlined,
         LandlordQuickAction.lease => Icons.description,
         LandlordQuickAction.chat => Icons.chat_bubble_outline,
+        LandlordQuickAction.maintenanceHistory => Icons.handyman_outlined,
         LandlordQuickAction.paymentChannel => Icons.qr_code_2,
       };
 
@@ -868,6 +869,7 @@ class _QuickActions extends StatelessWidget {
         LandlordQuickAction.manageRooms => AppColors.primary,
         LandlordQuickAction.lease => AppColors.warning,
         LandlordQuickAction.chat => AppColors.ring,
+        LandlordQuickAction.maintenanceHistory => AppColors.destructive,
         LandlordQuickAction.paymentChannel => AppColors.mutedForeground,
       };
 
@@ -886,6 +888,8 @@ class _QuickActions extends StatelessWidget {
         LandlordQuickAction.manageRooms => () => context.go('/landlord/rooms'),
         LandlordQuickAction.lease => () => context.go('/landlord/lease'),
         LandlordQuickAction.chat => () => context.go('/landlord/chat'),
+        LandlordQuickAction.maintenanceHistory => () =>
+            context.go('/landlord/maintenance'),
         LandlordQuickAction.paymentChannel => () => showPaymentChannelScreen(
               context,
               dormitoryId: viewModel.dormitoryId,
