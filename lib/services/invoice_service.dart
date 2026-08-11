@@ -510,9 +510,31 @@ class InvoiceService {
             'ขอบคุณครับ',
       );
 
+  /// เจ้าของหอบันทึกเองว่าได้รับเงินแล้ว โดยผู้เช่าไม่ได้กดแจ้งมาก่อน
+  ///
+  /// มีไว้สำหรับเงินที่จ่ายกันนอกแอป — ยื่นเงินสดหน้าห้อง หรือโอนแล้วทักบอกทาง
+  /// ช่องทางอื่น · ถ้าไม่มีทางนี้ เจ้าของหอที่เก็บเงินครบแล้วมีทางเลือกแค่ปล่อย
+  /// บิลค้างไว้ทั้งที่ไม่มีใครค้างจริง
+  ///
+  /// [method] ถูกบันทึกลงบิลด้วย เพราะผู้เช่าที่ไม่ได้กดอะไรเลยควรอ่านออกจาก
+  /// ประวัติได้ว่าเจ้าของหอรับรองการจ่ายแบบไหน — ป้าย "ชำระแล้ว" เฉยๆ ไม่พอให้
+  /// สองฝ่ายตรวจสอบย้อนหลังว่าตรงกับที่จ่ายจริงหรือไม่
+  Future<void> markPaidByLandlord({
+    required Invoice invoice,
+    required PaymentMethod method,
+  }) =>
+      _markPaid(
+        invoice: invoice,
+        method: method,
+        notice: 'เจ้าของหอบันทึกว่าได้รับ'
+            '${method == PaymentMethod.cash ? 'เงินสด' : 'เงินโอน'}'
+            'ค่าบิล ${invoice.invoiceNo} แล้ว ขอบคุณครับ',
+      );
+
   Future<void> _markPaid({
     required Invoice invoice,
     required String notice,
+    PaymentMethod? method,
   }) async {
     _assertTransition(invoice.status, InvoiceStatus.paid);
 
@@ -526,6 +548,11 @@ class InvoiceService {
       // ที่มาจาก NOW() ฝั่งเซิร์ฟเวอร์อยู่แล้ว
       'paid_at': DateTime.now().toUtc().toIso8601String(),
       'approved_by': approvedBy,
+      // ใส่เฉพาะตอนที่เจ้าของหอเป็นคนระบุเอง — เส้นทางที่ผู้เช่าแจ้งมาก่อน
+      // (สลิป/เงินสด) บันทึกค่านี้ไว้ตั้งแต่ตอนแจ้งแล้ว การเขียนทับตรงนี้จะลบ
+      // สิ่งที่ผู้เช่าเลือกไว้ทิ้ง และฐานข้อมูลที่ยังไม่ได้รัน
+      // invoices_cash_payment.sql ก็ไม่มีคอลัมน์นี้ให้เขียน
+      if (method != null) 'payment_method': method.name,
     }).eq('id', invoice.dbId);
 
     await _postInvoiceNotice(invoice: invoice, body: notice);

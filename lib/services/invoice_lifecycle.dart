@@ -15,7 +15,12 @@ bool canTransition(InvoiceStatus from, InvoiceStatus to) {
 
   switch (from) {
     case InvoiceStatus.unpaid:
-      return to == InvoiceStatus.pending;
+      // ตรงไป paid ได้ด้วย — เจ้าของหอบันทึกเองว่าได้รับเงินแล้ว โดยไม่ต้องรอ
+      // ให้ผู้เช่ากดแจ้งก่อน · เงินที่จ่ายกันนอกแอป (ยื่นเงินสดหน้าห้อง โอนแล้ว
+      // ทักบอกในไลน์) เกิดขึ้นจริงและบ่อย ถ้าบังคับให้ผ่าน pending เสมอ ทางเดียว
+      // ที่เหลือคือให้เจ้าของหอไปกดแทนผู้เช่า ซึ่งทำไม่ได้ หรือปล่อยบิลค้างทั้งที่
+      // เก็บเงินครบแล้ว — สถานะในระบบจะเพี้ยนจากความจริงโดยที่ไม่มีใครแก้ได้
+      return to == InvoiceStatus.pending || to == InvoiceStatus.paid;
     case InvoiceStatus.pending:
       return to == InvoiceStatus.paid || to == InvoiceStatus.unpaid;
     case InvoiceStatus.paid:

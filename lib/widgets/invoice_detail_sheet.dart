@@ -99,6 +99,29 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
     if (changed) Navigator.of(context).pop(true);
   }
 
+  /// เจ้าของหอบันทึกเองว่าบิลใบนี้ได้รับเงินแล้ว โดยผู้เช่าไม่ได้แจ้งมาก่อน
+  ///
+  /// ถามวิธีที่รับเงินก่อนเสมอ ไม่เดาให้ — ผู้เช่าที่ไม่ได้กดอะไรเลยควรอ่านออก
+  /// จากประวัติได้ว่าเจ้าของหอรับรองการจ่ายแบบไหน · และเตือนว่าย้อนกลับไม่ได้
+  /// ด้วยเหตุผลเดียวกับ [_confirmCash] คือ canTransition ปิดทาง paid → unpaid
+  Future<void> _markPaidDirectly() async {
+    final actions = context.read<InvoiceActionsViewModel>();
+    if (actions.isBusy) return;
+
+    final method = await showDialog<PaymentMethod>(
+      context: context,
+      builder: (_) => _MarkPaidDialog(invoice: actions.invoice),
+    );
+    if (method == null || !mounted) return;
+
+    final result = await actions.markPaid(method);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
+    if (result.success) Navigator.of(context).pop(true);
+  }
+
   /// ยืนยันว่าได้รับเงินสดจากผู้เช่าแล้ว
   ///
   /// ถามยืนยันก่อนเพราะกดแล้วบิลเป็น "ชำระแล้ว" ทันทีและถอยกลับไม่ได้ —
@@ -294,6 +317,19 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
                 // แล้วคือจบ (canTransition บล็อกไว้ที่ชั้น service อยู่แล้ว)
                 // เหลือแค่ "บันทึก PDF" ที่ยังทำได้เสมอเพราะไม่แตะสถานะ
                 if (!invoice.isVoided) ...[
+                  // บิลที่ยังไม่มีใครแจ้งอะไรมา — เจ้าของหอบันทึกเองได้เลย
+                  // สำหรับเงินที่จ่ายกันนอกแอป ซึ่งไม่งั้นจะไม่มีทางทำให้บิล
+                  // ตรงกับความจริงได้เลยนอกจากรอให้ผู้เช่ากดแจ้งย้อนหลัง
+                  if (invoice.status == InvoiceStatus.unpaid) ...[
+                    PrimaryButton(
+                      label: 'บันทึกว่าชำระแล้ว',
+                      icon: Icons.check_circle_outline,
+                      fullWidth: true,
+                      isLoading: actions.isBusy,
+                      onPressed: actions.isBusy ? null : _markPaidDirectly,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   // pending มีสองหน้าตา — จ่ายสดไม่มีสลิปให้ตรวจ ปุ่ม "ตรวจสลิป"
                   // จะพาไปหน้าจอที่ว่างเปล่า จึงต้องเป็นการยืนยันรับเงินแทน
                   if (invoice.awaitsCashConfirmation) ...[
@@ -382,6 +418,80 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
 /// คืน true เมื่อยกเลิกสำเร็จ (ไม่ว่าจะตอบออกใบแทนหรือไม่ก็ตาม) เพื่อให้
 /// ผู้เรียกรีเฟรชรายการของตัวเอง คืน false เมื่อกดยกเลิกกล่องเหตุผลหรือ
 /// การยกเลิกล้มเหลว
+/// ถามวิธีที่ได้รับเงินก่อนบันทึกว่าบิลชำระแล้ว — คืน null เมื่อยกเลิก
+///
+/// เป็น StatefulWidget เพื่อให้ตัวเลือกที่กดค้างอยู่ในตัวมันเอง ไม่ต้องยก state
+/// ขึ้นไปไว้ที่แผ่นรายละเอียดซึ่งไม่ได้ใช้ค่านี้ต่อหลังกล่องปิด
+class _MarkPaidDialog extends StatefulWidget {
+  const _MarkPaidDialog({required this.invoice});
+
+  final Invoice invoice;
+
+  @override
+  State<_MarkPaidDialog> createState() => _MarkPaidDialogState();
+}
+
+class _MarkPaidDialogState extends State<_MarkPaidDialog> {
+  // ค่าตั้งต้นเป็นเงินสด เพราะเป็นเหตุผลที่พบบ่อยที่สุดที่ทำให้ต้องบันทึกเอง —
+  // ผู้เช่าที่โอนมักกดแจ้งในแอปอยู่แล้วเพราะต้องแนบสลิป
+  PaymentMethod _method = PaymentMethod.cash;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: const Text('บันทึกว่าชำระแล้ว'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'ได้รับเงิน ${formatBaht(widget.invoice.total)} '
+            'จาก ${widget.invoice.tenantName} แล้วใช่ไหม\n\n'
+            'บิลจะเปลี่ยนเป็น "ชำระแล้ว" ทันทีโดยไม่ต้องรอผู้เช่าแจ้ง '
+            'และย้อนกลับไม่ได้',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 12),
+          Text('ได้รับเงินมาทางไหน',
+              style: Theme.of(context).textTheme.labelLarge),
+          // RadioGroup ถือค่าที่เลือกให้ทั้งกลุ่ม — `groupValue`/`onChanged`
+          // บน RadioListTile แต่ละใบถูก deprecate ไปตั้งแต่ Flutter 3.32
+          RadioGroup<PaymentMethod>(
+            groupValue: _method,
+            onChanged: (value) => setState(() => _method = value!),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final method in PaymentMethod.values)
+                  RadioListTile<PaymentMethod>(
+                    value: method,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(
+                      method == PaymentMethod.cash ? 'เงินสด' : 'เงินโอน',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('ยกเลิก'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(_method),
+          child: const Text('บันทึก'),
+        ),
+      ],
+    );
+  }
+}
+
 Future<bool> runVoidInvoiceFlow(
   BuildContext context, {
   required InvoiceActionsViewModel actions,

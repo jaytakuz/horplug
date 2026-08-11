@@ -63,6 +63,15 @@ class _FakeInvoiceService extends InvoiceService {
   }
 
   @override
+  Future<void> markPaidByLandlord({
+    required Invoice invoice,
+    required PaymentMethod method,
+  }) async {
+    calls.add('markPaidByLandlord:${method.name}');
+    if (error != null) throw error!;
+  }
+
+  @override
   Future<void> voidInvoice({
     required Invoice invoice,
     required String reason,
@@ -137,6 +146,32 @@ void main() {
 
       expect(result.success, isTrue);
       expect(service.calls, ['sendInvoiceCard:INV-202608-301']);
+    });
+
+    // เจ้าของหอบันทึกเองสำหรับเงินที่จ่ายกันนอกแอป โดยผู้เช่าไม่ได้แจ้งมาก่อน
+    test('บันทึกว่าชำระแล้วส่งวิธีรับเงินไปด้วย ไม่ใช่แค่เปลี่ยนสถานะ',
+        () async {
+      final service = _FakeInvoiceService();
+      final result = await _viewModel(
+        service,
+        invoice: _invoice(status: InvoiceStatus.unpaid),
+      ).markPaid(PaymentMethod.cash);
+
+      expect(result.success, isTrue);
+      expect(service.calls, ['markPaidByLandlord:cash']);
+      expect(result.message, contains('INV-202608-301'));
+      expect(result.message, contains('เงินสด'));
+    });
+
+    test('บันทึกว่าชำระแล้วแบบเงินโอน บอกวิธีที่ถูกในข้อความ', () async {
+      final service = _FakeInvoiceService();
+      final result = await _viewModel(
+        service,
+        invoice: _invoice(status: InvoiceStatus.unpaid),
+      ).markPaid(PaymentMethod.transfer);
+
+      expect(service.calls, ['markPaidByLandlord:transfer']);
+      expect(result.message, contains('เงินโอน'));
     });
 
     test('ส่งบิลเข้าแชทไม่แตะสถานะบิล', () async {

@@ -56,6 +56,17 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
         onFailure: 'ยืนยันไม่สำเร็จ',
       );
 
+  /// เจ้าของหอบันทึกเองว่าได้รับเงินแล้ว โดยผู้เช่าไม่ได้แจ้งมาก่อน
+  ///
+  /// ข้อความบอกวิธีที่รับเงินด้วย เพราะสิ่งที่เจ้าของหอเพิ่งยืนยันคือ "ได้รับ
+  /// เงินสด" หรือ "ได้รับเงินโอน" ไม่ใช่แค่ "บิลนี้จบแล้ว"
+  Future<ActionResult> markPaid(PaymentMethod method) => _run(
+        () => _service.markPaidByLandlord(invoice: invoice, method: method),
+        onSuccess: 'บันทึกว่าบิล ${invoice.invoiceNo} ชำระแล้ว '
+            '(${method == PaymentMethod.cash ? 'เงินสด' : 'เงินโอน'})',
+        onFailure: 'บันทึกการชำระไม่สำเร็จ',
+      );
+
   Future<ActionResult> reject(String reason) => _run(
         () => _service.rejectSlip(invoice: invoice, reason: reason.trim()),
         onSuccess: 'ปฏิเสธสลิปของบิล ${invoice.invoiceNo} แล้ว',
