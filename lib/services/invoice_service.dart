@@ -68,7 +68,7 @@ class InvoiceService {
         .eq('dorm_id', dormitoryId)
         .eq('billing_month', month)
         .eq('billing_year', year)
-        .order('invoice_no');
+        .order('invoice_no', ascending: true);
 
     return (data as List)
         .cast<Map<String, dynamic>>()

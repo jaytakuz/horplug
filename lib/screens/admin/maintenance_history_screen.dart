@@ -172,6 +172,8 @@ class _MaintenanceHistoryViewState extends State<_MaintenanceHistoryView> {
                 isUpdating: viewModel.isUpdating,
                 onEditCleaningFee: (fee) =>
                     viewModel.updateCleaningFee(request, fee),
+                onUpdateStatus: (status) =>
+                    viewModel.updateStatus(request, status),
               ),
               const SizedBox(height: 12),
             ],

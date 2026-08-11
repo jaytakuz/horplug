@@ -303,14 +303,31 @@ class _RoomsViewState extends State<_RoomsView> {
   Widget _buildCompactFilterSection(
       BuildContext context, RoomsViewModel viewModel) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: PaperCard(
-        padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 0),
+        padding: EdgeInsets.zero,
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: _buildSearchSection(context, viewModel),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'ค้นหาห้อง',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: viewModel.searchQuery.trim().isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () {
+                            _searchController.clear();
+                            viewModel.setSearchQuery('');
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onChanged: viewModel.setSearchQuery,
+              ),
             ),
             TextButton.icon(
               onPressed: () => _showFilterSheet(context, viewModel),
@@ -460,37 +477,6 @@ class _RoomsViewState extends State<_RoomsView> {
     );
   }
 
-  Widget _buildSearchSection(BuildContext context, RoomsViewModel viewModel) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
-      child: PaperCard(
-        padding: const EdgeInsets.all(0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                labelText: 'ค้นหาห้อง',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: viewModel.searchQuery.trim().isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () {
-                          _searchController.clear();
-                          viewModel.setSearchQuery('');
-                        },
-                      )
-                    : null,
-              ),
-              onChanged: viewModel.setSearchQuery,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildFilterGroup(
     BuildContext context, {
     required String title,
@@ -515,7 +501,7 @@ class _RoomsViewState extends State<_RoomsView> {
             initialValue: selectedValue,
             decoration: InputDecoration(
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

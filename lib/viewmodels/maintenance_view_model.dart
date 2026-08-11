@@ -93,6 +93,28 @@ class MaintenanceViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> updateStatus(
+      MaintenanceRequest request, MaintenanceStatus status) async {
+    if (isUpdating) return;
+
+    isUpdating = true;
+    notifyListeners();
+
+    try {
+      await _service.updateMaintenanceStatus(
+        requestId: request.id,
+        roomId: roomId,
+        landlordId: landlordId,
+        status: status,
+        requestType: request.requestType,
+      );
+      await loadRequests();
+    } finally {
+      isUpdating = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> updateCleaningFee(MaintenanceRequest request, double fee) async {
     if (isUpdating) return;
 

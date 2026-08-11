@@ -534,7 +534,7 @@ class SupabaseService {
       }
     }
 
-    return rows.map((row) {
+    final previews = rows.map((row) {
       final roomId = row['room_id'] as int;
       final rpcTimestamp = row['last_message_at'] is String
           ? DateTime.tryParse(row['last_message_at'] as String)
@@ -549,6 +549,21 @@ class SupabaseService {
         unreadCount: (row['unread_count'] as num).toInt(),
       );
     }).toList();
+
+    // Most recently active conversation on top; rooms with no messages yet
+    // sink to the bottom, ordered by room number among themselves.
+    previews.sort((a, b) {
+      final aTime = a.lastMessageAt;
+      final bTime = b.lastMessageAt;
+      if (aTime == null && bTime == null) {
+        return a.roomNumber.compareTo(b.roomNumber);
+      }
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime);
+    });
+
+    return previews;
   }
 
   /// ติดตามข้อความล่าสุด [limit] รายการของห้องแบบ realtime — เพิ่ม limit
