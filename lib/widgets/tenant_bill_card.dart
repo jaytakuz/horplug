@@ -14,6 +14,7 @@ class TenantBillCard extends StatelessWidget {
     required this.bill,
     this.onPay,
     this.onSavePdf,
+    this.onCancelCash,
   });
 
   final Invoice bill;
@@ -26,6 +27,9 @@ class TenantBillCard extends StatelessWidget {
   /// ต้องเก็บไว้เป็นหลักฐานจริงๆ และเป็นเหตุผลที่เอกสารมีลายน้ำ "ชำระแล้ว" —
   /// ไม่มีทางเข้าถึงเลยสักทาง
   final VoidCallback? onSavePdf;
+
+  /// ถอนการแจ้งจ่ายเงินสดที่ยังรอเจ้าของหอยืนยัน
+  final VoidCallback? onCancelCash;
 
   @override
   Widget build(BuildContext context) {
@@ -159,19 +163,43 @@ class TenantBillCard extends StatelessWidget {
           onPressed: onPay,
         );
       case InvoiceStatus.pending:
-        return Row(
+        // pending มีสองหน้าตา — รอตรวจสลิป กับ รอยืนยันรับเงินสด ผู้เช่าต้อง
+        // รู้ว่ากำลังรออะไรอยู่ ไม่งั้นคนที่จ่ายสดจะงงว่าทำไมระบบพูดถึงสลิป
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.hourglass_top,
-                size: 16, color: AppColors.warning),
-            const SizedBox(width: 6),
-            Text(
-              'รอเจ้าของหอตรวจสลิป',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: AppColors.warning),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.hourglass_top,
+                    size: 16, color: AppColors.warning),
+                const SizedBox(width: 6),
+                Text(
+                  bill.awaitsCashConfirmation
+                      ? 'รอยืนยันรับเงินสด'
+                      : 'รอเจ้าของหอตรวจสลิป',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: AppColors.warning),
+                ),
+              ],
             ),
+            // ถอนได้เฉพาะการแจ้งเงินสด — สลิปที่อัปไปแล้วมีไฟล์อยู่ใน storage
+            // การถอนต้องลบไฟล์ด้วย ซึ่งเป็นคนละเรื่องและยังไม่มีทางทำ
+            if (bill.awaitsCashConfirmation && onCancelCash != null)
+              TextButton(
+                onPressed: onCancelCash,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.destructive,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                child: const Text('ยกเลิกการแจ้ง'),
+              ),
           ],
         );
       case InvoiceStatus.paid:

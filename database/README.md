@@ -19,6 +19,7 @@
 | 6 | `invoices_chat_message.sql` | `messages.invoice_id` สำหรับการ์ดบิลในแชท | 3 |
 | 7 | `payment_slip_bucket.sql` | policy ของบัคเก็ตสลิป | 3 · **สร้าง bucket ก่อน** |
 | 8 | `dormitory_payment_channel.sql` | ตารางช่องทางชำระเงินต่อหอ | 1 |
+| 9 | `invoices_cash_payment.sql` | คอลัมน์ `payment_method` + RPC แจ้ง/ยกเลิกการจ่ายเงินสด | 4 |
 
 ไฟล์ทุกไฟล์ **รันซ้ำได้** (`IF NOT EXISTS` / `DROP POLICY IF EXISTS`)
 
@@ -53,6 +54,18 @@ SELECT tablename FROM pg_tables
 ```
 
 ต้องได้ 2 แถว · ได้ไม่ครบแปลว่าข้ามไฟล์ไป
+
+```sql
+-- คอลัมน์และฟังก์ชันที่เพิ่มทีหลัง ต้องมีครบทั้งหมด
+SELECT column_name FROM information_schema.columns
+ WHERE table_name = 'invoices' AND column_name = 'payment_method';
+SELECT proname FROM pg_proc
+ WHERE proname IN ('submit_payment_slip', 'submit_cash_payment',
+                   'cancel_cash_payment')
+ ORDER BY proname;
+```
+
+ต้องได้ 1 แถว และ 3 แถวตามลำดับ
 
 ```sql
 -- policy ของบิลต้องมี 4 อัน และของบัคเก็ตสลิปต้องมี 5 อัน

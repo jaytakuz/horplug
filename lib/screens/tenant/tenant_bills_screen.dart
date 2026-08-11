@@ -43,7 +43,20 @@ class _TenantBillsView extends StatelessWidget {
       bill: bill,
       channel: viewModel.paymentChannel,
       onSubmit: (slip) => viewModel.submitSlip(bill: bill, slip: slip),
+      onSubmitCash: () => viewModel.submitCash(bill: bill),
     );
+  }
+
+  Future<void> _handleCancelCash(
+    BuildContext context,
+    TenantBillsViewModel viewModel,
+    Invoice bill,
+  ) async {
+    final result = await viewModel.cancelCash(bill: bill);
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   Future<void> _handleSavePdf(
@@ -190,6 +203,7 @@ class _TenantBillsView extends StatelessWidget {
           bill: bill,
           onPay: () => _handlePay(context, viewModel, bill),
           onSavePdf: () => _handleSavePdf(context, viewModel, bill),
+          onCancelCash: () => _handleCancelCash(context, viewModel, bill),
         ),
         const SizedBox(height: 12),
       ],

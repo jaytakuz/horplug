@@ -29,6 +29,13 @@ abstract class TenantBillingSource {
     required Invoice bill,
     required File slip,
   });
+
+  /// ผู้เช่าแจ้งว่าจ่ายเงินสดให้เจ้าของหอแล้ว — ไม่มีสลิป เจ้าของหอต้องยืนยันเอง
+  Future<ActionResult> submitCashPayment({required Invoice bill});
+
+  /// ถอนการแจ้งจ่ายเงินสดที่ยังไม่ถูกยืนยัน — กดผิดได้ ไม่ควรต้องรอให้อีกฝ่าย
+  /// ปฏิเสธให้
+  Future<ActionResult> cancelCashPayment({required Invoice bill});
 }
 
 class SupabaseTenantBillingSource implements TenantBillingSource {
@@ -102,6 +109,24 @@ class SupabaseTenantBillingSource implements TenantBillingSource {
     return const ActionResult(
       success: true,
       message: 'ส่งสลิปแล้ว รอเจ้าของหอตรวจสอบ',
+    );
+  }
+
+  @override
+  Future<ActionResult> submitCashPayment({required Invoice bill}) async {
+    await _invoices.submitCashPayment(invoiceId: bill.dbId);
+    return const ActionResult(
+      success: true,
+      message: 'แจ้งชำระเงินสดแล้ว รอเจ้าของหอยืนยันการรับเงิน',
+    );
+  }
+
+  @override
+  Future<ActionResult> cancelCashPayment({required Invoice bill}) async {
+    await _invoices.cancelCashPayment(invoiceId: bill.dbId);
+    return const ActionResult(
+      success: true,
+      message: 'ยกเลิกการแจ้งชำระเงินสดแล้ว',
     );
   }
 }

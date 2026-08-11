@@ -419,7 +419,23 @@ class _InvoiceCard extends StatelessWidget {
                       style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ],
               ),
-              if (invoice.hasSlip)
+              // จ่ายสดไม่มีสลิป — ปุ่มนี้จะพาไปหน้าจอว่าง ให้เปิดแผ่นรายละเอียด
+              // ซึ่งมีปุ่มยืนยันรับเงินสดแทน (การ์ดทั้งใบกดได้อยู่แล้ว)
+              if (invoice.awaitsCashConfirmation)
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.payments_outlined,
+                        size: 16, color: AppColors.warning),
+                    SizedBox(width: 6),
+                    Text('รอยืนยันรับเงินสด',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.warning,
+                            fontWeight: FontWeight.w500)),
+                  ],
+                )
+              else if (invoice.hasSlip)
                 OutlinedButton.icon(
                   onPressed: () async {
                     final changed = await showSlipReviewSheet(

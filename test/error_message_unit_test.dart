@@ -28,6 +28,8 @@ void main() {
       for (final code in [
         'PGRST205',
         '42P01',
+        '42703',
+        '42883',
         '42501',
         'PGRST301',
         '23505',
@@ -71,6 +73,22 @@ void main() {
   group('แปลงตาม code ให้ตรงกับสิ่งที่ผู้ใช้ทำต่อได้', () {
     test('ตารางหายบอกให้แจ้งผู้ดูแล ไม่ใช่ให้ลองใหม่', () {
       expect(formatErrorMessage(_postgrest('PGRST205')), contains('ผู้ดูแล'));
+    });
+
+    // เคสจริงที่เจอ: เพิ่มคอลัมน์ payment_method ในโค้ดแล้วยังไม่ได้รัน
+    // migration · ผู้ใช้ต้องรู้ว่าเป็นเรื่องการติดตั้ง ไม่ใช่ให้กดลองใหม่ไปเรื่อยๆ
+    test('คอลัมน์หายบอกให้แจ้งผู้ดูแลเหมือนตารางหาย', () {
+      expect(
+        formatErrorMessage(_postgrest(
+          '42703',
+          message: 'column invoices.payment_method does not exist',
+        )),
+        contains('ผู้ดูแล'),
+      );
+    });
+
+    test('ฟังก์ชันหายบอกให้แจ้งผู้ดูแล', () {
+      expect(formatErrorMessage(_postgrest('42883')), contains('ผู้ดูแล'));
     });
 
     test('RLS ปฏิเสธบอกว่าไม่มีสิทธิ์', () {

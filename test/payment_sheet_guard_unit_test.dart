@@ -64,6 +64,8 @@ void main() {
                 ),
                 onSubmit: (File slip) async =>
                     const ActionResult(success: true, message: 'ส่งแล้ว'),
+                onSubmitCash: () async =>
+                    const ActionResult(success: true, message: 'แจ้งแล้ว'),
               );
             },
             child: const Text('เปิด'),

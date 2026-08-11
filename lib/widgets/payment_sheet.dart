@@ -38,6 +38,7 @@ Future<bool> showPaymentSheet(
   required Invoice bill,
   required PaymentChannel? channel,
   required Future<ActionResult> Function(File slip) onSubmit,
+  required Future<ActionResult> Function() onSubmitCash,
 }) async {
   if (!canOpenPaymentSheet(bill)) {
     debugPrint('showPaymentSheet ถูกเรียกด้วยบิลสถานะ ${bill.status.name} — '
@@ -53,6 +54,7 @@ Future<bool> showPaymentSheet(
       bill: bill,
       channel: channel,
       onSubmit: onSubmit,
+      onSubmitCash: onSubmitCash,
     ),
   );
   return result ?? false;
@@ -63,11 +65,13 @@ class _PaymentSheet extends StatefulWidget {
     required this.bill,
     required this.channel,
     required this.onSubmit,
+    required this.onSubmitCash,
   });
 
   final Invoice bill;
   final PaymentChannel? channel;
   final Future<ActionResult> Function(File slip) onSubmit;
+  final Future<ActionResult> Function() onSubmitCash;
 
   @override
   State<_PaymentSheet> createState() => _PaymentSheetState();
@@ -77,6 +81,111 @@ class _PaymentSheetState extends State<_PaymentSheet> {
   File? _slip;
   bool _isSubmitting = false;
   bool _isSharingPdf = false;
+
+  /// เริ่มที่โอนเงินเพราะเป็นทางที่ผู้เช่าส่วนใหญ่ใช้ และเป็นทางเดียวที่จบได้
+  /// ในตัวมันเองโดยไม่ต้องรอใคร
+  PaymentMethod _method = PaymentMethod.transfer;
+
+  Future<void> _submitCash() async {
+    if (_isSubmitting) return;
+
+    // เงินสดไม่มีหลักฐานให้ระบบตรวจ ผู้เช่ากดแล้วบิลจะไปค้างรอเจ้าของหอทันที
+    // จึงถามยืนยันก่อน ต่างจากการส่งสลิปที่ตัวไฟล์เป็นเครื่องยืนยันในตัวอยู่แล้ว
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('ยืนยันการจ่ายเงินสด'),
+        content: Text(
+          'แจ้งว่าได้จ่ายเงินสด ${formatBaht(widget.bill.total)} '
+          'ให้เจ้าของหอแล้วใช่ไหม\n\n'
+          'บิลจะขึ้นสถานะรอยืนยัน จนกว่าเจ้าของหอจะกดรับเงินในระบบ',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('ยังไม่ใช่'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('ใช่ จ่ายแล้ว'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSubmitting = true);
+    final result = await widget.onSubmitCash();
+    if (!mounted) return;
+
+    setState(() => _isSubmitting = false);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
+    if (result.success) Navigator.of(context).pop(true);
+  }
+
+  Widget _buildMethodPicker(BuildContext context) {
+    return SegmentedButton<PaymentMethod>(
+      segments: const [
+        ButtonSegment(
+          value: PaymentMethod.transfer,
+          icon: Icon(Icons.qr_code_2, size: 18),
+          label: Text('โอนเงิน'),
+        ),
+        ButtonSegment(
+          value: PaymentMethod.cash,
+          icon: Icon(Icons.payments_outlined, size: 18),
+          label: Text('เงินสด'),
+        ),
+      ],
+      selected: {_method},
+      onSelectionChanged: _isSubmitting
+          ? null
+          : (selected) => setState(() => _method = selected.first),
+      showSelectedIcon: false,
+    );
+  }
+
+  Widget _buildCashSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.muted,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.info_outline,
+                      size: 16, color: AppColors.mutedForeground),
+                  const SizedBox(width: 8),
+                  Text('จ่ายเงินสดให้เจ้าของหอโดยตรง',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'ยอดที่ต้องจ่าย ${formatBaht(widget.bill.total)}\n'
+                'หลังกดแจ้ง บิลจะขึ้นสถานะ "รอยืนยัน" จนกว่าเจ้าของหอจะกด'
+                'รับเงินในระบบ ถ้ากดผิดยกเลิกได้จากการ์ดบิล',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.mutedForeground,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   /// บันทึกบิลเป็น PDF โดยไม่ปิดแผ่น — ผู้เช่ามักเก็บไฟล์ไว้ก่อนแล้วค่อยโอน
   ///
@@ -206,29 +315,42 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 16),
-                // null ครอบทั้ง "เจ้าของหอยังไม่ได้ตั้งค่า" และ "โหลดไม่สำเร็จ"
-                // ข้อความจึงต้องจริงกับทั้งสองกรณี และต้องไม่ทำให้ผู้เช่าโอนไป
-                // ก่อนโดยเดาเลขบัญชีเอา — แต่ยังแนบสลิปได้ เผื่อจ่ายทางอื่นไปแล้ว
-                widget.channel == null
-                    ? const SectionErrorNote(
-                        message: 'ยังไม่มีข้อมูลช่องทางชำระเงินของหอนี้ '
-                            'กรุณาสอบถามเจ้าของหอก่อนโอน')
-                    : _buildChannel(context, widget.channel!),
-                const Divider(height: 24),
-                Text('แนบสลิปโอนเงิน',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
-                _buildSlipPicker(context),
+                _buildMethodPicker(context),
+                const SizedBox(height: 16),
+                if (_method == PaymentMethod.transfer) ...[
+                  // null ครอบทั้ง "เจ้าของหอยังไม่ได้ตั้งค่า" และ "โหลดไม่สำเร็จ"
+                  // ข้อความจึงต้องจริงกับทั้งสองกรณี และต้องไม่ทำให้ผู้เช่าโอนไป
+                  // ก่อนโดยเดาเลขบัญชีเอา — แต่ยังแนบสลิปได้ เผื่อจ่ายทางอื่นแล้ว
+                  widget.channel == null
+                      ? const SectionErrorNote(
+                          message: 'ยังไม่มีข้อมูลช่องทางชำระเงินของหอนี้ '
+                              'กรุณาสอบถามเจ้าของหอก่อนโอน')
+                      : _buildChannel(context, widget.channel!),
+                  const Divider(height: 24),
+                  Text('แนบสลิปโอนเงิน',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  _buildSlipPicker(context),
+                ] else
+                  _buildCashSection(context),
                 const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
-                      child: PrimaryButton(
-                        label: 'ส่งสลิป',
-                        fullWidth: true,
-                        isLoading: _isSubmitting,
-                        onPressed: _slip == null ? null : _submit,
-                      ),
+                      child: _method == PaymentMethod.transfer
+                          ? PrimaryButton(
+                              label: 'ส่งสลิป',
+                              fullWidth: true,
+                              isLoading: _isSubmitting,
+                              onPressed: _slip == null ? null : _submit,
+                            )
+                          : PrimaryButton(
+                              label: 'แจ้งว่าจ่ายเงินสดแล้ว',
+                              icon: Icons.payments_outlined,
+                              fullWidth: true,
+                              isLoading: _isSubmitting,
+                              onPressed: _submitCash,
+                            ),
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton(

@@ -30,19 +30,41 @@ mixin TenantSlipSubmission on ChangeNotifier {
   Future<ActionResult> submitSlip({
     required Invoice bill,
     required File slip,
+  }) =>
+      _runPaymentAction(
+        () => billingSource.submitPaymentSlip(bill: bill, slip: slip),
+        onFailure: 'ส่งสลิปไม่สำเร็จ',
+      );
+
+  /// แจ้งว่าจ่ายเงินสดแล้ว · ใช้ busy flag ตัวเดียวกับการส่งสลิป เพราะเป็นการ
+  /// "แจ้งชำระ" เหมือนกัน และหน้าจอไม่ควรให้กดทั้งสองทางพร้อมกันอยู่แล้ว
+  Future<ActionResult> submitCash({required Invoice bill}) =>
+      _runPaymentAction(
+        () => billingSource.submitCashPayment(bill: bill),
+        onFailure: 'แจ้งชำระเงินสดไม่สำเร็จ',
+      );
+
+  Future<ActionResult> cancelCash({required Invoice bill}) =>
+      _runPaymentAction(
+        () => billingSource.cancelCashPayment(bill: bill),
+        onFailure: 'ยกเลิกไม่สำเร็จ',
+      );
+
+  Future<ActionResult> _runPaymentAction(
+    Future<ActionResult> Function() action, {
+    required String onFailure,
   }) async {
     isSubmittingSlip = true;
     notifyListeners();
 
     try {
-      final result =
-          await billingSource.submitPaymentSlip(bill: bill, slip: slip);
+      final result = await action();
       if (result.success) await reloadAfterSlip();
       return result;
     } catch (error) {
       return ActionResult(
         success: false,
-        message: 'ส่งสลิปไม่สำเร็จ: ${formatErrorMessage(error)}',
+        message: '$onFailure: ${formatErrorMessage(error)}',
       );
     } finally {
       isSubmittingSlip = false;

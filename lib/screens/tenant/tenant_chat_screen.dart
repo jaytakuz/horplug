@@ -94,6 +94,7 @@ class _TenantChatView extends StatelessWidget {
       bill: invoice,
       channel: viewModel.paymentChannel,
       onSubmit: (File slip) => viewModel.submitSlip(bill: invoice, slip: slip),
+      onSubmitCash: () => viewModel.submitCash(bill: invoice),
     );
   }
 

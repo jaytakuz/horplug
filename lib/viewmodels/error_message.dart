@@ -47,10 +47,13 @@ String formatErrorMessage(Object error) {
 /// คือผู้เช่ากับเจ้าของหอ ไม่ใช่คนเขียนโปรแกรม
 String _describePostgrest(PostgrestException error) {
   switch (error.code) {
-    // ตารางหรือ view ไม่มีในฐานข้อมูล — แปลว่ายังไม่ได้ติดตั้ง schema
-    // ผู้ใช้ทำอะไรไม่ได้เลย ต้องให้คนดูแลระบบไปรัน migration
+    // ตาราง คอลัมน์ หรือฟังก์ชันหายไปจากฐานข้อมูล — แปลว่ายังไม่ได้รัน
+    // migration ให้ครบ ผู้ใช้ทำอะไรไม่ได้เลยนอกจากแจ้งคนดูแล
+    // (42703 undefined_column · 42883 undefined_function)
     case 'PGRST205':
     case '42P01':
+    case '42703':
+    case '42883':
       return 'ระบบยังติดตั้งไม่ครบ กรุณาแจ้งผู้ดูแลระบบ';
 
     // RLS ปฏิเสธ หรือไม่มีสิทธิ์บนตาราง

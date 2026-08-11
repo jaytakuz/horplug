@@ -49,6 +49,20 @@ class _FakeBillingSource implements TenantBillingSource {
   }
 
   @override
+  Future<ActionResult> submitCashPayment({required Invoice bill}) async {
+    submitCalls++;
+    if (error != null) throw error!;
+    return result ??
+        const ActionResult(success: true, message: 'แจ้งชำระเงินสดแล้ว');
+  }
+
+  @override
+  Future<ActionResult> cancelCashPayment({required Invoice bill}) async {
+    if (error != null) throw error!;
+    return const ActionResult(success: true, message: 'ยกเลิกแล้ว');
+  }
+
+  @override
   Future<Invoice?> fetchCurrentBill({
     required int roomDbId,
     required int month,

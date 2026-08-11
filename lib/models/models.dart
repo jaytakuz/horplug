@@ -2,6 +2,20 @@ enum RoomStatus { occupied, vacant, maintenance }
 
 enum InvoiceStatus { unpaid, pending, paid, voided }
 
+/// วิธีที่ผู้เช่าแจ้งว่าชำระบิล
+///
+/// จงใจไม่เป็นสถานะของบิล — บิลที่รอเจ้าของหอรับรองอยู่ที่ `pending` เหมือนกัน
+/// ทั้งคู่ เพราะขั้นของบิลเหมือนกันทุกประการ ต่างแค่หลักฐานที่เจ้าของหอต้องดู
+/// การทำเป็นสถานะที่ห้าจะทำให้ทุก exhaustive switch ในแอปพัง และทำให้
+/// `canTransition` ต้องรู้เรื่องวิธีจ่ายซึ่งไม่ใช่หน้าที่ของมัน
+enum PaymentMethod {
+  /// โอนเงิน (สแกนคิวอาร์หรือโอนเลขบัญชี) แล้วแนบสลิปเป็นหลักฐาน
+  transfer,
+
+  /// จ่ายเงินสดให้เจ้าของหอโดยตรง ไม่มีสลิป เจ้าของหอต้องยืนยันการรับเงินเอง
+  cash,
+}
+
 /// เหตุผลที่ห้องหนึ่งออกบิลในงวดนี้ไม่ได้
 enum SkipReason { noTenant, noMeterReading, alreadyIssued }
 
@@ -166,6 +180,13 @@ class Invoice {
   final int revision;
   final String? voidReason;
 
+  /// วิธีที่ผู้เช่าแจ้งว่าชำระ · null = ยังไม่ได้แจ้ง
+  ///
+  /// แยกจาก [status] เพราะเป็นคนละคำถาม — status บอกว่าบิลอยู่ขั้นไหน
+  /// ส่วนนี่บอกว่าหลักฐานคืออะไร บิลที่ `pending` จึงมีได้สองหน้าตา: รอตรวจสลิป
+  /// กับรอยืนยันรับเงินสด ซึ่งเจ้าของหอต้องทำคนละอย่าง
+  final PaymentMethod? paymentMethod;
+
   const Invoice({
     required this.dbId,
     required this.invoiceNo,
@@ -190,6 +211,7 @@ class Invoice {
     this.paidAt,
     this.revision = 1,
     this.voidReason,
+    this.paymentMethod,
   });
 
   /// งวดของบิล (วันที่ 1 ของเดือนนั้น) — ใช้เรียงและแสดงชื่อเดือน
@@ -198,6 +220,14 @@ class Invoice {
   bool get hasSlip => slipUrl != null;
   bool get isVoided => status == InvoiceStatus.voided;
 
+  /// รอเจ้าของหอยืนยันว่ารับเงินสดแล้ว — ไม่มีสลิปให้ตรวจ
+  bool get awaitsCashConfirmation =>
+      status == InvoiceStatus.pending && paymentMethod == PaymentMethod.cash;
+
+  /// รอเจ้าของหอตรวจสลิปที่ผู้เช่าแนบมา
+  bool get awaitsSlipReview =>
+      status == InvoiceStatus.pending && !awaitsCashConfirmation;
+
   Invoice copyWith({
     InvoiceStatus? status,
     String? slipUrl,
@@ -205,6 +235,7 @@ class Invoice {
     String? rejectionReason,
     DateTime? paidAt,
     String? voidReason,
+    PaymentMethod? paymentMethod,
   }) {
     return Invoice(
       dbId: dbId,
@@ -230,6 +261,7 @@ class Invoice {
       paidAt: paidAt ?? this.paidAt,
       revision: revision,
       voidReason: voidReason ?? this.voidReason,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
     );
   }
 }

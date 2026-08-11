@@ -33,12 +33,22 @@ class InvoiceService {
 
   SupabaseClient get _client => Supabase.instance.client;
 
+  /// `*` ไม่ใช่รายชื่อคอลัมน์ — จงใจ
+  ///
+  /// เดิมไล่ชื่อคอลัมน์ทีละตัว ซึ่งทำให้**การเพิ่มคอลัมน์ใหม่กลายเป็น breaking
+  /// change ทันที**: แอปที่รู้จัก payment_method แต่เจอฐานข้อมูลที่ยังไม่ได้รัน
+  /// migration จะได้ 42703 กลับมาจากทุก query ที่แตะบิล ทั้งหน้าบิล แดชบอร์ด
+  /// และการ์ดในแชทล่มพร้อมกันเพราะคอลัมน์เดียวที่ยังไม่มี ทั้งที่ฟีเจอร์ที่ใช้
+  /// คอลัมน์นั้นเป็นแค่ส่วนเล็กๆ ส่วนหนึ่ง
+  ///
+  /// ด้วย `*` คอลัมน์ที่ยังไม่มีจะหายไปจาก row เฉยๆ แล้ว `_invoiceFromRow`
+  /// อ่านได้เป็น null ซึ่งทุกฟิลด์ที่เพิ่มมาทีหลังรองรับอยู่แล้ว — ระบบจึงทำงาน
+  /// ต่อได้ระหว่างที่ migration ยังไม่ถูกรัน แค่ฟีเจอร์ใหม่ยังไม่ทำงาน
+  ///
+  /// ต้นทุนคือคอลัมน์ที่ไม่ได้ใช้ (created_at, issued_by, approved_by ฯลฯ)
+  /// ถูกส่งมาด้วย ซึ่งเป็นไม่กี่ไบต์ต่อแถวบนตารางที่นับแถวได้ด้วยหลักสิบ
   static const _columns = '''
-    id, invoice_no, room_id, tenant_id, billing_month, billing_year,
-    room_price, electricity_units, electricity_cost, water_cost, cleaning_fee,
-    total, status, due_date, issued_at, slip_url, slip_submitted_at,
-    rejection_reason, paid_at, revision, void_reason,
-    rooms(room_number), tenant_profiles(first_name, last_name)
+    *, rooms(room_number), tenant_profiles(first_name, last_name)
   ''';
 
   // ── อ่าน ────────────────────────────────────────────────────────────────
@@ -400,6 +410,23 @@ class InvoiceService {
     });
   }
 
+  /// ผู้เช่าแจ้งว่าจ่ายเงินสดให้เจ้าของหอแล้ว
+  ///
+  /// ผ่าน RPC ด้วยเหตุผลเดียวกับ submitSlip — RLS จำกัดไม่ได้ว่า UPDATE แตะ
+  /// คอลัมน์ไหน ถ้าให้ผู้เช่าเขียนตรงจะกดตัวเองเป็น paid ได้
+  Future<void> submitCashPayment({required int invoiceId}) async {
+    await _client.rpc('submit_cash_payment', params: {
+      'p_invoice_id': invoiceId,
+    });
+  }
+
+  /// ผู้เช่าถอนการแจ้งจ่ายเงินสดที่ยังไม่ถูกยืนยัน
+  Future<void> cancelCashPayment({required int invoiceId}) async {
+    await _client.rpc('cancel_cash_payment', params: {
+      'p_invoice_id': invoiceId,
+    });
+  }
+
   /// ลบสลิปที่เพิ่งอัปโหลดเมื่อขั้นตอนถัดไปล้ม — best effort
   Future<void> discardSlip(String path) async {
     try {
@@ -415,7 +442,28 @@ class InvoiceService {
 
   // ── เจ้าของหอตรวจสลิป ──────────────────────────────────────────────────
 
-  Future<void> approveSlip({required Invoice invoice}) async {
+  /// เจ้าของหออนุมัติสลิปที่ผู้เช่าแนบมา
+  Future<void> approveSlip({required Invoice invoice}) => _markPaid(
+        invoice: invoice,
+        notice: 'รับชำระบิล ${invoice.invoiceNo} เรียบร้อยแล้ว ขอบคุณครับ',
+      );
+
+  /// เจ้าของหอยืนยันว่าได้รับเงินสดจากผู้เช่าแล้ว
+  ///
+  /// ปลายทางเหมือน [approveSlip] ทุกประการ — บิลเป็น paid, บันทึกเวลาและผู้
+  /// อนุมัติ ต่างแค่ข้อความที่โพสต์เข้าแชท เพราะสิ่งที่เกิดขึ้นจริงคนละอย่าง
+  /// และผู้เช่าควรเห็นในแชทว่าเจ้าของหอรับรองการจ่ายสด ไม่ใช่รับรองสลิปที่
+  /// ไม่มีอยู่
+  Future<void> confirmCashPayment({required Invoice invoice}) => _markPaid(
+        invoice: invoice,
+        notice: 'ยืนยันรับเงินสดค่าบิล ${invoice.invoiceNo} เรียบร้อยแล้ว '
+            'ขอบคุณครับ',
+      );
+
+  Future<void> _markPaid({
+    required Invoice invoice,
+    required String notice,
+  }) async {
     _assertTransition(invoice.status, InvoiceStatus.paid);
 
     final approvedBy = _client.auth.currentUser?.id;
@@ -430,10 +478,7 @@ class InvoiceService {
       'approved_by': approvedBy,
     }).eq('id', invoice.dbId);
 
-    await _postInvoiceNotice(
-      invoice: invoice,
-      body: 'รับชำระบิล ${invoice.invoiceNo} เรียบร้อยแล้ว ขอบคุณครับ',
-    );
+    await _postInvoiceNotice(invoice: invoice, body: notice);
   }
 
   /// ปฏิเสธพากลับไป unpaid ไม่ใช่สถานะที่ห้า เพราะสิ่งที่ผู้เช่าต้องทำ
@@ -599,6 +644,16 @@ InvoiceStatus _statusFromName(String? name) {
   );
 }
 
+/// null เมื่อผู้เช่ายังไม่ได้แจ้งวิธีชำระ — บิลเก่าก่อนคอลัมน์นี้จะมีจะเป็น null
+/// ทั้งหมด ซึ่ง [Invoice.awaitsSlipReview] ตีความว่ารอตรวจสลิปตามพฤติกรรมเดิม
+PaymentMethod? _paymentMethodFrom(Object? value) {
+  if (value == null) return null;
+  for (final method in PaymentMethod.values) {
+    if (method.name == value) return method;
+  }
+  return null;
+}
+
 /// PostgREST คืน Map สำหรับ many-to-one และ List สำหรับ one-to-many
 /// จึงรองรับทั้งสองแบบเหมือนที่ fetchDormitoryInfo ทำอยู่แล้ว
 Map<String, dynamic>? _embedded(dynamic value) {
@@ -648,5 +703,6 @@ Invoice _invoiceFromRow(Map<String, dynamic> row) {
         : DateTime.parse(row['paid_at'] as String).toLocal(),
     revision: row['revision'] as int? ?? 1,
     voidReason: row['void_reason'] as String?,
+    paymentMethod: _paymentMethodFrom(row['payment_method']),
   );
 }

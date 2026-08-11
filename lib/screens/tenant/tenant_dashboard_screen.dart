@@ -297,6 +297,7 @@ class _BillHeroCard extends StatelessWidget {
       bill: bill,
       channel: viewModel.paymentChannel,
       onSubmit: (slip) => viewModel.submitSlip(bill: bill, slip: slip),
+      onSubmitCash: () => viewModel.submitCash(bill: bill),
     );
   }
 

@@ -43,6 +43,15 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
         onFailure: 'อนุมัติไม่สำเร็จ',
       );
 
+  /// ยืนยันว่าได้รับเงินสดจากผู้เช่าแล้ว — ปลายทางเดียวกับ [approve]
+  /// ต่างที่ข้อความในแชท เพราะผู้เช่าควรเห็นว่าเจ้าของหอรับรองการจ่ายสด
+  /// ไม่ใช่รับรองสลิปที่ไม่มีอยู่
+  Future<ActionResult> confirmCash() => _run(
+        () => _service.confirmCashPayment(invoice: invoice),
+        onSuccess: 'ยืนยันรับเงินสดของบิล ${invoice.invoiceNo} แล้ว',
+        onFailure: 'ยืนยันไม่สำเร็จ',
+      );
+
   Future<ActionResult> reject(String reason) => _run(
         () => _service.rejectSlip(invoice: invoice, reason: reason.trim()),
         onSuccess: 'ปฏิเสธสลิปของบิล ${invoice.invoiceNo} แล้ว',

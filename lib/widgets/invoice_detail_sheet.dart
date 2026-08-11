@@ -74,6 +74,47 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
     if (changed) Navigator.of(context).pop(true);
   }
 
+  /// ยืนยันว่าได้รับเงินสดจากผู้เช่าแล้ว
+  ///
+  /// ถามยืนยันก่อนเพราะกดแล้วบิลเป็น "ชำระแล้ว" ทันทีและถอยกลับไม่ได้ —
+  /// canTransition ปิดทาง paid → pending ไว้ ทางแก้เดียวคือยกเลิกบิลแล้วออกใหม่
+  Future<void> _confirmCash() async {
+    final actions = context.read<InvoiceActionsViewModel>();
+    if (actions.isBusy) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('ยืนยันรับเงินสด'),
+        content: Text(
+          'ได้รับเงินสด ${formatBaht(actions.invoice.total)} '
+          'จาก ${actions.invoice.tenantName} แล้วใช่ไหม\n\n'
+          'บิลจะเปลี่ยนเป็น "ชำระแล้ว" ทันที และย้อนกลับไม่ได้',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('ยังไม่ได้รับ'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('ได้รับแล้ว'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final result = await actions.confirmCash();
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
+    if (result.success) Navigator.of(context).pop(true);
+  }
+
   /// สร้างและแชร์ PDF โดยไม่ปิดแผ่น — ต่างจากปุ่มอื่นตรงที่ไม่ได้เปลี่ยนสถานะ
   /// อะไรเลย เจ้าของหอจึงควรอยู่หน้าเดิมได้หลังแชร์เสร็จ
   Future<void> _sharePdf() async {
@@ -201,7 +242,18 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
                 // แล้วคือจบ (canTransition บล็อกไว้ที่ชั้น service อยู่แล้ว)
                 // เหลือแค่ "บันทึก PDF" ที่ยังทำได้เสมอเพราะไม่แตะสถานะ
                 if (!invoice.isVoided) ...[
-                  if (invoice.status == InvoiceStatus.pending) ...[
+                  // pending มีสองหน้าตา — จ่ายสดไม่มีสลิปให้ตรวจ ปุ่ม "ตรวจสลิป"
+                  // จะพาไปหน้าจอที่ว่างเปล่า จึงต้องเป็นการยืนยันรับเงินแทน
+                  if (invoice.awaitsCashConfirmation) ...[
+                    PrimaryButton(
+                      label: 'ยืนยันรับเงินสดแล้ว',
+                      icon: Icons.payments_outlined,
+                      fullWidth: true,
+                      isLoading: actions.isBusy,
+                      onPressed: actions.isBusy ? null : _confirmCash,
+                    ),
+                    const SizedBox(height: 8),
+                  ] else if (invoice.awaitsSlipReview) ...[
                     PrimaryButton(
                       label: 'ตรวจสลิป',
                       icon: Icons.image_outlined,
