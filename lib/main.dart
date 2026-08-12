@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -25,6 +27,8 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  _registerFontLicenses();
 
   // URL แบบไม่มี # บนเว็บ · ต้องเรียกก่อน runApp
   //
@@ -57,6 +61,25 @@ Future<void> main() async {
   await authController.initialize();
 
   runApp(HorPlugApp(authController: authController));
+}
+
+/// ใบอนุญาตของฟอนต์ที่ฝังมากับแอป
+///
+/// Open Sans และ Noto Sans Thai เป็น SIL OFL 1.1 ทั้งคู่ ซึ่งกำหนดให้แจกใบอนุญาต
+/// ไปพร้อมกับฟอนต์ · หน้า licenses ของ Flutter (`showLicensePage`) คือที่ที่ผู้ใช้
+/// หามันเจอ แต่มันรู้จักเฉพาะแพ็กเกจ ไม่รู้จักไฟล์ที่เราหยิบมาใส่เอง
+void _registerFontLicenses() {
+  LicenseRegistry.addLicense(() async* {
+    for (final path in const [
+      'lib/assets/fonts/OFL-OpenSans.txt',
+      'lib/assets/fonts/OFL-NotoSansThai.txt',
+    ]) {
+      yield LicenseEntryWithLineBreaks(
+        const ['ฟอนต์ที่ฝังมากับแอป'],
+        await rootBundle.loadString(path),
+      );
+    }
+  });
 }
 
 /// หน้าที่แสดงแทนแอปทั้งตัวเมื่อยังไม่ได้ตั้งค่า Supabase
