@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
+import '../models/picked_image.dart';
 import '../services/invoice_service.dart';
 import '../services/supabase_service.dart';
 import '../services/tenant_billing_source.dart';
@@ -170,7 +170,7 @@ class TenantChatViewModel extends ChangeNotifier
     try {
       final path = await _service.uploadChatImage(
         roomId: roomId,
-        imageFile: File(picked.path),
+        image: await PickedImage.fromXFile(picked),
       );
       await _service.sendMessage(
         roomId: roomId,

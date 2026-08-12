@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
+import '../models/picked_image.dart';
 import '../services/tenant_billing_source.dart';
 import 'action_result.dart';
 import 'error_message.dart';
@@ -29,7 +28,7 @@ mixin TenantSlipSubmission on ChangeNotifier {
 
   Future<ActionResult> submitSlip({
     required Invoice bill,
-    required File slip,
+    required PickedImage slip,
   }) =>
       _runPaymentAction(
         () => billingSource.submitPaymentSlip(bill: bill, slip: slip),

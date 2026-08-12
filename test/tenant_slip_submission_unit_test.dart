@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:horplug/models/models.dart';
+import 'package:horplug/models/picked_image.dart';
 import 'package:horplug/services/tenant_billing_source.dart';
 import 'package:horplug/viewmodels/action_result.dart';
 import 'package:horplug/viewmodels/tenant_slip_submission.dart';
@@ -33,7 +32,7 @@ class _FakeBillingSource implements TenantBillingSource {
   @override
   Future<ActionResult> submitPaymentSlip({
     required Invoice bill,
-    required File slip,
+    required PickedImage slip,
   }) async {
     submitCalls++;
     if (error != null) throw error!;
@@ -93,7 +92,11 @@ class _Host extends ChangeNotifier with TenantSlipSubmission {
 }
 
 void main() {
-  final slip = File('ไม่ได้ถูกอ่านจริงเพราะ source เป็นตัวปลอม');
+  final slip = PickedImage(
+    bytes: Uint8List.fromList([1, 2, 3]),
+    extension: 'jpg',
+    contentType: 'image/jpeg',
+  );
 
   group('submitSlip', () {
     test('สำเร็จแล้วรีเฟรชหน้าจอที่ผสม mixin นี้', () async {

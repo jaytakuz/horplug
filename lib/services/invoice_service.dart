@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/models.dart';
+import '../models/picked_image.dart';
 import '../viewmodels/tenant_dashboard_view_model.dart' show thaiMonthName;
 import 'invoice_calculator.dart';
 import 'invoice_lifecycle.dart';
@@ -439,11 +438,19 @@ class InvoiceService {
   /// อัปโหลดสลิปแล้วคืน storage path
   Future<String> uploadSlip({
     required Invoice invoice,
-    required File file,
+    required PickedImage file,
   }) async {
     final stamp = DateTime.now().millisecondsSinceEpoch;
-    final path = '${invoice.roomDbId}/${invoice.invoiceNo}-$stamp.jpg';
-    await _client.storage.from(_slipBucket).upload(path, file);
+    final path =
+        '${invoice.roomDbId}/${invoice.invoiceNo}-$stamp.${file.extension}';
+    // uploadBinary ไม่ใช่ upload ด้วยเหตุผลเดียวกับ uploadChatImage — upload
+    // อ่านไฟล์จากดิสก์ ซึ่งบนเว็บไม่มีให้อ่าน · นามสกุลก็ต้องมาจากรูปจริง
+    // ไม่ใช่ .jpg ตายตัว ไม่งั้น PNG จะถูกเก็บด้วยชื่อที่โกหกชนิดของมัน
+    await _client.storage.from(_slipBucket).uploadBinary(
+          path,
+          file.bytes,
+          fileOptions: FileOptions(contentType: file.contentType),
+        );
     return path;
   }
 
