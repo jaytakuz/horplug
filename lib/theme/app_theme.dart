@@ -1,3 +1,7 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+// CupertinoPageTransitionsBuilder อยู่ใน cupertino.dart ไม่ใช่ material.dart
+// · import แบบ show เพื่อไม่ให้ชื่ออื่นของสองไลบรารีชนกันในไฟล์นี้
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 import 'breakpoints.dart';
@@ -55,6 +59,30 @@ ThemeData buildAppTheme() {
     // Android แต่ true บน iOS/macOS ทำให้หัวข้อเด้งไปอยู่กลางจอเฉพาะบน iOS
     // บังคับเป็นชิดซ้ายเพื่อให้ทุกแพลตฟอร์มเหมือนกัน
     appBarTheme: const AppBarTheme(centerTitle: false),
+    // ปัดจากขอบซ้ายเพื่อย้อนกลับ · ตั้งที่เดียวครอบทุกเส้นทางที่ push
+    // (รายละเอียดห้อง ประวัติแจ้งซ่อม แชทรายห้อง ตั้งค่าช่องทางรับเงิน) โดยไม่
+    // ต้องแก้หน้าจอสักหน้า และไม่มีหน้าไหนหลุดเมื่อมีหน้าใหม่เพิ่มทีหลัง
+    //
+    // Android บนเครื่องจริงใช้ PredictiveBack ซึ่งให้พรีวิวหน้าถัดไประหว่างปัด
+    // ตามมาตรฐาน Android 14+ · ต้องคู่กับ enableOnBackInvokedCallback ใน
+    // AndroidManifest.xml
+    //
+    // บนเว็บต้องแยกด้วย kIsWeb เพราะ PredictiveBack อาศัย platform channel ของ
+    // Android ที่ไม่มีในเบราว์เซอร์ แล้วจะตกกลับไปเป็น zoom transition ซึ่ง
+    // "ไม่มีท่าทางลากเลย" — เว็บบนมือถือ Android จะกลายเป็นแพลตฟอร์มเดียวที่
+    // ปัดกลับไม่ได้ · CupertinoPageTransitionsBuilder พก CupertinoBackGestureDetector
+    // มาในตัว จึงลากกลับได้ทั้งด้วยนิ้วและด้วยเมาส์
+    pageTransitionsTheme: PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: kIsWeb
+            ? const CupertinoPageTransitionsBuilder()
+            : const PredictiveBackPageTransitionsBuilder(),
+        TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
+        TargetPlatform.macOS: const CupertinoPageTransitionsBuilder(),
+        TargetPlatform.windows: const CupertinoPageTransitionsBuilder(),
+        TargetPlatform.linux: const CupertinoPageTransitionsBuilder(),
+      },
+    ),
     cardTheme: CardThemeData(
       color: AppColors.card,
       elevation: 0,
