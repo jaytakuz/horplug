@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:horplug/models/models.dart';
+import 'package:horplug/models/picked_image.dart';
 import 'package:horplug/viewmodels/action_result.dart';
 import 'package:horplug/widgets/payment_sheet.dart';
 
@@ -62,7 +61,7 @@ void main() {
                   promptPayId: '0812345678',
                   accountName: 'สมหญิง เจ้าของหอ',
                 ),
-                onSubmit: (File slip) async =>
+                onSubmit: (PickedImage slip) async =>
                     const ActionResult(success: true, message: 'ส่งแล้ว'),
                 onSubmitCash: () async =>
                     const ActionResult(success: true, message: 'แจ้งแล้ว'),

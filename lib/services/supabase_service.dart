@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
+import '../models/picked_image.dart';
 import 'maintenance_overview.dart';
 
 const _chatImageBucket = 'chat-image';
@@ -609,11 +608,17 @@ class SupabaseService {
   /// signed URL ตอนอ่านข้อความ เพราะ bucket เป็น private
   Future<String> uploadChatImage({
     required int roomId,
-    required File imageFile,
+    required PickedImage image,
   }) async {
-    final extension = imageFile.path.split('.').last;
-    final path = '$roomId/${DateTime.now().microsecondsSinceEpoch}.$extension';
-    await client.storage.from(_chatImageBucket).upload(path, imageFile);
+    final path =
+        '$roomId/${DateTime.now().microsecondsSinceEpoch}.${image.extension}';
+    // uploadBinary ไม่ใช่ upload เพราะ upload รับ dart:io File แล้วอ่านจากดิสก์
+    // ซึ่งบนเว็บโยน UnsupportedError ทันที — ดู [PickedImage]
+    await client.storage.from(_chatImageBucket).uploadBinary(
+          path,
+          image.bytes,
+          fileOptions: FileOptions(contentType: image.contentType),
+        );
     return path;
   }
 

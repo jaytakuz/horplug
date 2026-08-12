@@ -1,6 +1,5 @@
-import 'dart:io';
-
 import '../models/models.dart';
+import '../models/picked_image.dart';
 import '../viewmodels/action_result.dart';
 import 'invoice_service.dart';
 import 'payment_channel_service.dart';
@@ -27,7 +26,7 @@ abstract class TenantBillingSource {
 
   Future<ActionResult> submitPaymentSlip({
     required Invoice bill,
-    required File slip,
+    required PickedImage slip,
   });
 
   /// ผู้เช่าแจ้งว่าจ่ายเงินสดให้เจ้าของหอแล้ว — ไม่มีสลิป เจ้าของหอต้องยืนยันเอง
@@ -96,7 +95,7 @@ class SupabaseTenantBillingSource implements TenantBillingSource {
   @override
   Future<ActionResult> submitPaymentSlip({
     required Invoice bill,
-    required File slip,
+    required PickedImage slip,
   }) async {
     final path = await _invoices.uploadSlip(invoice: bill, file: slip);
     try {

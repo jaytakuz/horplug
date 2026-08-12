@@ -49,6 +49,18 @@ class _ChatViewState extends State<_ChatView> {
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<ChatViewModel>();
+
+    // การส่งรูปที่ล้มเหลวเคยเงียบสนิท — เห็นแค่วงกลมหมุนแล้วไม่มีอะไรขึ้น
+    final sendError = viewModel.sendErrorMessage;
+    if (sendError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(sendError)));
+        viewModel.clearSendError();
+      });
+    }
+
     return viewModel.selectedChat == null
         ? _buildInboxView(context, viewModel)
         : _buildConversationView(context, viewModel);
