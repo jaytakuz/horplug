@@ -6,6 +6,7 @@ import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/maintenance_view_model.dart';
 import '../../widgets/maintenance_request_card.dart';
 import '../../widgets/maintenance_search_and_filter.dart';
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 
 class MaintenanceHistoryScreen extends StatelessWidget {
@@ -79,9 +80,10 @@ class _MaintenanceHistoryView extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 16),
               PrimaryButton(
-                label: 'ลองใหม่',
+                label: viewModel.isRefreshing ? 'กำลังลองใหม่...' : 'ลองใหม่',
                 icon: Icons.refresh,
-                onPressed: viewModel.loadRequests,
+                onPressed:
+                    viewModel.isRefreshing ? null : viewModel.loadRequests,
               ),
             ],
           ),
@@ -112,7 +114,7 @@ class _MaintenanceHistoryView extends StatelessWidget {
     }
 
     final requests = viewModel.filteredRequests;
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: viewModel.loadRequests,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),

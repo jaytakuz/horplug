@@ -4,6 +4,7 @@ import '../models/models.dart';
 import '../services/supabase_service.dart';
 import 'action_result.dart';
 import 'error_message.dart';
+import 'refreshable.dart';
 
 String maintenanceStatusLabel(MaintenanceStatus status) {
   switch (status) {
@@ -54,7 +55,7 @@ List<MaintenanceRequest> filterMaintenanceRequests(
   }).toList();
 }
 
-class MaintenanceViewModel extends ChangeNotifier {
+class MaintenanceViewModel extends ChangeNotifier with RefreshableViewModel {
   MaintenanceViewModel({
     required this.roomId,
     required this.landlordId,
@@ -65,7 +66,6 @@ class MaintenanceViewModel extends ChangeNotifier {
   final String landlordId;
   final SupabaseService _service;
 
-  bool isLoading = true;
   String? errorMessage;
   List<MaintenanceRequest> requests = [];
   bool isUpdating = false;
@@ -90,20 +90,15 @@ class MaintenanceViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadRequests() async {
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
-
-    try {
-      requests = await _service.fetchMaintenanceRequests(roomId: roomId);
-      isLoading = false;
-      notifyListeners();
-    } catch (error) {
-      errorMessage = error.toString();
-      isLoading = false;
-      notifyListeners();
-    }
+  Future<void> loadRequests() {
+    return runLoad(() async {
+      errorMessage = null;
+      try {
+        requests = await _service.fetchMaintenanceRequests(roomId: roomId);
+      } catch (error) {
+        errorMessage = error.toString();
+      }
+    });
   }
 
   Future<ActionResult> updateStatus(

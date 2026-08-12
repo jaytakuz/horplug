@@ -8,6 +8,7 @@ import '../../utils/formatters.dart';
 import '../../viewmodels/maintenance_overview_view_model.dart';
 import '../../viewmodels/maintenance_view_model.dart'
     show maintenanceRequestTypeLabel, maintenanceStatusLabel;
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import 'maintenance_history_screen.dart';
 
@@ -94,9 +95,9 @@ class _MaintenanceOverviewViewState extends State<_MaintenanceOverviewView> {
                   style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 16),
               PrimaryButton(
-                label: 'ลองใหม่',
+                label: viewModel.isRefreshing ? 'กำลังลองใหม่...' : 'ลองใหม่',
                 icon: Icons.refresh,
-                onPressed: viewModel.load,
+                onPressed: viewModel.isRefreshing ? null : viewModel.load,
               ),
             ],
           ),
@@ -136,7 +137,7 @@ class _MaintenanceOverviewViewState extends State<_MaintenanceOverviewView> {
           _buildSummaryLine(context, viewModel),
           _buildFloorFilterSection(viewModel),
           Expanded(
-            child: RefreshIndicator(
+            child: PullToRefresh(
               onRefresh: viewModel.load,
               child: rooms.isEmpty
                   ? _buildNoResultState()
@@ -232,18 +233,15 @@ class _MaintenanceOverviewViewState extends State<_MaintenanceOverviewView> {
   }
 
   Widget _buildNoResultState() {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_off, size: 40, color: AppColors.mutedForeground),
-            SizedBox(height: 12),
-            Text('ไม่พบห้องตามที่ค้นหา',
-                style: TextStyle(color: AppColors.mutedForeground)),
-          ],
-        ),
+    return const CenteredScrollable(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.search_off, size: 40, color: AppColors.mutedForeground),
+          SizedBox(height: 12),
+          Text('ไม่พบห้องตามที่ค้นหา',
+              style: TextStyle(color: AppColors.mutedForeground)),
+        ],
       ),
     );
   }

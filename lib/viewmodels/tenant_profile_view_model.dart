@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/supabase_service.dart';
 import 'error_message.dart';
+import 'refreshable.dart';
 import 'safe_notifier.dart';
 
 String roomStatusLabel(RoomStatus status) {
@@ -16,7 +17,8 @@ String roomStatusLabel(RoomStatus status) {
   }
 }
 
-class TenantProfileViewModel extends ChangeNotifier with SafeNotifier {
+class TenantProfileViewModel extends ChangeNotifier
+    with SafeNotifier, RefreshableViewModel {
   TenantProfileViewModel({
     required this.roomId,
     required this.dormitoryId,
@@ -27,7 +29,6 @@ class TenantProfileViewModel extends ChangeNotifier with SafeNotifier {
   final int? dormitoryId;
   final SupabaseService _service;
 
-  bool isLoading = true;
   String? errorMessage;
   Room? room;
   DormitoryInfo? dormitory;
@@ -40,26 +41,22 @@ class TenantProfileViewModel extends ChangeNotifier with SafeNotifier {
       return;
     }
 
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
-
-    try {
-      room = await _service.fetchRoom(roomDbId: roomDbId);
-    } catch (error) {
-      errorMessage = formatErrorMessage(error);
-    }
-
-    // ข้อมูลติดต่อเจ้าของหอต้องรัน rls_tenant_access.sql ก่อนจึงจะอ่านได้ —
-    // ถ้าอ่านไม่ได้ให้เงียบไว้แล้วโชว์ "ไม่พบข้อมูลผู้ติดต่อ" แทนขึ้น error
-    final dorm = dormitoryId;
-    if (dorm != null) {
+    return runLoad(() async {
+      errorMessage = null;
       try {
-        dormitory = await _service.fetchDormitoryInfo(dormitoryId: dorm);
-      } catch (_) {}
-    }
+        room = await _service.fetchRoom(roomDbId: roomDbId);
+      } catch (error) {
+        errorMessage = formatErrorMessage(error);
+      }
 
-    isLoading = false;
-    notifyListeners();
+      // ข้อมูลติดต่อเจ้าของหอต้องรัน rls_tenant_access.sql ก่อนจึงจะอ่านได้ —
+      // ถ้าอ่านไม่ได้ให้เงียบไว้แล้วโชว์ "ไม่พบข้อมูลผู้ติดต่อ" แทนขึ้น error
+      final dorm = dormitoryId;
+      if (dorm != null) {
+        try {
+          dormitory = await _service.fetchDormitoryInfo(dormitoryId: dorm);
+        } catch (_) {}
+      }
+    });
   }
 }

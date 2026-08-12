@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
+import '../services/invoice_service.dart';
 import '../services/supabase_service.dart';
+import 'refreshable.dart';
 
 String roomStatusLabel(RoomStatus? status) {
   switch (status) {
@@ -16,19 +18,27 @@ String roomStatusLabel(RoomStatus? status) {
   }
 }
 
-class MeterViewModel extends ChangeNotifier {
-  MeterViewModel({required this.dormitoryId, SupabaseService? service})
-      : _service = service ?? SupabaseService();
+class MeterViewModel extends ChangeNotifier with RefreshableViewModel {
+  MeterViewModel({
+    required this.dormitoryId,
+    SupabaseService? service,
+    InvoiceService? invoices,
+  })  : _service = service ?? SupabaseService(),
+        _invoices = invoices ?? InvoiceService();
 
   final int dormitoryId;
   final SupabaseService _service;
+  final InvoiceService _invoices;
 
-  bool isLoading = true;
   bool isSaving = false;
   String? errorMessage;
   int selectedMonth = DateTime.now().month;
   int selectedYear = DateTime.now().year;
   final Set<int> modifiedWaterRoomIds = {};
+
+  /// ห้องที่เจ้าของหอเพิ่งพิมพ์เลขมิเตอร์ไฟ ยังไม่ได้บันทึก · คู่กับ
+  /// [modifiedWaterRoomIds] ที่มีอยู่เดิม — ดู [hasUnsavedEdits]
+  final Set<int> modifiedElectricityRoomIds = {};
 
   String searchQuery = '';
   String selectedFloor = 'ทั้งหมด';
@@ -94,14 +104,25 @@ class MeterViewModel extends ChangeNotifier {
 
   int get waterSavedCount => waterRecords.where((r) => r.id != null).length;
 
-  bool get canSave {
-    if (isLoading || isSaving) return false;
-    final hasValidElec =
-        electricityRecords.any((r) => r.currentReading != null);
-    final hasNewOrModifiedWater = modifiedWaterRoomIds.isNotEmpty ||
-        waterRecords.any((r) => r.id == null);
-    return hasValidElec || hasNewOrModifiedWater;
-  }
+  /// สิ่งที่ผู้ใช้เพิ่งพิมพ์ในรอบนี้และยังไม่ได้บันทึก
+  ///
+  /// เกณฑ์ของกล่อง "ถามก่อนทิ้ง" ตอนลากรีเฟรช จึงนับเฉพาะสิ่งที่ **คนพิมพ์**
+  /// ไม่ใช่สิ่งที่ยังไม่มีในฐานข้อมูล — งวดใหม่มีแถวค่าน้ำที่ `id == null`
+  /// ครบทุกห้องตั้งแต่โหลดเสร็จ ถ้านับรวมด้วย กล่องจะเด้งทุกครั้งที่ลาก
+  /// ทั้งที่ยังไม่มีใครแตะอะไรเลย ซึ่งสอนให้ผู้ใช้กด "ทิ้ง" โดยไม่อ่าน
+  bool get hasUnsavedInput =>
+      modifiedElectricityRoomIds.isNotEmpty || modifiedWaterRoomIds.isNotEmpty;
+
+  /// มีอะไรให้กดบันทึกไหม — รวมแถวค่าน้ำของงวดที่ยังไม่เคยถูกบันทึก
+  ///
+  /// เกณฑ์เดิมตอบว่า "บันทึกได้" เพียงเพราะมีห้องไหนสักห้องที่มีเลขมิเตอร์ ซึ่ง
+  /// เป็นจริงเสมอหลังโหลดข้อมูลที่เคยบันทึกไว้ ปุ่มจึงกดได้ตลอดแม้ไม่มีอะไร
+  /// เปลี่ยน · แถวค่าน้ำที่ยังไม่มี id ยังนับอยู่ เพราะเป็นเกณฑ์เดียวกับที่
+  /// [saveAll] ใช้เลือกแถวที่ต้องส่งขึ้นเซิร์ฟเวอร์จริง
+  bool get hasUnsavedEdits =>
+      hasUnsavedInput || waterRecords.any((r) => r.id == null);
+
+  bool get canSave => !isLoading && !isSaving && hasUnsavedEdits;
 
   void clearFilters() {
     selectedFloor = 'ทั้งหมด';
@@ -124,34 +145,33 @@ class MeterViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadAllRecords() async {
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
+  Future<void> loadAllRecords() {
+    return runLoad(() async {
+      errorMessage = null;
+      try {
+        final elecs = await _service.fetchElectricityRecords(
+          dormitoryId: dormitoryId,
+          month: selectedMonth,
+          year: selectedYear,
+        );
+        final waters = await _service.fetchWaterRecords(
+          dormitoryId: dormitoryId,
+          month: selectedMonth,
+          year: selectedYear,
+        );
 
-    try {
-      final elecs = await _service.fetchElectricityRecords(
-        dormitoryId: dormitoryId,
-        month: selectedMonth,
-        year: selectedYear,
-      );
-      final waters = await _service.fetchWaterRecords(
-        dormitoryId: dormitoryId,
-        month: selectedMonth,
-        year: selectedYear,
-      );
-
-      electricityRecords = elecs;
-      waterRecords = waters;
-      modifiedWaterRoomIds.clear();
-      isLoading = false;
-      reloadTick++;
-      notifyListeners();
-    } catch (error) {
-      errorMessage = 'ไม่สามารถโหลดข้อมูลได้: $error';
-      isLoading = false;
-      notifyListeners();
-    }
+        electricityRecords = elecs;
+        waterRecords = waters;
+        // ล้างหลัง fetch สำเร็จเท่านั้น และล้างพร้อมกับ reloadTick ที่หน้าจอใช้
+        // ทิ้ง TextEditingController — สองอย่างนี้ต้องเกิดคู่กันเสมอ ไม่งั้น
+        // ธง "มีของค้าง" จะไม่ตรงกับสิ่งที่ผู้ใช้เห็นในช่องกรอก
+        modifiedWaterRoomIds.clear();
+        modifiedElectricityRoomIds.clear();
+        reloadTick++;
+      } catch (error) {
+        errorMessage = 'ไม่สามารถโหลดข้อมูลได้: $error';
+      }
+    });
   }
 
   Future<void> setPeriod({int? month, int? year}) async {
@@ -162,6 +182,7 @@ class MeterViewModel extends ChangeNotifier {
 
   void setElectricityReading(ElectricityRecord record, double? value) {
     record.currentReading = value;
+    modifiedElectricityRoomIds.add(record.roomDbId);
     notifyListeners();
   }
 
@@ -169,6 +190,33 @@ class MeterViewModel extends ChangeNotifier {
     record.amount = value;
     modifiedWaterRoomIds.add(record.roomDbId);
     notifyListeners();
+  }
+
+  /// ปรับยอดบิลค้างชำระของงวดที่เลือกให้ตรงกับมิเตอร์ที่เพิ่งบันทึก
+  /// แล้วแจ้งผู้เช่าที่ยอดเปลี่ยน
+  ///
+  /// แยกจาก [saveAll] เพราะความล้มของสองอย่างนี้มีน้ำหนักต่างกัน — มิเตอร์คือ
+  /// ของจริงที่บันทึกไปแล้ว การปรับบิลคือผลพวงของมัน ล้มแล้วบอกได้ ไม่ต้องย้อน
+  ///
+  /// คืนทั้งจำนวนใบที่ปรับและผลของการแจ้ง เพราะสองอย่างนี้ล้มแยกกันได้ และการ
+  /// รายงานว่า "ปรับยอดไม่สำเร็จ" ทั้งที่ยอดเปลี่ยนไปแล้วแต่แจ้งไม่ออก จะทำให้
+  /// เจ้าของหอเข้าใจผิดว่าบิลยังเป็นยอดเดิม
+  Future<({int adjusted, bool noticesPosted})> syncInvoicesForPeriod() async {
+    final adjustments = await _invoices.syncUnpaidInvoices(
+      dormitoryId: dormitoryId,
+      month: selectedMonth,
+      year: selectedYear,
+    );
+    if (adjustments.isEmpty) return (adjusted: 0, noticesPosted: true);
+
+    try {
+      await _invoices.postAdjustmentNotices(adjustments);
+      return (adjusted: adjustments.length, noticesPosted: true);
+    } catch (_) {
+      // บิลถูกแก้ไปแล้ว การ์ดในแชทก็แสดงยอดใหม่เองอยู่แล้วเพราะ resolve สด
+      // สิ่งที่หายไปคือข้อความที่บอกว่า "ยอดเปลี่ยนจากเท่าไร" เท่านั้น
+      return (adjusted: adjustments.length, noticesPosted: false);
+    }
   }
 
   Future<bool> saveAll() async {

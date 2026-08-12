@@ -37,6 +37,18 @@
   <title>HorPlug — ระบบจัดการหอพัก</title>
   <link rel="manifest" href="manifest.json">
 
+  <!--
+    โหลดฟอนต์หลักไปพร้อมกับ engine ไม่ใช่หลังจากนั้น · ไม่มีสองบรรทัดนี้
+    ตัวหนังสือชุดแรกจะขึ้นด้วยฟอนต์ของระบบแล้วกระโดดเปลี่ยนเมื่อไฟล์จริงมาถึง
+
+    เส้นทางมี lib/ ซ้อนอยู่จริงๆ — Flutter คัดลอก asset ตามพาธที่ประกาศใน
+    pubspec.yaml ทั้งดุ้น ไว้ใต้ assets/ อีกที
+  -->
+  <link rel="preload" as="font" type="font/ttf" crossorigin
+        href="assets/lib/assets/fonts/OpenSans-Regular.ttf">
+  <link rel="preload" as="font" type="font/ttf" crossorigin
+        href="assets/lib/assets/fonts/NotoSansThai-Regular.ttf">
+
   <style>
     /* พื้นหลังสีเดียวกับธีมของแอป · ระหว่างที่ยังโหลด engine ไม่เสร็จ ผู้ใช้จะ
        เห็นสีนี้แทนหน้าขาวที่กระพริบเป็นสีขาวแล้วตัดเป็นสีเข้ม */
@@ -57,6 +69,9 @@
       align-items: center;
       justify-content: center;
       height: 100%;
+      /* ฟอนต์ระบบตามเดิม — ข้อความนี้ขึ้นก่อนที่ฟอนต์ของแอปจะโหลดเสร็จ
+         การประกาศ Noto Sans Thai ตรงนี้จึงได้แค่เครื่องที่บังเอิญมีติดมาอยู่แล้ว
+         ส่วนเครื่องอื่นจะเห็นข้อความว่างจนกว่าไฟล์จะมาถึง ซึ่งแย่กว่าเดิม */
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       color: #5A6B80;
       font-size: 14px;

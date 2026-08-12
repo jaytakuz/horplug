@@ -9,6 +9,7 @@ import '../../theme/breakpoints.dart';
 import '../../viewmodels/action_result.dart';
 import '../../viewmodels/rooms_view_model.dart';
 import '../../widgets/create_rooms_dialog.dart';
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import 'maintenance_history_screen.dart';
 import '../../utils/formatters.dart';
@@ -60,10 +61,12 @@ class _RoomsViewState extends State<_RoomsView> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    // หน้าที่โหลดล้มคือหน้าที่ต้องการการลองใหม่มากที่สุด จึงต้องลากรีเฟรชได้
+    // เหมือนหน้าที่โหลดสำเร็จ ไม่ใช่มีแค่ปุ่มเดียวเป็นทางออก
     if (viewModel.errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+      return PullToRefresh(
+        onRefresh: viewModel.loadData,
+        child: CenteredScrollable(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -82,9 +85,9 @@ class _RoomsViewState extends State<_RoomsView> {
               ),
               const SizedBox(height: 16),
               PrimaryButton(
-                label: 'ลองใหม่',
+                label: viewModel.isRefreshing ? 'กำลังลองใหม่...' : 'ลองใหม่',
                 icon: Icons.refresh,
-                onPressed: viewModel.loadData,
+                onPressed: viewModel.isRefreshing ? null : viewModel.loadData,
               ),
             ],
           ),
@@ -93,9 +96,9 @@ class _RoomsViewState extends State<_RoomsView> {
     }
 
     if (viewModel.rooms.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+      return PullToRefresh(
+        onRefresh: viewModel.loadData,
+        child: CenteredScrollable(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -131,7 +134,7 @@ class _RoomsViewState extends State<_RoomsView> {
       );
     }
 
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: viewModel.loadData,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),

@@ -2,12 +2,36 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/models.dart';
 import '../models/picked_image.dart';
+import '../utils/formatters.dart' show formatBaht;
 import '../viewmodels/tenant_dashboard_view_model.dart' show thaiMonthName;
 import 'invoice_calculator.dart';
 import 'invoice_lifecycle.dart';
 import 'supabase_service.dart';
 
 const _slipBucket = 'payment-slip';
+
+/// ข้อมูลของงวดหนึ่ง map ตามห้อง — ผลของ [InvoiceService._fetchPeriodInputs]
+///
+/// การไม่มีคีย์กับการมีคีย์ที่เป็น 0 คนละความหมาย: ห้องที่ไม่มีใน [water] คือ
+/// ยังไม่มีใครกรอกค่าน้ำงวดนี้ ส่วนห้องที่มีค่า 0 คือกรอกไว้แล้วว่าไม่เก็บ ·
+/// [electricity] ก็เช่นกัน ห้องที่ยังไม่จดเลขมิเตอร์จะไม่มีคีย์เลย
+class _PeriodInputs {
+  const _PeriodInputs({
+    required this.electricity,
+    required this.water,
+    required this.cleaning,
+  });
+
+  final Map<int, MeterCharge> electricity;
+  final Map<int, double> water;
+  final Map<int, double> cleaning;
+
+  MeterCharge? electricityFor(int roomDbId) => electricity[roomDbId];
+  double? waterFor(int roomDbId) => water[roomDbId];
+
+  /// ไม่มีงานทำความสะอาดในงวด = ฿0 ซึ่งเป็นยอดจริง ไม่ใช่ข้อมูลที่ขาด
+  double cleaningFor(int roomDbId) => cleaning[roomDbId] ?? 0;
+}
 
 /// ผลของการตรวจก่อนออกบิล — แยกห้องที่ออกได้ออกจากห้องที่ข้าม
 class InvoicePreview {
@@ -159,6 +183,52 @@ class InvoiceService {
       return const InvoicePreview(drafts: [], skipped: []);
     }
 
+    final issued = await _client
+        .from('invoices')
+        .select('room_id')
+        .inFilter('room_id', roomIds)
+        .eq('billing_month', month)
+        .eq('billing_year', year)
+        .neq('status', InvoiceStatus.voided.name);
+
+    final issuedRoomIds = (issued as List)
+        .cast<Map<String, dynamic>>()
+        .map((row) => row['room_id'] as int)
+        .toSet();
+
+    final inputs = await _fetchPeriodInputs(
+      roomIds: roomIds,
+      month: month,
+      year: year,
+    );
+
+    final drafts = <InvoiceDraft>[];
+    final skipped = <InvoiceDraft>[];
+
+    for (final room in rooms) {
+      final draft = buildDraft(
+        room: room,
+        billingMonth: month,
+        billingYear: year,
+        electricity: inputs.electricityFor(room.dbId),
+        waterAmount: inputs.waterFor(room.dbId),
+        cleaningFee: inputs.cleaningFor(room.dbId),
+        alreadyIssued: issuedRoomIds.contains(room.dbId),
+      );
+
+      (draft.canIssue ? drafts : skipped).add(draft);
+    }
+
+    return InvoicePreview(drafts: drafts, skipped: skipped);
+  }
+
+  /// ข้อมูลดิบของงวดที่ใช้ตัดสินยอดบิล — ใช้ร่วมกันระหว่างการออกบิลกับการ
+  /// คำนวณยอดใหม่ เพื่อไม่ให้สองเส้นทางตีความข้อมูลชุดเดียวกันคนละแบบ
+  Future<_PeriodInputs> _fetchPeriodInputs({
+    required List<int> roomIds,
+    required int month,
+    required int year,
+  }) async {
     final elecs = await _client
         .from('electricity_record')
         .select()
@@ -171,65 +241,118 @@ class InvoiceService {
         .inFilter('room_id', roomIds)
         .eq('billing_month', month)
         .eq('billing_year', year);
-    final issued = await _client
-        .from('invoices')
-        .select('room_id')
-        .inFilter('room_id', roomIds)
-        .eq('billing_month', month)
-        .eq('billing_year', year)
-        .neq('status', InvoiceStatus.voided.name);
-
-    final elecData = (elecs as List).cast<Map<String, dynamic>>();
-    final waterData = (waters as List).cast<Map<String, dynamic>>();
-    final issuedRoomIds = (issued as List)
-        .cast<Map<String, dynamic>>()
-        .map((row) => row['room_id'] as int)
-        .toSet();
     final cleaningByRoom = await _fetchCleaningFeesByRoom(
       roomIds: roomIds,
       month: month,
       year: year,
     );
 
-    final drafts = <InvoiceDraft>[];
-    final skipped = <InvoiceDraft>[];
+    final electricity = <int, MeterCharge>{};
+    for (final row in (elecs as List).cast<Map<String, dynamic>>()) {
+      // current_reading เป็น NULL ได้เมื่อมีแถวมิเตอร์รอไว้แต่ยังไม่ได้จดเลข
+      // งวดนี้ · ต้องไม่ใส่ลงแมปเลย ไม่ใช่ใส่เป็น 0 เพราะ 0 น้อยกว่าเลขครั้งก่อน
+      // เสมอ มันจึงเข้าเงื่อนไขมิเตอร์วนรอบแล้วคืน (10000 − เลขครั้งก่อน) —
+      // ห้องที่ยังไม่จดมิเตอร์จะได้บิลที่ตรึงหน่วยไฟหลักพันไว้ทั้งที่ไม่มีใคร
+      // อ่านมิเตอร์เลย
+      if (row['current_reading'] == null) continue;
 
-    for (final room in rooms) {
-      final e = elecData.firstWhere((r) => r['room_id'] == room.dbId,
-          orElse: () => {});
-      final w = waterData.firstWhere((r) => r['room_id'] == room.dbId,
-          orElse: () => {});
-
-      final draft = buildDraft(
-        room: room,
-        billingMonth: month,
-        billingYear: year,
-        // หน่วยต้องผ่าน meterUnitsUsed เหมือนกับที่ ElectricityRecord.amount
-        // ผ่านตอนบันทึกมิเตอร์ ไม่งั้นงวดที่มิเตอร์หมุนกลับ 9999 → 0000 จะถูก
-        // ตรึงลงบิลเป็นหน่วยติดลบข้างค่าไฟที่ถูกต้อง แล้วพิมพ์ออก PDF แบบนั้น
-        // current_reading เป็น NULL ได้เมื่อมีแถวมิเตอร์รอไว้แต่ยังไม่ได้จดเลข
-        // งวดนี้ · ต้องส่ง null เข้า meterUnitsUsed ตรงๆ ไม่ใช่แปลงเป็น 0 ก่อน
-        // เพราะ 0 น้อยกว่าเลขครั้งก่อนเสมอ มันจึงเข้าเงื่อนไขมิเตอร์วนรอบแล้ว
-        // คืน (10000 − เลขครั้งก่อน) — ห้องที่ยังไม่จดมิเตอร์จะได้บิลที่ตรึง
-        // หน่วยไฟหลักพันไว้ทั้งที่ไม่มีใครอ่านมิเตอร์เลย
-        electricity: e.isEmpty || e['current_reading'] == null
-            ? null
-            : MeterCharge(
-                units: meterUnitsUsed(
-                  previousReading: _toDouble(e['previous_reading']),
-                  currentReading: _toDouble(e['current_reading']),
-                ),
-                amount: _toDouble(e['amount']),
-              ),
-        waterAmount: w.isEmpty ? null : _toDouble(w['amount']),
-        cleaningFee: cleaningByRoom[room.dbId] ?? 0,
-        alreadyIssued: issuedRoomIds.contains(room.dbId),
+      // หน่วยต้องผ่าน meterUnitsUsed เหมือนกับที่ ElectricityRecord.amount ผ่าน
+      // ตอนบันทึกมิเตอร์ ไม่งั้นงวดที่มิเตอร์หมุนกลับ 9999 → 0000 จะถูกตรึงลงบิล
+      // เป็นหน่วยติดลบข้างค่าไฟที่ถูกต้อง แล้วพิมพ์ออก PDF แบบนั้น
+      electricity[row['room_id'] as int] = MeterCharge(
+        units: meterUnitsUsed(
+          previousReading: _toDouble(row['previous_reading']),
+          currentReading: _toDouble(row['current_reading']),
+        ),
+        amount: _toDouble(row['amount']),
       );
-
-      (draft.canIssue ? drafts : skipped).add(draft);
     }
 
-    return InvoicePreview(drafts: drafts, skipped: skipped);
+    final water = <int, double>{
+      for (final row in (waters as List).cast<Map<String, dynamic>>())
+        row['room_id'] as int: _toDouble(row['amount']),
+    };
+
+    return _PeriodInputs(
+      electricity: electricity,
+      water: water,
+      cleaning: cleaningByRoom,
+    );
+  }
+
+  /// ปรับยอดบิลค้างชำระของงวดให้ตรงกับข้อมูลล่าสุด · คืนเฉพาะใบที่เปลี่ยนจริง
+  ///
+  /// เขียนตอนที่เจ้าของหอทำอะไรบางอย่าง ไม่ใช่ตอนที่ใครสักคนเปิดหน้าดู —
+  /// ผู้เช่าไม่มีสิทธิ์ UPDATE ตารางนี้ (RLS) และถ้าคำนวณสดตอนแสดงผล QR
+  /// พร้อมเพย์กับแถวในฐานข้อมูลจะพูดคนละยอด
+  ///
+  /// ต้องรัน `database/invoices_recalculation.sql` ก่อน ไม่งั้น UPDATE จะตกด้วย
+  /// 42703 (ไม่มีคอลัมน์ recalculated_at) · ผู้เรียกรายงานความล้มโดยไม่ย้อน
+  /// สิ่งที่ทำสำเร็จไปก่อนหน้า
+  Future<List<InvoiceAdjustment>> syncUnpaidInvoices({
+    required int dormitoryId,
+    required int month,
+    required int year,
+  }) async {
+    final rooms = await _service.fetchRooms(dormitoryId: dormitoryId);
+    if (rooms.isEmpty) return [];
+
+    final invoices = await fetchInvoices(
+      dormitoryId: dormitoryId,
+      month: month,
+      year: year,
+    );
+    final unpaid = invoices
+        .where((invoice) => invoice.status == InvoiceStatus.unpaid)
+        .toList();
+    // ไม่มีใบที่แก้ได้ = ไม่ต้องยิงคิวรีข้อมูลงวดเลย · ท่าทางลากรีเฟรชเรียก
+    // เมธอดนี้ทุกครั้ง งวดที่เก็บเงินครบแล้วจึงไม่ควรจ่ายค่าคิวรีสามชุด
+    if (unpaid.isEmpty) return [];
+
+    final inputs = await _fetchPeriodInputs(
+      roomIds: rooms.map((room) => room.dbId).toList(),
+      month: month,
+      year: year,
+    );
+    final roomsById = {for (final room in rooms) room.dbId: room};
+
+    final adjustments = <InvoiceAdjustment>[];
+    for (final invoice in unpaid) {
+      final room = roomsById[invoice.roomDbId];
+      if (room == null) continue;
+
+      final adjustment = revalueInvoice(
+        invoice: invoice,
+        room: room,
+        electricity: inputs.electricityFor(invoice.roomDbId),
+        waterAmount: inputs.waterFor(invoice.roomDbId),
+        cleaningFee: inputs.cleaningFor(invoice.roomDbId),
+      );
+      if (adjustment != null) adjustments.add(adjustment);
+    }
+
+    for (final adjustment in adjustments) {
+      await _client
+          .from('invoices')
+          .update({
+            'room_price': adjustment.roomPrice,
+            'electricity_units': adjustment.electricityUnits,
+            'electricity_cost': adjustment.electricityCost,
+            'water_cost': adjustment.waterCost,
+            'cleaning_fee': adjustment.cleaningFee,
+            'previous_total': adjustment.previousTotal,
+            'recalculated_at': DateTime.now().toUtc().toIso8601String(),
+            // total ไม่อยู่ในชุดนี้ เพราะเป็น GENERATED ALWAYS AS — ฐานข้อมูล
+            // คำนวณเอง จึงเป็นไปไม่ได้ที่ยอดรวมจะไม่ตรงกับผลบวกของรายการ
+          })
+          .eq('id', adjustment.invoice.dbId)
+          // ไม่ใช่ของประดับ — ถ้าผู้เช่ากดส่งสลิปในวินาทีเดียวกัน แถวจะเป็น
+          // pending ไปแล้วและคำสั่งนี้จะไม่ match อะไรเลย บิลที่มีสลิปแนบอยู่
+          // จึงไม่มีทางถูกขยับยอดแม้ในภาวะแข่งกัน
+          .eq('status', InvoiceStatus.unpaid.name);
+    }
+
+    return adjustments;
   }
 
   /// ออกบิลทั้งชุดใน insert เดียว
@@ -345,6 +468,41 @@ class InvoiceService {
         .toList();
 
     if (rows.isEmpty) return 0;
+    await _client.from('messages').insert(rows);
+    return rows.length;
+  }
+
+  /// แจ้งผู้เช่าว่ายอดบิลเปลี่ยน · คืนจำนวนข้อความที่โพสต์
+  ///
+  /// เป็นข้อความ `text` ไม่ใช่การ์ดบิล — การ์ดใบเดิมที่อยู่ในแชทแล้ว resolve
+  /// ข้อมูลสดผ่าน [invoicesByIdForRoom] จึงแสดงยอดใหม่เองอยู่แล้ว การส่งการ์ด
+  /// ซ้ำจะได้การ์ดสองใบที่ยอดเท่ากันในห้องแชทเดียว ซึ่งอ่านเหมือนมีบิลสองใบ
+  ///
+  /// ไม่ตั้ง `invoice_id` ด้วยเหตุผลเดียวกัน — คอลัมน์นั้นเป็นเครื่องหมายว่า
+  /// ข้อความนี้ *คือ* การ์ดบิล
+  ///
+  /// ระบุทั้งยอดเก่าและยอดใหม่ เพราะผู้เช่าที่แคปหน้าจอ QR ระบุยอดเก็บไว้ต้องรู้
+  /// ว่าใบที่ถืออยู่ใช้ไม่ได้แล้ว ไม่ใช่แค่ว่า "มีอะไรบางอย่างเปลี่ยน"
+  Future<int> postAdjustmentNotices(List<InvoiceAdjustment> adjustments) async {
+    if (adjustments.isEmpty) return 0;
+
+    final senderId = _client.auth.currentUser?.id;
+    if (senderId == null) throw Exception('ยังไม่ได้เข้าสู่ระบบ');
+
+    final rows = adjustments.map((adjustment) {
+      final invoice = adjustment.invoice;
+      return {
+        'room_id': invoice.roomDbId,
+        'sender_id': senderId,
+        'is_from_owner': true,
+        'body': 'ยอดบิล ${invoice.invoiceNo} '
+            'งวด${thaiMonthName(invoice.billingMonth)} ${invoice.billingYear} '
+            'เปลี่ยนจาก ${formatBaht(adjustment.previousTotal)} '
+            'เป็น ${formatBaht(adjustment.newTotal)} หลังปรับตามเลขมิเตอร์ล่าสุด',
+        'message_type': MessageType.text.name,
+      };
+    }).toList();
+
     await _client.from('messages').insert(rows);
     return rows.length;
   }
@@ -818,5 +976,13 @@ Invoice _invoiceFromRow(Map<String, dynamic> row) {
     revision: row['revision'] as int? ?? 1,
     voidReason: row['void_reason'] as String?,
     paymentMethod: _paymentMethodFrom(row['payment_method']),
+    // สองคอลัมน์นี้มาจาก invoices_recalculation.sql · ฐานข้อมูลที่ยังไม่ได้รัน
+    // ไฟล์นั้นจะไม่มีคีย์เหล่านี้ใน row เลย ซึ่งอ่านได้เป็น null ตามปกติ
+    recalculatedAt: row['recalculated_at'] == null
+        ? null
+        : DateTime.parse(row['recalculated_at'] as String).toLocal(),
+    previousTotal: row['previous_total'] == null
+        ? null
+        : _toDouble(row['previous_total']),
   );
 }

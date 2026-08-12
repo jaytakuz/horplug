@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/formatters.dart' show formatBaht;
 
 class PaperCard extends StatelessWidget {
   final Widget child;
@@ -491,5 +492,111 @@ class PrimaryButton extends StatelessWidget {
     );
 
     return button;
+  }
+}
+
+/// บรรทัดบอกว่าบิลใบนี้ถูกปรับยอดหลังออกไปแล้ว
+///
+/// เป็นบรรทัดของตัวเอง ไม่ใช่ป้ายอีกอันข้างสถานะ — แถวหัวการ์ดบิลมีชื่อเดือนกับ
+/// ป้ายสถานะเบียดกันอยู่แล้วที่ความกว้าง 360dp การยัดป้ายที่สามเข้าไปทำให้ชื่อ
+/// เดือนถูกตัดด้วย ellipsis บนมือถือทุกเครื่อง
+///
+/// ยอดเดิมสำคัญพอๆ กับการบอกว่ามีการเปลี่ยน เพราะผู้เช่าที่แคปหน้าจอ QR ระบุยอด
+/// เก็บไว้ต้องเทียบได้ว่าใบที่ถืออยู่ตรงกับยอดไหน
+class RecalculatedNote extends StatelessWidget {
+  const RecalculatedNote({super.key, this.previousTotal});
+
+  /// null เมื่อฐานข้อมูลยังไม่มีคอลัมน์ previous_total (ยังไม่ได้รัน
+  /// invoices_recalculation.sql) — ยังบอกได้ว่าปรับแล้ว แค่ไม่รู้ว่าจากเท่าไร
+  final double? previousTotal;
+
+  @override
+  Widget build(BuildContext context) {
+    final previous = previousTotal;
+
+    return Row(
+      children: [
+        const Icon(Icons.published_with_changes,
+            size: 13, color: AppColors.warning),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            previous == null
+                ? 'ปรับยอดแล้ว'
+                : 'ปรับยอดแล้ว · ยอดเดิม ${formatBaht(previous)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.warning,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// หัวหน้าจอ: ชื่อหน้า + คำอธิบายงวด/บริบท + ปุ่มหลักหนึ่งปุ่ม
+///
+/// หน้ามิเตอร์กับหน้าบิลเคยเขียนโครงนี้เองคนละชุด และทั้งสองชุดวาง `Column`
+/// ของข้อความไว้ใน `Row` โดยไม่มี `Expanded` — พอป้ายปุ่มยาวขึ้น (เช่น
+/// "บันทึกทั้งหมด" กลายเป็น "กำลังบันทึก...") หรือผู้ใช้ตั้งขนาดตัวอักษรของ
+/// ระบบให้ใหญ่ขึ้น ข้อความจะดันจนล้นขอบเป็นแถบเหลือง-ดำแทนที่จะหดตัวเอง
+class ScreenHeader extends StatelessWidget {
+  const ScreenHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.action,
+  });
+
+  final String title;
+  final String? subtitle;
+
+  /// ปุ่มหลักของหน้า · null = ไม่มีปุ่ม
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            subtitle!,
+            style: Theme.of(context).textTheme.bodySmall,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Expanded ไม่ใช่ Column เปล่าๆ — ข้อความยอมหดและตัดด้วย ellipsis
+          // เพื่อให้ปุ่มได้ความกว้างที่มันต้องการเสมอ ซึ่งเป็นสิ่งที่ต้องเห็น
+          // ครบมากกว่าชื่อหน้าที่ผู้ใช้อ่านไปแล้ว
+          Expanded(child: text),
+          if (action != null) ...[
+            const SizedBox(width: 12),
+            action!,
+          ],
+        ],
+      ),
+    );
   }
 }

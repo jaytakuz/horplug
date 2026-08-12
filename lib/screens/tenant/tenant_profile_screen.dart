@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_profile_view_model.dart';
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../utils/formatters.dart';
 
@@ -50,7 +51,7 @@ class _TenantProfileView extends StatelessWidget {
         .map((part) => part[0])
         .join();
 
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: () async {
         await auth.refreshProfile();
         await viewModel.load();

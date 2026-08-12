@@ -187,6 +187,17 @@ class Invoice {
   /// กับรอยืนยันรับเงินสด ซึ่งเจ้าของหอต้องทำคนละอย่าง
   final PaymentMethod? paymentMethod;
 
+  /// เวลาที่ยอดของใบนี้ถูกคำนวณใหม่ตามข้อมูลล่าสุดของงวด · null = ยังเป็นยอด
+  /// เดิมตั้งแต่วันออกบิล
+  ///
+  /// มีเฉพาะฐานข้อมูลที่รัน `database/invoices_recalculation.sql` แล้ว — ที่อื่น
+  /// คอลัมน์หายไปจาก row เฉยๆ แล้วอ่านได้เป็น null ตามแบบเดียวกับ payment_method
+  final DateTime? recalculatedAt;
+
+  /// ยอดก่อนการคำนวณครั้งล่าสุด · ให้การ์ดบิลบอกได้ว่า "จากเท่าไร" ไม่ใช่แค่
+  /// "เปลี่ยนแล้ว" ซึ่งไม่พอให้ผู้เช่าตรวจสอบอะไรได้
+  final double? previousTotal;
+
   const Invoice({
     required this.dbId,
     required this.invoiceNo,
@@ -212,6 +223,8 @@ class Invoice {
     this.revision = 1,
     this.voidReason,
     this.paymentMethod,
+    this.recalculatedAt,
+    this.previousTotal,
   });
 
   /// งวดของบิล (วันที่ 1 ของเดือนนั้น) — ใช้เรียงและแสดงชื่อเดือน
@@ -262,6 +275,10 @@ class Invoice {
       revision: revision,
       voidReason: voidReason ?? this.voidReason,
       paymentMethod: paymentMethod ?? this.paymentMethod,
+      // สองตัวนี้ไม่อยู่ในรายการที่ copyWith รับให้แก้ — เปลี่ยนได้จากการ
+      // คำนวณยอดใหม่ซึ่งเขียนลงฐานข้อมูลแล้วอ่านกลับมาเท่านั้น
+      recalculatedAt: recalculatedAt,
+      previousTotal: previousTotal,
     );
   }
 }

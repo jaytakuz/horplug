@@ -6,6 +6,7 @@ import '../services/tenant_billing_source.dart';
 import '../widgets/reusable_widgets.dart';
 import 'action_result.dart';
 import 'error_message.dart';
+import 'refreshable.dart';
 import 'safe_notifier.dart';
 import 'tenant_slip_submission.dart';
 
@@ -115,7 +116,7 @@ BadgeVariant billStatusVariant(InvoiceStatus status) {
 // ── ViewModel ───────────────────────────────────────────────────────────────
 
 class TenantDashboardViewModel extends ChangeNotifier
-    with SafeNotifier, TenantSlipSubmission {
+    with SafeNotifier, RefreshableViewModel, TenantSlipSubmission {
   TenantDashboardViewModel({
     required this.roomId,
     this.dormitoryId,
@@ -137,11 +138,6 @@ class TenantDashboardViewModel extends ChangeNotifier
   bool isResponding = false;
   List<TenantJoinRequest> pendingRequests = [];
   String? requestErrorMessage;
-
-  /// true เฉพาะการโหลด "ครั้งแรก" — การ pull-to-refresh ไม่ควรล้างหน้าจอ
-  /// เป็น spinner เพราะ RefreshIndicator แสดงสถานะให้อยู่แล้ว
-  bool isLoading = true;
-  bool _hasLoadedOnce = false;
 
   // แต่ละส่วนมี error ของตัวเอง — ส่วนเดียวพังไม่ควรทำให้ทั้งหน้าว่าง
   String? billErrorMessage;
@@ -166,20 +162,15 @@ class TenantDashboardViewModel extends ChangeNotifier
   /// กำลังส่งคำขอแจ้งซ่อม/ทำความสะอาดจากปุ่มทางลัด
   bool isSubmittingRequest = false;
 
-  Future<void> load() async {
-    isLoading = !_hasLoadedOnce;
-    notifyListeners();
+  Future<void> load() {
+    return runLoad(() async {
+      // คำขอเข้าหอต้องโหลดเสมอ แม้ยังไม่มีห้อง
+      await loadPendingRequests();
 
-    // คำขอเข้าหอต้องโหลดเสมอ แม้ยังไม่มีห้อง
-    await loadPendingRequests();
-
-    if (roomId != null) {
-      await _loadRoomSections();
-    }
-
-    isLoading = false;
-    _hasLoadedOnce = true;
-    notifyListeners();
+      if (roomId != null) {
+        await _loadRoomSections();
+      }
+    });
   }
 
   /// โหลดทุกส่วนพร้อมกัน โดยดัก error แยกรายส่วน — Future.wait จะไม่ล้มทั้งชุด
@@ -307,7 +298,7 @@ class TenantDashboardViewModel extends ChangeNotifier
   Future<void> loadPendingRequests() async {
     // เช่นเดียวกับ load(): pull-to-refresh ไม่ควรทำให้การ์ดคำขอหายกลายเป็น
     // spinner กลางจอ
-    isLoadingRequests = !_hasLoadedOnce;
+    isLoadingRequests = !hasLoadedOnce;
     requestErrorMessage = null;
     notifyListeners();
 

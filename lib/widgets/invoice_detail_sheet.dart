@@ -251,6 +251,15 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
                             'งวด${thaiMonthName(invoice.billingMonth)} ${invoice.billingYear} · ห้อง ${invoice.roomNumber} · ${invoice.tenantName}',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
+                          if (invoice.recalculatedAt != null) ...[
+                            const SizedBox(height: 4),
+                            RecalculatedNote(
+                                previousTotal: invoice.previousTotal),
+                            Text(
+                              'ปรับเมื่อ ${formatRelativeTime(invoice.recalculatedAt!)}',
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                          ],
                         ],
                       ),
                     ),

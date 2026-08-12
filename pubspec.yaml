@@ -48,3 +48,30 @@ flutter:
     # เอง ไม่ได้ใช้ระบบฟอนต์ของ Flutter
     - lib/assets/fonts/Sarabun-Regular.ttf
     - lib/assets/fonts/Sarabun-Bold.ttf
+    # ใบอนุญาตของฟอนต์ที่ฝังมา · main() อ่านผ่าน rootBundle แล้วลงทะเบียนกับ
+    # LicenseRegistry เพื่อให้โผล่ในหน้า licenses ของแอปตามที่ OFL กำหนด
+    - lib/assets/fonts/OFL-OpenSans.txt
+    - lib/assets/fonts/OFL-NotoSansThai.txt
+
+  # คนละที่กับ assets: ด้านบนโดยตั้งใจ — ที่นี่คือฟอนต์ที่ระบบฟอนต์ของ Flutter
+  # ต้องรู้จักชื่อตระกูลและน้ำหนัก เพื่อให้ธีมอ้างถึงด้วย fontFamily ได้
+  #
+  # Open Sans ไม่มีอักษรไทยสักตัว (latin/greek/cyrillic/hebrew เท่านั้น) จึงต้อง
+  # มี Noto Sans Thai คู่มาเสมอ ดู fontFamilyFallback ใน theme/app_theme.dart
+  fonts:
+    - family: Open Sans
+      fonts:
+        - asset: lib/assets/fonts/OpenSans-Regular.ttf
+          weight: 400
+        - asset: lib/assets/fonts/OpenSans-SemiBold.ttf
+          weight: 600
+        - asset: lib/assets/fonts/OpenSans-Bold.ttf
+          weight: 700
+    - family: Noto Sans Thai
+      fonts:
+        - asset: lib/assets/fonts/NotoSansThai-Regular.ttf
+          weight: 400
+        - asset: lib/assets/fonts/NotoSansThai-SemiBold.ttf
+          weight: 600
+        - asset: lib/assets/fonts/NotoSansThai-Bold.ttf
+          weight: 700

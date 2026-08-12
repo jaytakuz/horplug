@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/tenant_billing_source.dart';
 import 'error_message.dart';
+import 'refreshable.dart';
 import 'tenant_dashboard_view_model.dart' show billStatusLabel;
 import 'safe_notifier.dart';
 import 'tenant_slip_submission.dart';
@@ -28,7 +29,7 @@ double totalPaidInYear(List<Invoice> bills, int year) => bills
     .fold<double>(0, (sum, bill) => sum + bill.total);
 
 class TenantBillsViewModel extends ChangeNotifier
-    with SafeNotifier, TenantSlipSubmission {
+    with SafeNotifier, RefreshableViewModel, TenantSlipSubmission {
   TenantBillsViewModel({
     required this.roomId,
     required this.dormitoryId,
@@ -39,9 +40,6 @@ class TenantBillsViewModel extends ChangeNotifier
   final int? dormitoryId;
   final TenantBillingSource _source;
 
-  /// true เฉพาะการโหลดครั้งแรก — pull-to-refresh ไม่ควรล้างรายการบิลทิ้ง
-  bool isLoading = true;
-  bool _hasLoadedOnce = false;
   String? errorMessage;
   List<Invoice> bills = [];
   String selectedFilter = 'ทั้งหมด';
@@ -70,19 +68,14 @@ class TenantBillsViewModel extends ChangeNotifier
       return;
     }
 
-    isLoading = !_hasLoadedOnce;
-    errorMessage = null;
-    notifyListeners();
-
-    try {
-      bills = await _source.fetchBillHistory(roomDbId: room, monthCount: 6);
-      await loadPaymentChannel(dormitoryId);
-    } catch (error) {
-      errorMessage = formatErrorMessage(error);
-    } finally {
-      isLoading = false;
-      _hasLoadedOnce = true;
-      notifyListeners();
-    }
+    return runLoad(() async {
+      errorMessage = null;
+      try {
+        bills = await _source.fetchBillHistory(roomDbId: room, monthCount: 6);
+        await loadPaymentChannel(dormitoryId);
+      } catch (error) {
+        errorMessage = formatErrorMessage(error);
+      }
+    });
   }
 }

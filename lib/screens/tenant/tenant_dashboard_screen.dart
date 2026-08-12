@@ -18,6 +18,7 @@ import '../../viewmodels/tenant_shell_view_model.dart';
 import '../../widgets/maintenance_request_dialog.dart';
 import '../../widgets/payment_sheet.dart';
 import '../../widgets/quick_actions_editor.dart';
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../utils/chat_preview.dart';
 import '../../utils/formatters.dart';
@@ -86,7 +87,7 @@ class _TenantDashboardView extends StatelessWidget {
     final profile = auth.profile;
     final viewModel = context.watch<TenantDashboardViewModel>();
 
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: () async {
         await auth.refreshProfile();
         await viewModel.load();
