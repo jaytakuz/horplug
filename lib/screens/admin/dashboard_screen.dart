@@ -10,6 +10,7 @@ import '../../theme/breakpoints.dart';
 import '../../viewmodels/dashboard_view_model.dart';
 import '../../viewmodels/quick_actions_view_model.dart';
 import '../../widgets/quick_actions_editor.dart';
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../utils/formatters.dart';
 import 'payment_channel_screen.dart';
@@ -58,10 +59,12 @@ class _DashboardView extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
+    // หน้าที่โหลดล้มคือหน้าที่ต้องการการลองใหม่มากที่สุด จึงต้องลากรีเฟรชได้
+    // เหมือนหน้าที่โหลดสำเร็จ ไม่ใช่มีแค่ปุ่มเดียวเป็นทางออก
     if (viewModel.errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+      return PullToRefresh(
+        onRefresh: viewModel.loadRooms,
+        child: CenteredScrollable(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -80,9 +83,9 @@ class _DashboardView extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               PrimaryButton(
-                label: 'ลองใหม่',
+                label: viewModel.isRefreshing ? 'กำลังลองใหม่...' : 'ลองใหม่',
                 icon: Icons.refresh,
-                onPressed: viewModel.loadRooms,
+                onPressed: viewModel.isRefreshing ? null : viewModel.loadRooms,
               ),
             ],
           ),
@@ -92,7 +95,7 @@ class _DashboardView extends StatelessWidget {
 
     final floorNumbers = viewModel.floorNumbers;
 
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: viewModel.loadRooms,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),

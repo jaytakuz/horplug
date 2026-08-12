@@ -9,6 +9,7 @@ import '../../viewmodels/tenant_maintenance_view_model.dart';
 import '../../widgets/maintenance_request_card.dart';
 import '../../widgets/maintenance_request_dialog.dart';
 import '../../widgets/maintenance_search_and_filter.dart';
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 
 class TenantMaintenanceScreen extends StatelessWidget {
@@ -61,7 +62,7 @@ class _TenantMaintenanceView extends StatelessWidget {
       return _buildNoRoomState(context, viewModel);
     }
 
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: viewModel.loadRequests,
       child: LayoutBuilder(
         builder: (context, constraints) => ListView(
@@ -157,9 +158,10 @@ class _TenantMaintenanceView extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 16),
               PrimaryButton(
-                label: 'ลองใหม่',
+                label: viewModel.isRefreshing ? 'กำลังลองใหม่...' : 'ลองใหม่',
                 icon: Icons.refresh,
-                onPressed: viewModel.loadRequests,
+                onPressed:
+                    viewModel.isRefreshing ? null : viewModel.loadRequests,
               ),
             ],
           ),
@@ -212,13 +214,13 @@ class _TenantMaintenanceView extends StatelessWidget {
     ];
   }
 
-  /// ครอบด้วย RefreshIndicator + ListView ที่ scroll ได้ — เดิมเป็น Center
+  /// ครอบด้วย PullToRefresh + ListView ที่ scroll ได้ — เดิมเป็น Center
   /// เฉยๆ ทำให้ผู้เช่าที่รอเข้าห้องดึงรีเฟรชไม่ได้ กลายเป็นทางตัน
   Widget _buildNoRoomState(
     BuildContext context,
     TenantMaintenanceViewModel viewModel,
   ) {
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: viewModel.loadRequests,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),

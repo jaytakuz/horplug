@@ -7,6 +7,7 @@ import '../services/room_batch.dart';
 import '../services/supabase_service.dart';
 import 'action_result.dart';
 import 'error_message.dart';
+import 'refreshable.dart';
 import '../utils/formatters.dart';
 
 String roomStatusText(RoomStatus status) {
@@ -20,7 +21,7 @@ String roomStatusText(RoomStatus status) {
   }
 }
 
-class RoomsViewModel extends ChangeNotifier {
+class RoomsViewModel extends ChangeNotifier with RefreshableViewModel {
   RoomsViewModel({required this.dormitoryId, SupabaseService? service})
       : _service = service ?? SupabaseService();
 
@@ -34,7 +35,6 @@ class RoomsViewModel extends ChangeNotifier {
     'ค้างชำระ',
   ];
 
-  bool isLoading = true;
   bool isUpdatingTenant = false;
   String? errorMessage;
   List<Room> rooms = [];
@@ -121,26 +121,22 @@ class RoomsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadData() async {
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
+  Future<void> loadData() {
+    return runLoad(() async {
+      errorMessage = null;
+      try {
+        final fetchedRooms =
+            await _service.fetchRooms(dormitoryId: dormitoryId);
+        final tenants = await _service.fetchAvailableTenants();
+        final fetchedFloors = fetchedRooms.map((room) => room.floor).toSet();
 
-    try {
-      final fetchedRooms = await _service.fetchRooms(dormitoryId: dormitoryId);
-      final tenants = await _service.fetchAvailableTenants();
-      final fetchedFloors = fetchedRooms.map((room) => room.floor).toSet();
-
-      rooms = fetchedRooms;
-      availableTenants = tenants;
-      floors = fetchedFloors;
-      isLoading = false;
-      notifyListeners();
-    } catch (error) {
-      errorMessage = formatErrorMessage(error);
-      isLoading = false;
-      notifyListeners();
-    }
+        rooms = fetchedRooms;
+        availableTenants = tenants;
+        floors = fetchedFloors;
+      } catch (error) {
+        errorMessage = formatErrorMessage(error);
+      }
+    });
   }
 
   /// Screens like RoomsScreen stay mounted (IndexedStack) across tab

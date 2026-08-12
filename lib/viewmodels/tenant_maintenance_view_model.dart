@@ -5,6 +5,7 @@ import '../services/supabase_service.dart';
 import 'action_result.dart';
 import 'error_message.dart';
 import 'maintenance_view_model.dart';
+import 'refreshable.dart';
 import 'safe_notifier.dart';
 
 /// ตัวเลือกตัวกรองสถานะ — 'ทั้งหมด' บวกกับ label ของทุกสถานะ
@@ -16,7 +17,8 @@ const tenantMaintenanceFilters = [
   'ยกเลิก',
 ];
 
-class TenantMaintenanceViewModel extends ChangeNotifier with SafeNotifier {
+class TenantMaintenanceViewModel extends ChangeNotifier
+    with SafeNotifier, RefreshableViewModel {
   TenantMaintenanceViewModel({
     required this.roomId,
     required this.tenantId,
@@ -26,10 +28,6 @@ class TenantMaintenanceViewModel extends ChangeNotifier with SafeNotifier {
   final int? roomId;
   final String? tenantId;
   final SupabaseService _service;
-
-  /// true เฉพาะการโหลดครั้งแรก — pull-to-refresh ไม่ควรล้างรายการทิ้ง
-  bool isLoading = true;
-  bool _hasLoadedOnce = false;
 
   /// ชนิดคำขอที่กำลังส่งอยู่ (null = ไม่ได้ส่งอะไร) — เก็บเป็นชนิดแทน bool
   /// เพื่อให้ spinner ขึ้นบนปุ่มที่ผู้ใช้กดจริง ไม่ใช่ปุ่มแรกเสมอ
@@ -66,19 +64,14 @@ class TenantMaintenanceViewModel extends ChangeNotifier with SafeNotifier {
       return;
     }
 
-    isLoading = !_hasLoadedOnce;
-    errorMessage = null;
-    notifyListeners();
-
-    try {
-      requests = await _service.fetchMaintenanceRequests(roomId: room);
-    } catch (error) {
-      errorMessage = formatErrorMessage(error);
-    } finally {
-      isLoading = false;
-      _hasLoadedOnce = true;
-      notifyListeners();
-    }
+    return runLoad(() async {
+      errorMessage = null;
+      try {
+        requests = await _service.fetchMaintenanceRequests(roomId: room);
+      } catch (error) {
+        errorMessage = formatErrorMessage(error);
+      }
+    });
   }
 
   /// ส่งคำขอแจ้งซ่อม/ทำความสะอาด

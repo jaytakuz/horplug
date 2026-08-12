@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
 import '../services/supabase_service.dart';
+import 'refreshable.dart';
 
 String roomStatusLabel(RoomStatus? status) {
   switch (status) {
@@ -16,14 +17,13 @@ String roomStatusLabel(RoomStatus? status) {
   }
 }
 
-class MeterViewModel extends ChangeNotifier {
+class MeterViewModel extends ChangeNotifier with RefreshableViewModel {
   MeterViewModel({required this.dormitoryId, SupabaseService? service})
       : _service = service ?? SupabaseService();
 
   final int dormitoryId;
   final SupabaseService _service;
 
-  bool isLoading = true;
   bool isSaving = false;
   String? errorMessage;
   int selectedMonth = DateTime.now().month;
@@ -124,34 +124,29 @@ class MeterViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadAllRecords() async {
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
+  Future<void> loadAllRecords() {
+    return runLoad(() async {
+      errorMessage = null;
+      try {
+        final elecs = await _service.fetchElectricityRecords(
+          dormitoryId: dormitoryId,
+          month: selectedMonth,
+          year: selectedYear,
+        );
+        final waters = await _service.fetchWaterRecords(
+          dormitoryId: dormitoryId,
+          month: selectedMonth,
+          year: selectedYear,
+        );
 
-    try {
-      final elecs = await _service.fetchElectricityRecords(
-        dormitoryId: dormitoryId,
-        month: selectedMonth,
-        year: selectedYear,
-      );
-      final waters = await _service.fetchWaterRecords(
-        dormitoryId: dormitoryId,
-        month: selectedMonth,
-        year: selectedYear,
-      );
-
-      electricityRecords = elecs;
-      waterRecords = waters;
-      modifiedWaterRoomIds.clear();
-      isLoading = false;
-      reloadTick++;
-      notifyListeners();
-    } catch (error) {
-      errorMessage = 'ไม่สามารถโหลดข้อมูลได้: $error';
-      isLoading = false;
-      notifyListeners();
-    }
+        electricityRecords = elecs;
+        waterRecords = waters;
+        modifiedWaterRoomIds.clear();
+        reloadTick++;
+      } catch (error) {
+        errorMessage = 'ไม่สามารถโหลดข้อมูลได้: $error';
+      }
+    });
   }
 
   Future<void> setPeriod({int? month, int? year}) async {

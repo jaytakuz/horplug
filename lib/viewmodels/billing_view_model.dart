@@ -3,15 +3,15 @@ import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/invoice_service.dart';
 import 'error_message.dart';
+import 'refreshable.dart';
 
-class BillingViewModel extends ChangeNotifier {
+class BillingViewModel extends ChangeNotifier with RefreshableViewModel {
   BillingViewModel({required this.dormitoryId, InvoiceService? service})
       : _service = service ?? InvoiceService();
 
   final int dormitoryId;
   final InvoiceService _service;
 
-  bool isLoading = true;
   List<Invoice> invoices = [];
 
   /// จำนวนห้องที่มิเตอร์พร้อมแล้วแต่ยังไม่ได้ออกบิล — ใช้แยกสาเหตุรายการว่าง
@@ -51,28 +51,25 @@ class BillingViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadInvoices() async {
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
-    try {
-      invoices = await _service.fetchInvoices(
-        dormitoryId: dormitoryId,
-        month: selectedMonth,
-        year: selectedYear,
-      );
-      final preview = await _service.previewDrafts(
-        dormitoryId: dormitoryId,
-        month: selectedMonth,
-        year: selectedYear,
-      );
-      readyToIssueCount = preview.drafts.length;
-    } catch (error) {
-      errorMessage = formatErrorMessage(error);
-    } finally {
-      isLoading = false;
-      notifyListeners();
-    }
+  Future<void> loadInvoices() {
+    return runLoad(() async {
+      errorMessage = null;
+      try {
+        invoices = await _service.fetchInvoices(
+          dormitoryId: dormitoryId,
+          month: selectedMonth,
+          year: selectedYear,
+        );
+        final preview = await _service.previewDrafts(
+          dormitoryId: dormitoryId,
+          month: selectedMonth,
+          year: selectedYear,
+        );
+        readyToIssueCount = preview.drafts.length;
+      } catch (error) {
+        errorMessage = formatErrorMessage(error);
+      }
+    });
   }
 
   Future<void> setPeriod({int? month, int? year}) async {

@@ -9,6 +9,7 @@ import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/error_message.dart';
 import '../../viewmodels/tenant_bills_view_model.dart';
 import '../../widgets/payment_sheet.dart';
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../widgets/tenant_bill_card.dart';
 import '../../utils/formatters.dart';
@@ -94,7 +95,7 @@ class _TenantBillsView extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: viewModel.load,
       child: LayoutBuilder(
         builder: (context, constraints) => ListView(
@@ -162,9 +163,9 @@ class _TenantBillsView extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 16),
               PrimaryButton(
-                label: 'ลองใหม่',
+                label: viewModel.isRefreshing ? 'กำลังลองใหม่...' : 'ลองใหม่',
                 icon: Icons.refresh,
-                onPressed: viewModel.load,
+                onPressed: viewModel.isRefreshing ? null : viewModel.load,
               ),
             ],
           ),
@@ -213,13 +214,13 @@ class _TenantBillsView extends StatelessWidget {
     ];
   }
 
-  /// ครอบด้วย RefreshIndicator + ListView ที่ scroll ได้ — เดิมเป็น Center
+  /// ครอบด้วย PullToRefresh + ListView ที่ scroll ได้ — เดิมเป็น Center
   /// เฉยๆ ทำให้ผู้เช่าที่รอเข้าห้องดึงรีเฟรชไม่ได้ กลายเป็นทางตัน
   Widget _buildNoRoomState(
     BuildContext context,
     TenantBillsViewModel viewModel,
   ) {
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: viewModel.load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),

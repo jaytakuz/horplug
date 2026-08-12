@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../viewmodels/auth_view_model.dart';
@@ -132,10 +133,10 @@ class _ChatViewState extends State<_ChatView> {
         _buildSearchSection(viewModel),
         _buildFloorFilterSection(viewModel),
         Expanded(
-          child: RefreshIndicator(
+          child: PullToRefresh(
             onRefresh: viewModel.loadChatPreviews,
             child: filteredChats.isEmpty
-                ? _buildNoResultState(viewModel)
+                ? _buildNoResultState()
                 : ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: filteredChats.length,
@@ -279,20 +280,16 @@ class _ChatViewState extends State<_ChatView> {
     );
   }
 
-  Widget _buildNoResultState(ChatViewModel viewModel) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.search_off,
-                size: 40, color: AppColors.mutedForeground),
-            const SizedBox(height: 12),
-            const Text('ไม่พบห้องหรือผู้เช่าตามที่ค้นหา',
-                style: TextStyle(color: AppColors.mutedForeground)),
-          ],
-        ),
+  Widget _buildNoResultState() {
+    return const CenteredScrollable(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.search_off, size: 40, color: AppColors.mutedForeground),
+          SizedBox(height: 12),
+          Text('ไม่พบห้องหรือผู้เช่าตามที่ค้นหา',
+              style: TextStyle(color: AppColors.mutedForeground)),
+        ],
       ),
     );
   }

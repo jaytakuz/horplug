@@ -7,8 +7,9 @@ import '../services/invoice_service.dart';
 import '../services/supabase_service.dart';
 import 'action_result.dart';
 import 'error_message.dart';
+import 'refreshable.dart';
 
-class DashboardViewModel extends ChangeNotifier {
+class DashboardViewModel extends ChangeNotifier with RefreshableViewModel {
   DashboardViewModel({
     required this.dormitoryId,
     SupabaseService? service,
@@ -20,7 +21,6 @@ class DashboardViewModel extends ChangeNotifier {
   final SupabaseService _service;
   final InvoiceService _invoices;
 
-  bool isLoading = true;
   bool isUpdatingTenant = false;
   String? errorMessage;
   List<Room> rooms = [];
@@ -65,28 +65,24 @@ class DashboardViewModel extends ChangeNotifier {
   List<Room> roomsOnFloor(String floor) =>
       rooms.where((room) => room.floor == floor).toList();
 
-  Future<void> loadRooms() async {
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
+  Future<void> loadRooms() {
+    return runLoad(() async {
+      errorMessage = null;
+      try {
+        final fetchedRooms =
+            await _service.fetchRooms(dormitoryId: dormitoryId);
+        final tenants = await _service.fetchAvailableTenants();
+        final unread =
+            await _service.countUnreadMessages(dormitoryId: dormitoryId);
 
-    try {
-      final fetchedRooms = await _service.fetchRooms(dormitoryId: dormitoryId);
-      final tenants = await _service.fetchAvailableTenants();
-      final unread =
-          await _service.countUnreadMessages(dormitoryId: dormitoryId);
-
-      rooms = fetchedRooms;
-      availableTenants = tenants;
-      unreadMessageCount = unread;
-      pendingSlipCount = await _countPendingSlips();
-      isLoading = false;
-      notifyListeners();
-    } catch (error) {
-      errorMessage = formatErrorMessage(error);
-      isLoading = false;
-      notifyListeners();
-    }
+        rooms = fetchedRooms;
+        availableTenants = tenants;
+        unreadMessageCount = unread;
+        pendingSlipCount = await _countPendingSlips();
+      } catch (error) {
+        errorMessage = formatErrorMessage(error);
+      }
+    });
   }
 
   /// นับบิลที่รอตรวจ · คืน 0 เมื่อนับไม่ได้ ไม่ปล่อยให้ล้มทั้ง [loadRooms]
