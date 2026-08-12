@@ -178,11 +178,14 @@ class _ChatConversationViewState extends State<ChatConversationView> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => SafeArea(
-        child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
+        // Material จริงแทน Container ธรรมดา — เหตุผลเดียวกับใน
+        // maintenance_request_card.dart: showModalBottomSheet ตั้ง
+        // backgroundColor โปร่งใสไว้ (เพื่อให้เห็นมุมโค้ง) ทำให้ ListTile
+        // ด้านในไม่มี Material ทึบให้ ink splash วาดทับ
+        child: Material(
+          color: AppColors.card,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
 import '../services/supabase_service.dart';
+import 'action_result.dart';
+import 'error_message.dart';
 
 String maintenanceStatusLabel(MaintenanceStatus status) {
   switch (status) {
@@ -33,6 +35,25 @@ const maintenanceHistoryStatusFilters = [
   'ยกเลิก',
 ];
 
+/// กรองรายการตาม label สถานะ ('ทั้งหมด' = ไม่กรอง) และคำค้นหา (จับคู่กับ
+/// รายละเอียดหรือประเภทคำขอ) — ใช้ร่วมกันทั้งฝั่งเจ้าของหอและฝั่งผู้เช่า
+List<MaintenanceRequest> filterMaintenanceRequests(
+  List<MaintenanceRequest> requests,
+  String filter, {
+  String searchQuery = '',
+}) {
+  final query = searchQuery.trim().toLowerCase();
+  return requests.where((request) {
+    final matchesStatus =
+        filter == 'ทั้งหมด' || maintenanceStatusLabel(request.status) == filter;
+    final searchableText = [
+      request.description,
+      maintenanceRequestTypeLabel(request.requestType),
+    ].join(' ').toLowerCase();
+    return matchesStatus && (query.isEmpty || searchableText.contains(query));
+  }).toList();
+}
+
 class MaintenanceViewModel extends ChangeNotifier {
   MaintenanceViewModel({
     required this.roomId,
@@ -51,19 +72,11 @@ class MaintenanceViewModel extends ChangeNotifier {
   String searchQuery = '';
   String selectedStatusFilter = maintenanceHistoryStatusFilters.first;
 
-  List<MaintenanceRequest> get filteredRequests {
-    final query = searchQuery.trim().toLowerCase();
-    return requests.where((request) {
-      final matchesStatus =
-          selectedStatusFilter == maintenanceHistoryStatusFilters.first ||
-              maintenanceStatusLabel(request.status) == selectedStatusFilter;
-      final searchableText = [
-        request.description,
-        maintenanceRequestTypeLabel(request.requestType),
-      ].join(' ').toLowerCase();
-      return matchesStatus && (query.isEmpty || searchableText.contains(query));
-    }).toList();
-  }
+  List<MaintenanceRequest> get filteredRequests => filterMaintenanceRequests(
+        requests,
+        selectedStatusFilter,
+        searchQuery: searchQuery,
+      );
 
   void setSearchQuery(String value) {
     if (searchQuery == value) return;
@@ -93,9 +106,9 @@ class MaintenanceViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> updateStatus(
+  Future<ActionResult> updateStatus(
       MaintenanceRequest request, MaintenanceStatus status) async {
-    if (isUpdating) return;
+    if (isUpdating) return const ActionResult(success: true, message: '');
 
     isUpdating = true;
     notifyListeners();
@@ -109,14 +122,21 @@ class MaintenanceViewModel extends ChangeNotifier {
         requestType: request.requestType,
       );
       await loadRequests();
+      return const ActionResult(success: true, message: '');
+    } catch (error) {
+      return ActionResult(
+        success: false,
+        message: 'อัปเดตสถานะไม่สำเร็จ: ${formatErrorMessage(error)}',
+      );
     } finally {
       isUpdating = false;
       notifyListeners();
     }
   }
 
-  Future<void> updateCleaningFee(MaintenanceRequest request, double fee) async {
-    if (isUpdating) return;
+  Future<ActionResult> updateCleaningFee(
+      MaintenanceRequest request, double fee) async {
+    if (isUpdating) return const ActionResult(success: true, message: '');
 
     isUpdating = true;
     notifyListeners();
@@ -124,6 +144,12 @@ class MaintenanceViewModel extends ChangeNotifier {
     try {
       await _service.updateCleaningFee(requestId: request.id, fee: fee);
       await loadRequests();
+      return const ActionResult(success: true, message: '');
+    } catch (error) {
+      return ActionResult(
+        success: false,
+        message: 'บันทึกค่าทำความสะอาดไม่สำเร็จ: ${formatErrorMessage(error)}',
+      );
     } finally {
       isUpdating = false;
       notifyListeners();

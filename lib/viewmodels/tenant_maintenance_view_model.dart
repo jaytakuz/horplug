@@ -16,25 +16,6 @@ const tenantMaintenanceFilters = [
   'ยกเลิก',
 ];
 
-/// กรองรายการตาม label สถานะ ('ทั้งหมด' = ไม่กรอง) และคำค้นหา (จับคู่กับ
-/// รายละเอียดหรือประเภทคำขอ — เช่นเดียวกับฝั่งเจ้าของหอ)
-List<MaintenanceRequest> filterMaintenanceRequests(
-  List<MaintenanceRequest> requests,
-  String filter, {
-  String searchQuery = '',
-}) {
-  final query = searchQuery.trim().toLowerCase();
-  return requests.where((request) {
-    final matchesStatus =
-        filter == 'ทั้งหมด' || maintenanceStatusLabel(request.status) == filter;
-    final searchableText = [
-      request.description,
-      maintenanceRequestTypeLabel(request.requestType),
-    ].join(' ').toLowerCase();
-    return matchesStatus && (query.isEmpty || searchableText.contains(query));
-  }).toList();
-}
-
 class TenantMaintenanceViewModel extends ChangeNotifier with SafeNotifier {
   TenantMaintenanceViewModel({
     required this.roomId,

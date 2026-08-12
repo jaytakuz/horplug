@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/models.dart';
 import '../theme/app_theme.dart';
+import '../viewmodels/action_result.dart';
 import '../viewmodels/maintenance_view_model.dart';
 import 'reusable_widgets.dart';
 import '../utils/formatters.dart';
@@ -27,10 +28,11 @@ class MaintenanceRequestCard extends StatelessWidget {
   /// เจ้าของหอเท่านั้นที่ทำสองอย่างนี้ได้
   final bool readOnly;
 
-  final Future<void> Function(double fee)? onEditCleaningFee;
+  final Future<ActionResult> Function(double fee)? onEditCleaningFee;
 
   /// เจ้าของหอเท่านั้น: แตะที่การ์ดเพื่อเปลี่ยนสถานะคำขอ
-  final Future<void> Function(MaintenanceStatus status)? onUpdateStatus;
+  final Future<ActionResult> Function(MaintenanceStatus status)?
+      onUpdateStatus;
   final bool isUpdating;
 
   @override
@@ -149,11 +151,16 @@ class MaintenanceRequestCard extends StatelessWidget {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => SafeArea(
-        child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
+        // Material จริง (ไม่ใช่แค่ Container ที่มีสี) ให้ ListTile ด้านใน มี
+        // พื้นผิวทึบให้ ink splash วาดทับได้ — ตัว showModalBottomSheet เอง
+        // ตั้ง backgroundColor เป็นโปร่งใสไว้แล้ว (เพื่อให้เห็นมุมโค้ง) ทำให้
+        // Material ที่ห่อ sheet ไว้ตามปกติโปร่งใสไปด้วย ถ้าใช้ Container
+        // เฉยๆ ตรงนี้ ripple ของปุ่มจะไม่โชว์และ Flutter จะแจ้ง exception
+        // "ListTile background color or ink splashes may be invisible"
+        child: Material(
+          color: AppColors.card,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -200,9 +207,12 @@ class MaintenanceRequestCard extends StatelessWidget {
       ),
     );
 
-    if (status != null) {
-      await onUpdateStatus(status);
-    }
+    if (status == null) return;
+
+    final result = await onUpdateStatus(status);
+    if (!context.mounted || result.success) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   Widget _buildCleaningFeeRow(BuildContext context) {
@@ -254,14 +264,20 @@ class MaintenanceRequestCard extends StatelessWidget {
   }
 
   Future<void> _showEditFeeDialog(BuildContext context) async {
+    final onEditCleaningFee = this.onEditCleaningFee;
+    if (onEditCleaningFee == null) return;
+
     final fee = await showDialog<double>(
       context: context,
       builder: (_) => _CleaningFeeDialog(initialFee: request.cleaningFee),
     );
 
-    if (fee != null) {
-      await onEditCleaningFee?.call(fee);
-    }
+    if (fee == null) return;
+
+    final result = await onEditCleaningFee(fee);
+    if (!context.mounted || result.success) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
   }
 
   String _formatDate(DateTime dateTime) {
