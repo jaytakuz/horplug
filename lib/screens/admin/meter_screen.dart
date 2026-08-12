@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
 import '../../widgets/issue_invoices_dialog.dart';
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../viewmodels/meter_view_model.dart';
@@ -136,6 +137,40 @@ class _MeterViewState extends State<_MeterView>
         ),
       );
     }
+  }
+
+  /// รีเฟรชที่ถามก่อนทิ้งงานที่ยังไม่ได้บันทึก
+  ///
+  /// `reloadTick` ล้าง TextEditingController ทั้งชุดทุกครั้งที่โหลดใหม่ ถ้าปล่อยให้
+  /// ท่าทางลากเรียก loadAllRecords() ตรงๆ เลขมิเตอร์ที่เพิ่งพิมพ์มาทั้งชั้นจะหายไป
+  /// เงียบๆ ด้วยท่าทางที่ผู้ใช้ตั้งใจใช้เพื่อ "ดูข้อมูลล่าสุด" ไม่ใช่เพื่อล้างงานตัวเอง
+  Future<void> _handleRefresh(MeterViewModel viewModel) async {
+    if (viewModel.hasUnsavedInput) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('มีเลขมิเตอร์ที่ยังไม่ได้บันทึก'),
+          content: const Text('รีเฟรชแล้วค่าที่พิมพ์ไว้จะหายทั้งหมด'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('ยกเลิก'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.destructive,
+              ),
+              child: const Text('ทิ้งแล้วรีเฟรช'),
+            ),
+          ],
+        ),
+      );
+      // กด "ยกเลิก" หรือปิดกล่องทิ้ง = คืน Future ทันที วงแหวนหดกลับเอง
+      if (discard != true) return;
+    }
+
+    await viewModel.loadAllRecords();
   }
 
   @override
@@ -447,18 +482,23 @@ class _MeterViewState extends State<_MeterView>
 
     return Column(
       children: [
+        // แถบความคืบหน้าอยู่นอก scroll view เช่นเดียวกับหัวหน้าจอ ตัวเลือกงวด
+        // และ TabBar — ทั้งหมดต้องนิ่งขณะที่รายการข้างล่างถูกลาก
         _buildProgressHeader(recorded, total),
-        if (records.isEmpty)
-          _buildNoResultState(viewModel)
-        else
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: records.length,
-              itemBuilder: (context, index) =>
-                  _buildElecCard(viewModel, records[index], index),
-            ),
+        Expanded(
+          child: PullToRefresh(
+            onRefresh: () => _handleRefresh(viewModel),
+            child: records.isEmpty
+                ? CenteredScrollable(child: _buildNoResultContent(viewModel))
+                : ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    itemCount: records.length,
+                    itemBuilder: (context, index) =>
+                        _buildElecCard(viewModel, records[index], index),
+                  ),
           ),
+        ),
       ],
     );
   }
@@ -475,42 +515,41 @@ class _MeterViewState extends State<_MeterView>
     return Column(
       children: [
         _buildProgressHeader(saved, total),
-        if (records.isEmpty)
-          _buildNoResultState(viewModel)
-        else
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: records.length,
-              itemBuilder: (context, index) =>
-                  _buildWaterCard(viewModel, records[index], index),
-            ),
+        Expanded(
+          child: PullToRefresh(
+            onRefresh: () => _handleRefresh(viewModel),
+            child: records.isEmpty
+                ? CenteredScrollable(child: _buildNoResultContent(viewModel))
+                : ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    itemCount: records.length,
+                    itemBuilder: (context, index) =>
+                        _buildWaterCard(viewModel, records[index], index),
+                  ),
           ),
+        ),
       ],
     );
   }
 
-  Widget _buildNoResultState(MeterViewModel viewModel) {
-    return Expanded(
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.search_off, size: 40, color: AppColors.mutedForeground),
-            const SizedBox(height: 12),
-            const Text('ไม่พบห้องตามเงื่อนไขที่เลือก',
-                style: TextStyle(color: AppColors.mutedForeground)),
-            if (viewModel.activeFilterCount > 0) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: viewModel.clearFilters,
-                icon: const Icon(Icons.filter_alt_off, size: 16),
-                label: const Text('ล้างตัวกรอง'),
-              ),
-            ],
-          ],
-        ),
-      ),
+  Widget _buildNoResultContent(MeterViewModel viewModel) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.search_off, size: 40, color: AppColors.mutedForeground),
+        const SizedBox(height: 12),
+        const Text('ไม่พบห้องตามเงื่อนไขที่เลือก',
+            style: TextStyle(color: AppColors.mutedForeground)),
+        if (viewModel.activeFilterCount > 0) ...[
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: viewModel.clearFilters,
+            icon: const Icon(Icons.filter_alt_off, size: 16),
+            label: const Text('ล้างตัวกรอง'),
+          ),
+        ],
+      ],
     );
   }
 
@@ -804,20 +843,27 @@ class _MeterViewState extends State<_MeterView>
   }
 
   Widget _buildEmptyState(String msg, MeterViewModel viewModel) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.inbox_outlined, size: 48, color: AppColors.mutedForeground),
-          const SizedBox(height: 12),
-          Text(msg, style: const TextStyle(color: AppColors.mutedForeground)),
-          const SizedBox(height: 16),
-          TextButton.icon(
-            onPressed: viewModel.loadAllRecords,
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('โหลดใหม่'),
-          ),
-        ],
+    return PullToRefresh(
+      onRefresh: () => _handleRefresh(viewModel),
+      child: CenteredScrollable(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.inbox_outlined,
+                size: 48, color: AppColors.mutedForeground),
+            const SizedBox(height: 12),
+            Text(msg, style: const TextStyle(color: AppColors.mutedForeground)),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: viewModel.isRefreshing
+                  ? null
+                  : () => _handleRefresh(viewModel),
+              icon: const Icon(Icons.refresh, size: 16),
+              label: Text(
+                  viewModel.isRefreshing ? 'กำลังโหลดใหม่...' : 'โหลดใหม่'),
+            ),
+          ],
+        ),
       ),
     );
   }

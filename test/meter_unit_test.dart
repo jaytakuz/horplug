@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:horplug/models/models.dart';
+import 'package:horplug/services/supabase_service.dart';
+import 'package:horplug/viewmodels/meter_view_model.dart';
 
 // ---------------------------------------------------------------------------
 // Pure helper functions (extracted from MeterScreen logic)
@@ -170,10 +172,156 @@ WaterRecord buildWaterRecord({
 }
 
 // ---------------------------------------------------------------------------
+// ViewModel fake — client เป็น getter ใน SupabaseService จึงสืบทอดได้โดยไม่แตะ
+// Supabase.instance ซึ่ง assert เมื่อยังไม่ได้ initialize
+// ---------------------------------------------------------------------------
+
+class _FakeMeterService extends SupabaseService {
+  _FakeMeterService({
+    required this.electricityRecords,
+    required this.waterRecords,
+  });
+
+  final List<ElectricityRecord> electricityRecords;
+  final List<WaterRecord> waterRecords;
+  int saveElectricityCallCount = 0;
+  int saveWaterCallCount = 0;
+
+  @override
+  Future<List<ElectricityRecord>> fetchElectricityRecords({
+    int? dormitoryId,
+    int? roomDbId,
+    required int month,
+    required int year,
+  }) async =>
+      List.from(electricityRecords);
+
+  @override
+  Future<List<WaterRecord>> fetchWaterRecords({
+    int? dormitoryId,
+    int? roomDbId,
+    required int month,
+    required int year,
+  }) async =>
+      List.from(waterRecords);
+
+  @override
+  Future<void> saveElectricityRecords(List<ElectricityRecord> records) async {
+    saveElectricityCallCount++;
+  }
+
+  @override
+  Future<void> saveWaterRecords(List<WaterRecord> records) async {
+    saveWaterCallCount++;
+  }
+}
+
+Future<MeterViewModel> buildLoadedMeterViewModel({
+  List<ElectricityRecord>? electricityRecords,
+  List<WaterRecord>? waterRecords,
+}) async {
+  final viewModel = MeterViewModel(
+    dormitoryId: 1,
+    service: _FakeMeterService(
+      electricityRecords: electricityRecords ??
+          [
+            buildElecRecord(id: '1', roomDbId: 1, currentReading: 100),
+            buildElecRecord(id: '2', roomDbId: 2, currentReading: 200),
+          ],
+      waterRecords: waterRecords ??
+          [
+            buildWaterRecord(id: '1', roomDbId: 1, amount: 80),
+            buildWaterRecord(id: '2', roomDbId: 2, amount: 90),
+          ],
+    ),
+  );
+  await viewModel.loadAllRecords();
+  return viewModel;
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 void main() {
+  // การลากรีเฟรชล้าง TextEditingController ทั้งชุดผ่าน reloadTick หน้าจอจึงต้อง
+  // ถามก่อนทิ้ง ซึ่งถามได้ก็ต่อเมื่อ ViewModel ตอบได้จริงว่ามีอะไรค้างอยู่บ้าง
+  group('มีอะไรที่ยังไม่ได้บันทึกไหม', () {
+    test('ยังไม่แก้อะไร = ไม่มีอะไรให้บันทึก', () async {
+      final viewModel = await buildLoadedMeterViewModel();
+
+      expect(viewModel.hasUnsavedEdits, isFalse);
+      expect(viewModel.canSave, isFalse,
+          reason: 'ปุ่มบันทึกไม่ควรกดได้ทั้งที่ไม่มีอะไรเปลี่ยน');
+    });
+
+    test('พิมพ์เลขมิเตอร์ไฟแล้วถือว่ามีของค้าง', () async {
+      final viewModel = await buildLoadedMeterViewModel();
+      final record = viewModel.electricityRecords.first;
+
+      viewModel.setElectricityReading(record, 1234);
+
+      expect(viewModel.modifiedElectricityRoomIds, contains(record.roomDbId));
+      expect(viewModel.hasUnsavedEdits, isTrue);
+      expect(viewModel.canSave, isTrue);
+    });
+
+    test('แถวค่าน้ำที่ยังไม่เคยบันทึกนับเป็นของที่กดบันทึกได้', () async {
+      final viewModel = await buildLoadedMeterViewModel(
+        waterRecords: [buildWaterRecord(id: null, roomDbId: 1, amount: 0)],
+      );
+
+      expect(viewModel.hasUnsavedEdits, isTrue);
+    });
+
+    // งวดใหม่มีแถวค่าน้ำที่ยังไม่มี id ครบทุกห้องตั้งแต่โหลดเสร็จ ถ้ากล่อง
+    // "ถามก่อนทิ้ง" ใช้เกณฑ์เดียวกับปุ่มบันทึก มันจะเด้งทุกครั้งที่ลากรีเฟรช
+    // ทั้งที่ยังไม่มีใครพิมพ์อะไร ซึ่งสอนให้ผู้ใช้กด "ทิ้ง" โดยไม่อ่าน
+    test('งวดใหม่ที่ยังไม่มีใครพิมพ์ ไม่ถือว่ามีของค้างให้ถามก่อนทิ้ง', () async {
+      final viewModel = await buildLoadedMeterViewModel(
+        waterRecords: [
+          buildWaterRecord(id: null, roomDbId: 1, amount: 0),
+          buildWaterRecord(id: null, roomDbId: 2, amount: 0),
+        ],
+      );
+
+      expect(viewModel.hasUnsavedInput, isFalse);
+      expect(viewModel.hasUnsavedEdits, isTrue,
+          reason: 'ยังกดบันทึกได้ เพราะมีแถวที่ต้องสร้างจริง');
+    });
+
+    test('พิมพ์ค่าน้ำแล้วถือว่ามีของค้างให้ถามก่อนทิ้ง', () async {
+      final viewModel = await buildLoadedMeterViewModel();
+
+      viewModel.setWaterAmount(viewModel.waterRecords.first, 150);
+
+      expect(viewModel.hasUnsavedInput, isTrue);
+    });
+
+    test('บันทึกสำเร็จแล้วล้างธงทั้งสองฝั่ง', () async {
+      final viewModel = await buildLoadedMeterViewModel();
+      viewModel.setElectricityReading(viewModel.electricityRecords.first, 1234);
+      viewModel.setWaterAmount(viewModel.waterRecords.first, 120);
+
+      final saved = await viewModel.saveAll();
+
+      expect(saved, isTrue);
+      expect(viewModel.modifiedElectricityRoomIds, isEmpty);
+      expect(viewModel.modifiedWaterRoomIds, isEmpty);
+      expect(viewModel.hasUnsavedEdits, isFalse);
+    });
+
+    test('โหลดใหม่ล้างของค้างทิ้ง — ค่าที่พิมพ์ไว้หายไปกับ reloadTick อยู่แล้ว',
+        () async {
+      final viewModel = await buildLoadedMeterViewModel();
+      viewModel.setElectricityReading(viewModel.electricityRecords.first, 1234);
+
+      await viewModel.loadAllRecords();
+
+      expect(viewModel.hasUnsavedInput, isFalse);
+    });
+  });
+
   group('Feature 4: Utility Meter Recording', () {
     // -----------------------------------------------------------------------
     // 4.1 Record Electricity Meter Readings
