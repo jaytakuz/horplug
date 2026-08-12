@@ -77,6 +77,85 @@ String invoiceNoFor({
   return revision > 1 ? '$base-R$revision' : base;
 }
 
+/// สิ่งที่ต้องแก้ในบิลใบหนึ่ง เมื่อเทียบกับข้อมูลล่าสุดของงวด
+class InvoiceAdjustment {
+  const InvoiceAdjustment({
+    required this.invoice,
+    required this.roomPrice,
+    required this.electricityUnits,
+    required this.electricityCost,
+    required this.waterCost,
+    required this.cleaningFee,
+  });
+
+  /// ใบเดิม — เลขที่บิลและ revision ติดมากับมัน เพราะนี่คือการแก้ยอดของใบนี้
+  /// ไม่ใช่การออกใบแทน
+  final Invoice invoice;
+
+  final double roomPrice;
+  final double electricityUnits;
+  final double electricityCost;
+  final double waterCost;
+  final double cleaningFee;
+
+  double get previousTotal => invoice.total;
+
+  /// สูตรเดียวกับ GENERATED column `invoices.total` — ที่นี่คำนวณไว้เพื่อบอก
+  /// ผู้เช่าว่ายอดจะเปลี่ยนเป็นเท่าไร ส่วนตัวเลขที่นับเป็นทางการยังเป็นของ
+  /// ฐานข้อมูล ซึ่งไม่มีทางไม่ตรงกับผลบวกของรายการ
+  double get newTotal => roomPrice + electricityCost + waterCost + cleaningFee;
+}
+
+/// เทียบบิลใบหนึ่งกับข้อมูลล่าสุดของงวด · null = ไม่ต้องแตะใบนี้
+///
+/// บิลตรึงตัวเลข ณ วันออกมาตั้งแต่ spec แรก ซึ่งถูกสำหรับใบที่ผู้เช่าจ่ายไปแล้ว
+/// แต่แปลว่าเลขมิเตอร์ที่พิมพ์ผิดหลักเดียวต้องแก้ด้วยการยกเลิกใบเดิมแล้วออกใหม่
+/// ซึ่งกินเลขที่บิลและทิ้งการ์ดยอดผิดไว้ในแชทของผู้เช่า · ที่นี่จึงคำนวณใหม่
+/// เฉพาะใบที่ยังไม่มีใครจ่าย โดยคงเลขที่บิลและ revision ไว้ตามเดิม
+InvoiceAdjustment? revalueInvoice({
+  required Invoice invoice,
+  required Room room,
+  MeterCharge? electricity,
+  double? waterAmount,
+  required double cleaningFee,
+}) {
+  // ใบที่ส่งสลิป/จ่าย/ยกเลิกแล้วตรึงตลอดไป — ผู้เช่าจ่ายตามยอดที่เห็น
+  // การขยับยอดทีหลังทำให้สลิปกับบิลไม่ตรงกันโดยไม่มีใครผิด
+  if (invoice.status != InvoiceStatus.unpaid) return null;
+
+  // บิลที่ออกไปแล้วแปลว่าเคยมีเลขมิเตอร์ การที่มันหายคือข้อมูลถูกลบ ไม่ใช่
+  // ผู้เช่าใช้ไฟน้อยลง · กันการลบพลาดกลายเป็นส่วนลดเงียบๆ
+  if (electricity == null) return null;
+
+  final adjustment = InvoiceAdjustment(
+    invoice: invoice,
+    roomPrice: room.price,
+    electricityUnits: electricity.units,
+    electricityCost: electricity.amount,
+    // "ยังไม่กรอกค่าน้ำ" กับ "กรอกว่าไม่เก็บค่าน้ำ" คนละความหมาย อย่างแรกต้อง
+    // คงยอดเดิมของบิลไว้ อย่างหลังคือ 0 ที่ตั้งใจ
+    waterCost: waterAmount ?? invoice.waterCost,
+    cleaningFee: cleaningFee,
+  );
+
+  return _isUnchanged(adjustment) ? null : adjustment;
+}
+
+/// เศษที่ต่างกันจากการปัดเลขทศนิยมไม่ใช่การเปลี่ยนยอด
+///
+/// การเขียนซ้ำโดยไม่มีอะไรเปลี่ยนแปลว่าผู้เช่าได้ข้อความในแชททุกครั้งที่
+/// เจ้าของหอกดบันทึกมิเตอร์ ซึ่งเป็นการแจ้งเตือนที่สอนให้คนเลิกอ่าน
+bool _isUnchanged(InvoiceAdjustment a) {
+  const epsilon = 0.005;
+  final invoice = a.invoice;
+
+  return (a.roomPrice - invoice.roomPrice).abs() < epsilon &&
+      (a.electricityUnits - invoice.electricityUnits).abs() < epsilon &&
+      (a.electricityCost - invoice.electricityCost).abs() < epsilon &&
+      (a.waterCost - invoice.waterCost).abs() < epsilon &&
+      (a.cleaningFee - invoice.cleaningFee).abs() < epsilon;
+}
+
 /// ข้อความที่แสดงในรายการ "ข้าม N ห้อง" ของกล่องตรวจก่อนออกบิล
 String skipReasonLabel(SkipReason reason) {
   switch (reason) {

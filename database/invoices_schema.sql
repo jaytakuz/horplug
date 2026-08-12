@@ -19,7 +19,10 @@ CREATE TABLE IF NOT EXISTS invoices (
   billing_month       INT  NOT NULL CHECK (billing_month BETWEEN 1 AND 12),
   billing_year        INT  NOT NULL,
 
-  -- ตัวเลขที่ตรึงไว้ ณ วันออกบิล ห้ามคำนวณใหม่จากมิเตอร์อีก
+  -- ตัวเลขที่ตรึงไว้ ณ วันออกบิล — ตรึงถาวรสำหรับใบที่ส่งสลิป/จ่าย/ยกเลิกแล้ว
+  -- ส่วนใบที่ยัง unpaid ถูกคำนวณใหม่จากข้อมูลล่าสุดของงวดได้ ดู
+  -- invoices_recalculation.sql (ก่อนหน้าไฟล์นั้น ที่นี่เขียนว่า "ห้ามคำนวณใหม่
+  -- จากมิเตอร์อีก" ซึ่งไม่จริงแล้ว)
   room_price          NUMERIC NOT NULL DEFAULT 0,
   electricity_units   NUMERIC NOT NULL DEFAULT 0,
   electricity_cost    NUMERIC NOT NULL DEFAULT 0,

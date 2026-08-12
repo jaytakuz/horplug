@@ -20,6 +20,7 @@
 | 7 | `payment_slip_bucket.sql` | policy ของบัคเก็ตสลิป | 3 · **สร้าง bucket ก่อน** |
 | 8 | `dormitory_payment_channel.sql` | ตารางช่องทางชำระเงินต่อหอ | 1 |
 | 9 | `invoices_cash_payment.sql` | คอลัมน์ `payment_method` + RPC แจ้ง/ยกเลิกการจ่ายเงินสด | 4 |
+| 10 | `invoices_recalculation.sql` | คอลัมน์ `recalculated_at` + `previous_total` สำหรับปรับยอดบิลค้างชำระ | 3 |
 
 ไฟล์ทุกไฟล์ **รันซ้ำได้** (`IF NOT EXISTS` / `DROP POLICY IF EXISTS`)
 
