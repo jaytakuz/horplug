@@ -72,6 +72,13 @@ class BillingViewModel extends ChangeNotifier with RefreshableViewModel {
     });
   }
 
+  /// จุดเดียวที่ท่าทางลากเรียก
+  ///
+  /// แยกจาก [loadInvoices] เพราะคอมมิทถัดไปจะแทรกการปรับยอดบิลค้างชำระไว้ตรงนี้
+  /// ก่อนโหลด — ที่นั่นเป็นการ "เขียน" ซึ่งต้องเกิดจากท่าทางของเจ้าของหอเท่านั้น
+  /// ไม่ใช่ทุกครั้งที่หน้าถูก build (AdminShell build ทุกแท็บพร้อมกันตั้งแต่เปิดแอป)
+  Future<void> refresh() => loadInvoices();
+
   Future<void> setPeriod({int? month, int? year}) async {
     if (month != null) selectedMonth = month;
     if (year != null) selectedYear = year;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
+import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
 import '../../viewmodels/auth_view_model.dart' show AuthScope;
@@ -109,21 +110,34 @@ class _BillingView extends StatelessWidget {
         Expanded(
           child: viewModel.isLoading
               ? const Center(child: CircularProgressIndicator())
-              // error ต้องมาก่อน empty state — รายการที่ว่างเพราะโหลดไม่สำเร็จ
-              // ไม่ใช่ "ยังไม่ได้จดมิเตอร์" การบอกผิดทำให้เจ้าของหอไปตามหา
-              // ปัญหาผิดที่
-              : viewModel.errorMessage != null
-                  ? _buildErrorState(context, viewModel)
-                  : filteredInvoices.isEmpty
-                      ? _buildEmptyState(context, viewModel)
-                      : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: filteredInvoices.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        return _InvoiceCard(invoice: filteredInvoices[index]);
-                      },
-                    ),
+              // ท่าทางลากครอบทั้งสามสถานะ ไม่ใช่เฉพาะตอนมีรายการ — หน้าที่ว่าง
+              // หรือโหลดล้มคือหน้าที่ผู้ใช้อยากลองใหม่มากที่สุด
+              //
+              // หัวหน้าจอ ตัวเลือกงวด ลิงก์ตั้งค่าช่องทางรับเงิน และชิปตัวกรอง
+              // อยู่นอกกรอบนี้ทั้งหมด จึงนิ่งขณะลาก
+              : PullToRefresh(
+                  onRefresh: viewModel.refresh,
+                  // error ต้องมาก่อน empty state — รายการที่ว่างเพราะโหลด
+                  // ไม่สำเร็จ ไม่ใช่ "ยังไม่ได้จดมิเตอร์" การบอกผิดทำให้
+                  // เจ้าของหอไปตามหาปัญหาผิดที่
+                  child: viewModel.errorMessage != null
+                      ? CenteredScrollable(
+                          child: _buildErrorContent(context, viewModel))
+                      : filteredInvoices.isEmpty
+                          ? CenteredScrollable(
+                              child: _buildEmptyContent(context, viewModel))
+                          : ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(16),
+                              itemCount: filteredInvoices.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                return _InvoiceCard(
+                                    invoice: filteredInvoices[index]);
+                              },
+                            ),
+                ),
         ),
       ],
       ),
@@ -207,91 +221,78 @@ class _BillingView extends StatelessWidget {
   /// รายการว่างมีสองความหมายที่ต่างกันคนละเรื่อง — งวดนี้ยังไม่มีบิลเลย
   /// กับตัวกรองที่เลือกไม่ตรงกับบิลใบไหน อย่างหลังไม่ควรชวนให้ออกบิลใหม่
   /// ทั้งที่บิลอีกยี่สิบใบอยู่ห่างไปแค่ชิปเดียว
-  Widget _buildErrorState(BuildContext context, BillingViewModel viewModel) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline,
-                size: 48, color: AppColors.destructive),
-            const SizedBox(height: 16),
-            Text('โหลดข้อมูลบิลไม่สำเร็จ',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              viewModel.errorMessage!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.mutedForeground),
-            ),
-            const SizedBox(height: 16),
-            PrimaryButton(
-              label: 'ลองใหม่',
-              icon: Icons.refresh,
-              onPressed: viewModel.loadInvoices,
-            ),
-          ],
+  /// คืนเฉพาะเนื้อใน — [CenteredScrollable] จัดกึ่งกลางและระยะขอบให้แล้ว
+  Widget _buildErrorContent(BuildContext context, BillingViewModel viewModel) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.error_outline, size: 48, color: AppColors.destructive),
+        const SizedBox(height: 16),
+        Text('โหลดข้อมูลบิลไม่สำเร็จ',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(
+          viewModel.errorMessage!,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.mutedForeground),
         ),
-      ),
+        const SizedBox(height: 16),
+        PrimaryButton(
+          label: viewModel.isRefreshing ? 'กำลังลองใหม่...' : 'ลองใหม่',
+          icon: Icons.refresh,
+          onPressed: viewModel.isRefreshing ? null : viewModel.refresh,
+        ),
+      ],
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, BillingViewModel viewModel) {
+  Widget _buildEmptyContent(BuildContext context, BillingViewModel viewModel) {
     if (viewModel.invoices.isNotEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'ไม่มีบิลในตัวกรองนี้',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.mutedForeground),
-          ),
-        ),
+      return const Text(
+        'ไม่มีบิลในตัวกรองนี้',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppColors.mutedForeground),
       );
     }
 
     final hasDrafts = viewModel.readyToIssueCount > 0;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(hasDrafts ? Icons.playlist_add_check : Icons.speed_outlined,
-                size: 64, color: AppColors.mutedForeground),
-            const SizedBox(height: 16),
-            Text(
-              hasDrafts
-                  ? 'มิเตอร์พร้อมแล้ว ${viewModel.readyToIssueCount} ห้อง ยังไม่ได้ออกบิลงวดนี้'
-                  : 'ยังไม่ได้จดมิเตอร์งวดนี้',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.mutedForeground),
-            ),
-            const SizedBox(height: 16),
-            if (hasDrafts)
-              PrimaryButton(
-                label: 'ออกบิลใหม่',
-                icon: Icons.add_chart,
-                onPressed: () async {
-                  final issued = await showIssueInvoicesDialog(
-                    context,
-                    dormitoryId: viewModel.dormitoryId,
-                    month: viewModel.selectedMonth,
-                    year: viewModel.selectedYear,
-                  );
-                  if (issued) await viewModel.loadInvoices();
-                },
-              )
-            else
-              TextButton(
-                onPressed: viewModel.loadInvoices,
-                child: const Text('โหลดใหม่อีกครั้ง'),
-              ),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(hasDrafts ? Icons.playlist_add_check : Icons.speed_outlined,
+            size: 64, color: AppColors.mutedForeground),
+        const SizedBox(height: 16),
+        Text(
+          hasDrafts
+              ? 'มิเตอร์พร้อมแล้ว ${viewModel.readyToIssueCount} ห้อง ยังไม่ได้ออกบิลงวดนี้'
+              : 'ยังไม่ได้จดมิเตอร์งวดนี้',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.mutedForeground),
         ),
-      ),
+        const SizedBox(height: 16),
+        if (hasDrafts)
+          PrimaryButton(
+            label: 'ออกบิลใหม่',
+            icon: Icons.add_chart,
+            onPressed: () async {
+              final issued = await showIssueInvoicesDialog(
+                context,
+                dormitoryId: viewModel.dormitoryId,
+                month: viewModel.selectedMonth,
+                year: viewModel.selectedYear,
+              );
+              if (issued) await viewModel.loadInvoices();
+            },
+          )
+        else
+          TextButton(
+            onPressed: viewModel.isRefreshing ? null : viewModel.refresh,
+            child: Text(viewModel.isRefreshing
+                ? 'กำลังโหลดใหม่...'
+                : 'โหลดใหม่อีกครั้ง'),
+          ),
+      ],
     );
   }
 
