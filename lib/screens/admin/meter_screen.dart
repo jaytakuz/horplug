@@ -447,31 +447,14 @@ class _MeterViewState extends State<_MeterView>
   }
 
   Widget _buildHeader(MeterViewModel viewModel) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('บันทึกมิเตอร์', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 2),
-              Text(
-                'งวด ${_getMonthName(viewModel.selectedMonth)} ${viewModel.selectedYear}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.mutedForeground,
-                    ),
-              ),
-            ],
-          ),
-          PrimaryButton(
-            label: viewModel.isSaving ? 'กำลังบันทึก...' : 'บันทึกทั้งหมด',
-            icon: Icons.save,
-            onPressed: viewModel.canSave ? () => _handleSave(viewModel) : null,
-          ),
-        ],
+    return ScreenHeader(
+      title: 'บันทึกมิเตอร์',
+      subtitle:
+          'งวด ${_getMonthName(viewModel.selectedMonth)} ${viewModel.selectedYear}',
+      action: PrimaryButton(
+        label: viewModel.isSaving ? 'กำลังบันทึก...' : 'บันทึกทั้งหมด',
+        icon: Icons.save,
+        onPressed: viewModel.canSave ? () => _handleSave(viewModel) : null,
       ),
     );
   }

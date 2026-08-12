@@ -70,33 +70,22 @@ class _BillingView extends StatelessWidget {
       gutter: 0,
       child: Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('จัดการบิลรายเดือน', style: Theme.of(context).textTheme.titleMedium),
-                  Text('${_getMonthName(viewModel.selectedMonth)} ${viewModel.selectedYear}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
-                ],
-              ),
-              PrimaryButton(
-                label: 'ออกบิลใหม่',
-                icon: Icons.add_chart,
-                onPressed: () async {
-                  final issued = await showIssueInvoicesDialog(
-                    context,
-                    dormitoryId: viewModel.dormitoryId,
-                    month: viewModel.selectedMonth,
-                    year: viewModel.selectedYear,
-                  );
-                  if (issued) await viewModel.loadInvoices();
-                },
-              ),
-            ],
+        ScreenHeader(
+          title: 'จัดการบิลรายเดือน',
+          subtitle:
+              '${_getMonthName(viewModel.selectedMonth)} ${viewModel.selectedYear}',
+          action: PrimaryButton(
+            label: 'ออกบิลใหม่',
+            icon: Icons.add_chart,
+            onPressed: () async {
+              final issued = await showIssueInvoicesDialog(
+                context,
+                dormitoryId: viewModel.dormitoryId,
+                month: viewModel.selectedMonth,
+                year: viewModel.selectedYear,
+              );
+              if (issued) await viewModel.loadInvoices();
+            },
           ),
         ),
         _buildPeriodSelector(viewModel),
