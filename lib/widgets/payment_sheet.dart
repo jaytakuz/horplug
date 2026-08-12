@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
+import '../models/picked_image.dart';
 import '../services/invoice_pdf.dart';
 import '../services/promptpay.dart';
 import '../theme/app_theme.dart';
@@ -37,7 +36,7 @@ Future<bool> showPaymentSheet(
   BuildContext context, {
   required Invoice bill,
   required PaymentChannel? channel,
-  required Future<ActionResult> Function(File slip) onSubmit,
+  required Future<ActionResult> Function(PickedImage slip) onSubmit,
   required Future<ActionResult> Function() onSubmitCash,
 }) async {
   if (!canOpenPaymentSheet(bill)) {
@@ -70,7 +69,7 @@ class _PaymentSheet extends StatefulWidget {
 
   final Invoice bill;
   final PaymentChannel? channel;
-  final Future<ActionResult> Function(File slip) onSubmit;
+  final Future<ActionResult> Function(PickedImage slip) onSubmit;
   final Future<ActionResult> Function() onSubmitCash;
 
   @override
@@ -78,7 +77,7 @@ class _PaymentSheet extends StatefulWidget {
 }
 
 class _PaymentSheetState extends State<_PaymentSheet> {
-  File? _slip;
+  PickedImage? _slip;
   bool _isSubmitting = false;
   bool _isSharingPdf = false;
 
@@ -251,9 +250,14 @@ class _PaymentSheetState extends State<_PaymentSheet> {
     if (source == null) return;
 
     final picked = await ImagePicker().pickImage(source: source);
-    if (picked == null || !mounted) return;
+    if (picked == null) return;
 
-    setState(() => _slip = File(picked.path));
+    // อ่านไบต์ตั้งแต่ตรงนี้ ไม่ใช่ตอนกดส่ง — บนเว็บ blob ที่เบราว์เซอร์ให้มา
+    // มีอายุจำกัด และ mounted ต้องเช็คใหม่หลัง await เพราะแผ่นอาจถูกปิดไปแล้ว
+    final image = await PickedImage.fromXFile(picked);
+    if (!mounted) return;
+
+    setState(() => _slip = image);
   }
 
   Future<void> _submit() async {
@@ -490,7 +494,8 @@ class _PaymentSheetState extends State<_PaymentSheet> {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: Image.file(slip,
+          // Image.memory ไม่ใช่ Image.file — บนเว็บไม่มีไฟล์ให้อ่าน มีแต่ไบต์
+          child: Image.memory(slip.bytes,
               width: 120, height: 120, fit: BoxFit.cover),
         ),
         const SizedBox(width: 12),

@@ -1,12 +1,13 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/models.dart';
+import '../models/picked_image.dart';
 import '../services/invoice_service.dart';
 import '../services/supabase_service.dart';
+import 'error_message.dart';
 import 'safe_notifier.dart';
 
 class ChatViewModel extends ChangeNotifier with SafeNotifier {
@@ -64,6 +65,10 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
   List<ChatMessage> conversation = [];
   bool isSending = false;
   bool isUploadingImage = false;
+
+  /// ข้อความบอกว่าการส่งครั้งล่าสุดล้มเหลว · หน้าจอโชว์แล้วเรียก
+  /// [clearSendError] — คู่เดียวกับที่ฝั่งผู้เช่าใช้อยู่
+  String? sendErrorMessage;
   bool isUpdatingMaintenance = false;
   bool hasMoreMessages = true;
   bool isLoadingMore = false;
@@ -210,7 +215,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     try {
       final path = await _service.uploadChatImage(
         roomId: chat.roomDbId,
-        imageFile: File(picked.path),
+        image: await PickedImage.fromXFile(picked),
       );
       await _service.sendMessage(
         roomId: chat.roomDbId,
@@ -220,6 +225,11 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
         type: MessageType.image,
         attachmentUrl: path,
       );
+    } catch (error) {
+      // เดิมมีแต่ finally · error หลุดออกไปเป็น unhandled async exception
+      // (ผู้เรียกไม่ await) เจ้าของหอจึงเห็นแค่วงกลมหมุนแล้วหายไป ไม่มีรูป
+      // ไม่มีข้อความบอกว่าเกิดอะไรขึ้น — เป็นเหตุผลที่บั๊กบนเว็บซ่อนอยู่ได้นาน
+      sendErrorMessage = 'ส่งรูปไม่สำเร็จ: ${formatErrorMessage(error)}';
     } finally {
       isUploadingImage = false;
       notifyListeners();
@@ -249,6 +259,12 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
       isUpdatingMaintenance = false;
       notifyListeners();
     }
+  }
+
+  void clearSendError() {
+    if (sendErrorMessage == null) return;
+    sendErrorMessage = null;
+    notifyListeners();
   }
 
   @override

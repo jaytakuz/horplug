@@ -1,9 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
+import '../../models/picked_image.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_chat_view_model.dart';
@@ -93,7 +92,8 @@ class _TenantChatView extends StatelessWidget {
       context,
       bill: invoice,
       channel: viewModel.paymentChannel,
-      onSubmit: (File slip) => viewModel.submitSlip(bill: invoice, slip: slip),
+      onSubmit: (PickedImage slip) =>
+          viewModel.submitSlip(bill: invoice, slip: slip),
       onSubmitCash: () => viewModel.submitCash(bill: invoice),
     );
   }
