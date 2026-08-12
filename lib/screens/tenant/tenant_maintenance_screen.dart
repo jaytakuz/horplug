@@ -8,6 +8,7 @@ import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_maintenance_view_model.dart';
 import '../../widgets/maintenance_request_card.dart';
 import '../../widgets/maintenance_request_dialog.dart';
+import '../../widgets/maintenance_search_and_filter.dart';
 import '../../widgets/reusable_widgets.dart';
 
 class TenantMaintenanceScreen extends StatelessWidget {
@@ -111,11 +112,12 @@ class _TenantMaintenanceView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          FilterChipGroup(
-            title: 'สถานะ',
-            options: tenantMaintenanceFilters,
-            selectedValue: viewModel.selectedFilter,
-            onSelected: viewModel.setFilter,
+          MaintenanceSearchAndFilter(
+            searchQuery: viewModel.searchQuery,
+            onSearchChanged: viewModel.setSearchQuery,
+            statusOptions: tenantMaintenanceFilters,
+            selectedStatus: viewModel.selectedFilter,
+            onStatusChanged: viewModel.setFilter,
           ),
           const SizedBox(height: 16),
           ..._buildList(context, viewModel),
@@ -167,7 +169,9 @@ class _TenantMaintenanceView extends StatelessWidget {
 
     final requests = viewModel.filteredRequests;
     if (requests.isEmpty) {
-      final isFiltered = viewModel.selectedFilter != 'ทั้งหมด';
+      final hasSearch = viewModel.searchQuery.trim().isNotEmpty;
+      final hasStatusFilter = viewModel.selectedFilter != 'ทั้งหมด';
+      final isFiltered = hasSearch || hasStatusFilter;
       return [
         PaperCard(
           child: Column(
@@ -177,16 +181,20 @@ class _TenantMaintenanceView extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 isFiltered
-                    ? 'ไม่มีรายการในสถานะนี้'
+                    ? 'ไม่พบรายการที่ค้นหา'
                     : 'ยังไม่มีประวัติการแจ้งซ่อม/ทำความสะอาด',
                 style: Theme.of(context).textTheme.titleMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 4),
               Text(
-                isFiltered
-                    ? 'ลองเลือกสถานะอื่น'
-                    : 'แตะปุ่มด้านบนเพื่อแจ้งซ่อมหรือขอทำความสะอาด',
+                hasSearch && hasStatusFilter
+                    ? 'ลองเปลี่ยนคำค้นหาหรือสถานะ'
+                    : hasSearch
+                        ? 'ลองเปลี่ยนคำค้นหา'
+                        : hasStatusFilter
+                            ? 'ลองเลือกสถานะอื่น'
+                            : 'แตะปุ่มด้านบนเพื่อแจ้งซ่อมหรือขอทำความสะอาด',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall,
               ),

@@ -16,15 +16,23 @@ const tenantMaintenanceFilters = [
   'ยกเลิก',
 ];
 
-/// กรองรายการตาม label สถานะ ('ทั้งหมด' = ไม่กรอง)
+/// กรองรายการตาม label สถานะ ('ทั้งหมด' = ไม่กรอง) และคำค้นหา (จับคู่กับ
+/// รายละเอียดหรือประเภทคำขอ — เช่นเดียวกับฝั่งเจ้าของหอ)
 List<MaintenanceRequest> filterMaintenanceRequests(
   List<MaintenanceRequest> requests,
-  String filter,
-) {
-  if (filter == 'ทั้งหมด') return requests;
-  return requests
-      .where((request) => maintenanceStatusLabel(request.status) == filter)
-      .toList();
+  String filter, {
+  String searchQuery = '',
+}) {
+  final query = searchQuery.trim().toLowerCase();
+  return requests.where((request) {
+    final matchesStatus =
+        filter == 'ทั้งหมด' || maintenanceStatusLabel(request.status) == filter;
+    final searchableText = [
+      request.description,
+      maintenanceRequestTypeLabel(request.requestType),
+    ].join(' ').toLowerCase();
+    return matchesStatus && (query.isEmpty || searchableText.contains(query));
+  }).toList();
 }
 
 class TenantMaintenanceViewModel extends ChangeNotifier with SafeNotifier {
@@ -49,13 +57,23 @@ class TenantMaintenanceViewModel extends ChangeNotifier with SafeNotifier {
   String? errorMessage;
   List<MaintenanceRequest> requests = [];
   String selectedFilter = 'ทั้งหมด';
+  String searchQuery = '';
 
-  List<MaintenanceRequest> get filteredRequests =>
-      filterMaintenanceRequests(requests, selectedFilter);
+  List<MaintenanceRequest> get filteredRequests => filterMaintenanceRequests(
+        requests,
+        selectedFilter,
+        searchQuery: searchQuery,
+      );
 
   void setFilter(String filter) {
     if (selectedFilter == filter) return;
     selectedFilter = filter;
+    notifyListeners();
+  }
+
+  void setSearchQuery(String value) {
+    if (searchQuery == value) return;
+    searchQuery = value;
     notifyListeners();
   }
 

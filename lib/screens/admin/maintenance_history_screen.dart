@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/maintenance_view_model.dart';
 import '../../widgets/maintenance_request_card.dart';
+import '../../widgets/maintenance_search_and_filter.dart';
 import '../../widgets/reusable_widgets.dart';
 
 class MaintenanceHistoryScreen extends StatelessWidget {
@@ -37,7 +38,7 @@ class MaintenanceHistoryScreen extends StatelessWidget {
   }
 }
 
-class _MaintenanceHistoryView extends StatefulWidget {
+class _MaintenanceHistoryView extends StatelessWidget {
   const _MaintenanceHistoryView(
       {required this.roomNumber, required this.readOnly});
 
@@ -45,27 +46,12 @@ class _MaintenanceHistoryView extends StatefulWidget {
   final bool readOnly;
 
   @override
-  State<_MaintenanceHistoryView> createState() =>
-      _MaintenanceHistoryViewState();
-}
-
-class _MaintenanceHistoryViewState extends State<_MaintenanceHistoryView> {
-  final TextEditingController _searchController = TextEditingController();
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<MaintenanceViewModel>();
 
     return Scaffold(
-      appBar: AppBar(
-          title:
-              Text('ประวัติการแจ้งซ่อม/ทำความสะอาด ห้อง ${widget.roomNumber}')),
+      appBar:
+          AppBar(title: Text('ประวัติการแจ้งซ่อม/ทำความสะอาด ห้อง $roomNumber')),
       body: _buildBody(context, viewModel),
     );
   }
@@ -132,34 +118,12 @@ class _MaintenanceHistoryViewState extends State<_MaintenanceHistoryView> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
-          PaperCard(
-            padding: EdgeInsets.zero,
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'ค้นหารายการ',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: viewModel.searchQuery.trim().isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () {
-                          _searchController.clear();
-                          viewModel.setSearchQuery('');
-                        },
-                      )
-                    : null,
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              onChanged: viewModel.setSearchQuery,
-            ),
-          ),
-          const SizedBox(height: 12),
-          FilterChipGroup(
-            title: 'สถานะ',
-            options: maintenanceHistoryStatusFilters,
-            selectedValue: viewModel.selectedStatusFilter,
-            onSelected: viewModel.setStatusFilter,
+          MaintenanceSearchAndFilter(
+            searchQuery: viewModel.searchQuery,
+            onSearchChanged: viewModel.setSearchQuery,
+            statusOptions: maintenanceHistoryStatusFilters,
+            selectedStatus: viewModel.selectedStatusFilter,
+            onStatusChanged: viewModel.setStatusFilter,
           ),
           const SizedBox(height: 16),
           if (requests.isEmpty)
@@ -168,7 +132,7 @@ class _MaintenanceHistoryViewState extends State<_MaintenanceHistoryView> {
             for (final request in requests) ...[
               MaintenanceRequestCard(
                 request: request,
-                readOnly: widget.readOnly,
+                readOnly: readOnly,
                 isUpdating: viewModel.isUpdating,
                 onEditCleaningFee: (fee) =>
                     viewModel.updateCleaningFee(request, fee),
