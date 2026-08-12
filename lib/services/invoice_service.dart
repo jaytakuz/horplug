@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/models.dart';
 import '../models/picked_image.dart';
+import '../utils/formatters.dart' show formatBaht;
 import '../viewmodels/tenant_dashboard_view_model.dart' show thaiMonthName;
 import 'invoice_calculator.dart';
 import 'invoice_lifecycle.dart';
@@ -467,6 +468,41 @@ class InvoiceService {
         .toList();
 
     if (rows.isEmpty) return 0;
+    await _client.from('messages').insert(rows);
+    return rows.length;
+  }
+
+  /// แจ้งผู้เช่าว่ายอดบิลเปลี่ยน · คืนจำนวนข้อความที่โพสต์
+  ///
+  /// เป็นข้อความ `text` ไม่ใช่การ์ดบิล — การ์ดใบเดิมที่อยู่ในแชทแล้ว resolve
+  /// ข้อมูลสดผ่าน [invoicesByIdForRoom] จึงแสดงยอดใหม่เองอยู่แล้ว การส่งการ์ด
+  /// ซ้ำจะได้การ์ดสองใบที่ยอดเท่ากันในห้องแชทเดียว ซึ่งอ่านเหมือนมีบิลสองใบ
+  ///
+  /// ไม่ตั้ง `invoice_id` ด้วยเหตุผลเดียวกัน — คอลัมน์นั้นเป็นเครื่องหมายว่า
+  /// ข้อความนี้ *คือ* การ์ดบิล
+  ///
+  /// ระบุทั้งยอดเก่าและยอดใหม่ เพราะผู้เช่าที่แคปหน้าจอ QR ระบุยอดเก็บไว้ต้องรู้
+  /// ว่าใบที่ถืออยู่ใช้ไม่ได้แล้ว ไม่ใช่แค่ว่า "มีอะไรบางอย่างเปลี่ยน"
+  Future<int> postAdjustmentNotices(List<InvoiceAdjustment> adjustments) async {
+    if (adjustments.isEmpty) return 0;
+
+    final senderId = _client.auth.currentUser?.id;
+    if (senderId == null) throw Exception('ยังไม่ได้เข้าสู่ระบบ');
+
+    final rows = adjustments.map((adjustment) {
+      final invoice = adjustment.invoice;
+      return {
+        'room_id': invoice.roomDbId,
+        'sender_id': senderId,
+        'is_from_owner': true,
+        'body': 'ยอดบิล ${invoice.invoiceNo} '
+            'งวด${thaiMonthName(invoice.billingMonth)} ${invoice.billingYear} '
+            'เปลี่ยนจาก ${formatBaht(adjustment.previousTotal)} '
+            'เป็น ${formatBaht(adjustment.newTotal)} หลังปรับตามเลขมิเตอร์ล่าสุด',
+        'message_type': MessageType.text.name,
+      };
+    }).toList();
+
     await _client.from('messages').insert(rows);
     return rows.length;
   }

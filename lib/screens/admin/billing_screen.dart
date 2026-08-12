@@ -37,6 +37,27 @@ class BillingScreen extends StatelessWidget {
 class _BillingView extends StatelessWidget {
   const _BillingView();
 
+  /// ลากรีเฟรช = ปรับยอดตามข้อมูลล่าสุดแล้วโหลด · บอกเมื่อการปรับยอดล้ม
+  ///
+  /// ที่นี่ใช้ SnackBar ได้ ต่างจาก error ตอนโหลดที่หน้านี้จงใจวาดในตัวหน้าจอ —
+  /// ผู้ใช้เพิ่งทำท่าทางบนแท็บที่เห็นอยู่ตรงหน้า ไม่ใช่การโหลดอัตโนมัติที่เกิด
+  /// ตอนเปิดแอปแล้วเด้งทับแท็บอื่นตามที่คอมเมนต์ข้างบนอธิบายไว้
+  Future<void> _handleRefresh(
+    BuildContext context,
+    BillingViewModel viewModel,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await viewModel.refresh();
+
+    final error = viewModel.syncErrorMessage;
+    if (error == null || !context.mounted) return;
+    viewModel.syncErrorMessage = null;
+
+    messenger.showSnackBar(SnackBar(
+      content: Text('ปรับยอดบิลตามข้อมูลล่าสุดไม่สำเร็จ: $error'),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<BillingViewModel>();
@@ -116,7 +137,7 @@ class _BillingView extends StatelessWidget {
               // หัวหน้าจอ ตัวเลือกงวด ลิงก์ตั้งค่าช่องทางรับเงิน และชิปตัวกรอง
               // อยู่นอกกรอบนี้ทั้งหมด จึงนิ่งขณะลาก
               : PullToRefresh(
-                  onRefresh: viewModel.refresh,
+                  onRefresh: () => _handleRefresh(context, viewModel),
                   // error ต้องมาก่อน empty state — รายการที่ว่างเพราะโหลด
                   // ไม่สำเร็จ ไม่ใช่ "ยังไม่ได้จดมิเตอร์" การบอกผิดทำให้
                   // เจ้าของหอไปตามหาปัญหาผิดที่
@@ -424,6 +445,10 @@ class _InvoiceCard extends StatelessWidget {
                 : invoice.invoiceNo,
             style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground),
           ),
+          if (invoice.recalculatedAt != null) ...[
+            const SizedBox(height: 4),
+            RecalculatedNote(previousTotal: invoice.previousTotal),
+          ],
           const SizedBox(height: 12),
           _buildItemRow('🏠 ค่าห้อง', formatBaht(invoice.roomPrice)),
           _buildItemRow('⚡ ไฟ ${formatUnits(invoice.electricityUnits)} หน่วย', formatBaht(invoice.electricityCost)),

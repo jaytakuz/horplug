@@ -60,6 +60,10 @@ class TenantBillCard extends StatelessWidget {
                 : bill.invoiceNo,
             style: Theme.of(context).textTheme.labelSmall,
           ),
+          if (bill.recalculatedAt != null) ...[
+            const SizedBox(height: 4),
+            RecalculatedNote(previousTotal: bill.previousTotal),
+          ],
           const SizedBox(height: 12),
           _LineItem(label: '🏠 ค่าห้อง', amount: bill.roomPrice),
           _LineItem(

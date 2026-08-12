@@ -7,6 +7,7 @@ import '../../widgets/issue_invoices_dialog.dart';
 import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
+import '../../viewmodels/error_message.dart';
 import '../../viewmodels/meter_view_model.dart';
 import '../../utils/formatters.dart';
 
@@ -119,6 +120,11 @@ class _MeterViewState extends State<_MeterView>
       const SnackBar(content: Text('บันทึกข้อมูลมิเตอร์เรียบร้อยแล้ว')),
     );
 
+    // ปรับยอดบิลที่ออกไปแล้วแต่ยังไม่มีใครจ่าย ก่อนจะไปถามเรื่องออกบิลใหม่ —
+    // สองอย่างนี้ไม่ทับกัน อย่างแรกแก้ใบที่มีอยู่ อย่างหลังออกใบให้ห้องที่ยังไม่มี
+    await _syncInvoices(viewModel, messenger);
+    if (!mounted) return;
+
     final outcome = await maybeShowIssueInvoicesDialog(
       context,
       dormitoryId: viewModel.dormitoryId,
@@ -136,6 +142,36 @@ class _MeterViewState extends State<_MeterView>
               'ลองออกบิลอีกครั้งที่หน้าบิล'),
         ),
       );
+    }
+  }
+
+  /// ปรับยอดบิลค้างชำระของงวดแล้วรายงานผลตามความจริงของแต่ละขั้น
+  ///
+  /// เงียบเมื่อไม่มีใบไหนเปลี่ยน — งวดที่บันทึกมิเตอร์ซ้ำโดยเลขเท่าเดิม หรืองวด
+  /// ที่ยังไม่เคยออกบิล ไม่มีอะไรให้รายงาน และ snackbar ที่เด้งโดยไม่มีเนื้อหา
+  /// ทำให้ snackbar ที่มีเนื้อหาถูกมองข้ามไปด้วย
+  Future<void> _syncInvoices(
+    MeterViewModel viewModel,
+    ScaffoldMessengerState messenger,
+  ) async {
+    try {
+      final result = await viewModel.syncInvoicesForPeriod();
+      if (!mounted || result.adjusted == 0) return;
+
+      messenger.showSnackBar(SnackBar(
+        content: Text(result.noticesPosted
+            ? 'ปรับยอดบิลที่ยังค้างชำระ ${result.adjusted} ใบ และแจ้งผู้เช่าแล้ว'
+            : 'ปรับยอดบิลที่ยังค้างชำระ ${result.adjusted} ใบแล้ว '
+                'แต่ส่งข้อความแจ้งผู้เช่าไม่สำเร็จ'),
+      ));
+    } catch (error) {
+      if (!mounted) return;
+      // ต้องบอก ไม่ใช่เงียบ — เจ้าของหอเพิ่งแก้เลขมิเตอร์แล้วจะเข้าใจว่าบิล
+      // ตามไปด้วยแล้ว ทั้งที่ยังเป็นยอดเดิม
+      messenger.showSnackBar(SnackBar(
+        content: Text('ปรับยอดบิลตามมิเตอร์ใหม่ไม่สำเร็จ: '
+            '${formatErrorMessage(error)}'),
+      ));
     }
   }
 

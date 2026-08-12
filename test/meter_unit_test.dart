@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:horplug/models/models.dart';
+import 'package:horplug/services/invoice_calculator.dart';
+import 'package:horplug/services/invoice_service.dart';
 import 'package:horplug/services/supabase_service.dart';
 import 'package:horplug/viewmodels/meter_view_model.dart';
 
@@ -216,12 +218,74 @@ class _FakeMeterService extends SupabaseService {
   }
 }
 
+/// InvoiceService ปลอมสำหรับการปรับยอดบิลหลังบันทึกมิเตอร์
+///
+/// `syncUnpaidInvoices` กับ `postAdjustmentNotices` ล้มแยกกันได้ในของจริง
+/// (อย่างแรกเขียนตาราง invoices อย่างหลังเขียนตาราง messages) จึงต้องสั่งให้ล้ม
+/// แยกกันได้ในเทสต์ด้วย
+class _FakeInvoiceService extends InvoiceService {
+  _FakeInvoiceService({
+    this.adjustments = const [],
+    this.throwOnSync = false,
+    this.throwOnNotice = false,
+  });
+
+  final List<InvoiceAdjustment> adjustments;
+  final bool throwOnSync;
+  final bool throwOnNotice;
+  int noticeCallCount = 0;
+
+  @override
+  Future<List<InvoiceAdjustment>> syncUnpaidInvoices({
+    required int dormitoryId,
+    required int month,
+    required int year,
+  }) async {
+    if (throwOnSync) throw Exception('42703 recalculated_at ไม่มีในตาราง');
+    return adjustments;
+  }
+
+  @override
+  Future<int> postAdjustmentNotices(List<InvoiceAdjustment> adjustments) async {
+    noticeCallCount++;
+    if (throwOnNotice) throw Exception('ส่งข้อความไม่สำเร็จ');
+    return adjustments.length;
+  }
+}
+
+InvoiceAdjustment buildAdjustment({double newElectricityCost = 540}) {
+  return InvoiceAdjustment(
+    invoice: Invoice(
+      dbId: 1,
+      invoiceNo: 'INV-202608-101',
+      roomDbId: 1,
+      roomNumber: '101',
+      tenantName: 'สมชาย ใจดี',
+      billingMonth: 8,
+      billingYear: 2026,
+      roomPrice: 3000,
+      electricityCost: 300,
+      total: 3300,
+      status: InvoiceStatus.unpaid,
+      dueDate: DateTime(2026, 9, 5),
+      issuedAt: DateTime(2026, 8, 31),
+    ),
+    roomPrice: 3000,
+    electricityUnits: 90,
+    electricityCost: newElectricityCost,
+    waterCost: 0,
+    cleaningFee: 0,
+  );
+}
+
 Future<MeterViewModel> buildLoadedMeterViewModel({
   List<ElectricityRecord>? electricityRecords,
   List<WaterRecord>? waterRecords,
+  InvoiceService? invoices,
 }) async {
   final viewModel = MeterViewModel(
     dormitoryId: 1,
+    invoices: invoices ?? _FakeInvoiceService(),
     service: _FakeMeterService(
       electricityRecords: electricityRecords ??
           [
@@ -319,6 +383,53 @@ void main() {
       await viewModel.loadAllRecords();
 
       expect(viewModel.hasUnsavedInput, isFalse);
+    });
+  });
+
+  group('ปรับยอดบิลหลังบันทึกมิเตอร์', () {
+    test('ไม่มีใบไหนเปลี่ยน = ไม่ส่งข้อความหาผู้เช่าเลย', () async {
+      final invoices = _FakeInvoiceService();
+      final viewModel = await buildLoadedMeterViewModel(invoices: invoices);
+
+      final result = await viewModel.syncInvoicesForPeriod();
+
+      expect(result.adjusted, 0);
+      expect(invoices.noticeCallCount, 0,
+          reason: 'ข้อความที่ไม่มีเนื้อหาสอนให้ผู้เช่าเลิกอ่านการแจ้งเตือน');
+    });
+
+    test('มีใบที่เปลี่ยน = แจ้งผู้เช่าแล้วรายงานจำนวน', () async {
+      final invoices = _FakeInvoiceService(adjustments: [buildAdjustment()]);
+      final viewModel = await buildLoadedMeterViewModel(invoices: invoices);
+
+      final result = await viewModel.syncInvoicesForPeriod();
+
+      expect(result.adjusted, 1);
+      expect(result.noticesPosted, isTrue);
+      expect(invoices.noticeCallCount, 1);
+    });
+
+    // ยอดถูกแก้ไปแล้วจริงๆ การรายงานว่า "ปรับยอดไม่สำเร็จ" เพราะข้อความส่งไม่ออก
+    // จะทำให้เจ้าของหอเข้าใจว่าบิลยังเป็นยอดเดิม แล้วไปแก้ซ้ำหรือ void ทิ้ง
+    test('แจ้งผู้เช่าล้ม แต่ยังรายงานว่าปรับยอดไปกี่ใบ', () async {
+      final invoices = _FakeInvoiceService(
+        adjustments: [buildAdjustment()],
+        throwOnNotice: true,
+      );
+      final viewModel = await buildLoadedMeterViewModel(invoices: invoices);
+
+      final result = await viewModel.syncInvoicesForPeriod();
+
+      expect(result.adjusted, 1);
+      expect(result.noticesPosted, isFalse);
+    });
+
+    test('ปรับยอดล้มทั้งขั้น = โยนต่อให้หน้าจอบอกผู้ใช้', () async {
+      final viewModel = await buildLoadedMeterViewModel(
+        invoices: _FakeInvoiceService(throwOnSync: true),
+      );
+
+      expect(viewModel.syncInvoicesForPeriod(), throwsException);
     });
   });
 

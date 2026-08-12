@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
+import '../services/invoice_service.dart';
 import '../services/supabase_service.dart';
 import 'refreshable.dart';
 
@@ -18,11 +19,16 @@ String roomStatusLabel(RoomStatus? status) {
 }
 
 class MeterViewModel extends ChangeNotifier with RefreshableViewModel {
-  MeterViewModel({required this.dormitoryId, SupabaseService? service})
-      : _service = service ?? SupabaseService();
+  MeterViewModel({
+    required this.dormitoryId,
+    SupabaseService? service,
+    InvoiceService? invoices,
+  })  : _service = service ?? SupabaseService(),
+        _invoices = invoices ?? InvoiceService();
 
   final int dormitoryId;
   final SupabaseService _service;
+  final InvoiceService _invoices;
 
   bool isSaving = false;
   String? errorMessage;
@@ -184,6 +190,33 @@ class MeterViewModel extends ChangeNotifier with RefreshableViewModel {
     record.amount = value;
     modifiedWaterRoomIds.add(record.roomDbId);
     notifyListeners();
+  }
+
+  /// ปรับยอดบิลค้างชำระของงวดที่เลือกให้ตรงกับมิเตอร์ที่เพิ่งบันทึก
+  /// แล้วแจ้งผู้เช่าที่ยอดเปลี่ยน
+  ///
+  /// แยกจาก [saveAll] เพราะความล้มของสองอย่างนี้มีน้ำหนักต่างกัน — มิเตอร์คือ
+  /// ของจริงที่บันทึกไปแล้ว การปรับบิลคือผลพวงของมัน ล้มแล้วบอกได้ ไม่ต้องย้อน
+  ///
+  /// คืนทั้งจำนวนใบที่ปรับและผลของการแจ้ง เพราะสองอย่างนี้ล้มแยกกันได้ และการ
+  /// รายงานว่า "ปรับยอดไม่สำเร็จ" ทั้งที่ยอดเปลี่ยนไปแล้วแต่แจ้งไม่ออก จะทำให้
+  /// เจ้าของหอเข้าใจผิดว่าบิลยังเป็นยอดเดิม
+  Future<({int adjusted, bool noticesPosted})> syncInvoicesForPeriod() async {
+    final adjustments = await _invoices.syncUnpaidInvoices(
+      dormitoryId: dormitoryId,
+      month: selectedMonth,
+      year: selectedYear,
+    );
+    if (adjustments.isEmpty) return (adjusted: 0, noticesPosted: true);
+
+    try {
+      await _invoices.postAdjustmentNotices(adjustments);
+      return (adjusted: adjustments.length, noticesPosted: true);
+    } catch (_) {
+      // บิลถูกแก้ไปแล้ว การ์ดในแชทก็แสดงยอดใหม่เองอยู่แล้วเพราะ resolve สด
+      // สิ่งที่หายไปคือข้อความที่บอกว่า "ยอดเปลี่ยนจากเท่าไร" เท่านั้น
+      return (adjusted: adjustments.length, noticesPosted: false);
+    }
   }
 
   Future<bool> saveAll() async {
