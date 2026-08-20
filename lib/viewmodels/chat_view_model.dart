@@ -195,6 +195,11 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
         isFromOwner: true,
         body: trimmed,
       );
+    } catch (error) {
+      // เดิมมีแต่ finally — error หลุดเป็น unhandled async exception
+      // (ผู้เรียกไม่ await) เจ้าของหอเห็นแค่ข้อความที่พิมพ์หายไปเฉยๆ เหมือนที่
+      // เคยเกิดกับฝั่งผู้เช่ามาก่อน ใช้ sendErrorMessage ตัวเดียวกับที่ส่งรูปใช้
+      sendErrorMessage = 'ส่งข้อความไม่สำเร็จ: ${formatErrorMessage(error)}';
     } finally {
       isSending = false;
       notifyListeners();
@@ -226,9 +231,6 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
         attachmentUrl: path,
       );
     } catch (error) {
-      // เดิมมีแต่ finally · error หลุดออกไปเป็น unhandled async exception
-      // (ผู้เรียกไม่ await) เจ้าของหอจึงเห็นแค่วงกลมหมุนแล้วหายไป ไม่มีรูป
-      // ไม่มีข้อความบอกว่าเกิดอะไรขึ้น — เป็นเหตุผลที่บั๊กบนเว็บซ่อนอยู่ได้นาน
       sendErrorMessage = 'ส่งรูปไม่สำเร็จ: ${formatErrorMessage(error)}';
     } finally {
       isUploadingImage = false;

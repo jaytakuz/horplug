@@ -30,8 +30,6 @@ String chatMessagePreview(ChatMessage message) {
       return 'อัปเดตงานซ่อม';
     case MessageType.cleaningUpdate:
       return 'อัปเดตงานทำความสะอาด';
-    case MessageType.parcelNotification:
-      return 'แจ้งพัสดุ';
     case MessageType.text:
       final text = message.text.trim();
       // ข้อความว่างเกิดได้จากข้อความที่แนบรูปมาแต่ไม่ได้พิมพ์อะไร

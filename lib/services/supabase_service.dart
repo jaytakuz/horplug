@@ -985,18 +985,14 @@ class SupabaseService {
   /// ห้องที่มีแจ้งซ่อมค้างอยู่ (รอดำเนินการ/กำลังดำเนินการ) จะถูกตั้งเป็น
   /// 'maintenance' อัตโนมัติ และกลับเป็น 'occupied' เมื่อเสร็จสิ้น — แต่จะกลับ
   /// เฉพาะตอนไม่มีแจ้งซ่อมอื่นของห้องเดียวกันที่ยังไม่เสร็จค้างอยู่แล้วเท่านั้น
+  ///
+  /// ตรรกะการตัดสินใจล้วนอยู่ใน [roomStatusForMaintenanceSync] (ไม่มี I/O จึง
+  /// unit test ตรงๆ ได้) ส่วนตรงนี้ทำหน้าที่แค่ query ข้อมูลที่จำเป็นแล้วส่งต่อ
   Future<void> _syncRoomStatusForMaintenance({
     required int roomId,
     required MaintenanceStatus status,
   }) async {
-    if (status == MaintenanceStatus.pending ||
-        status == MaintenanceStatus.inProgress) {
-      await client
-          .from('rooms')
-          .update({'status': 'maintenance'}).eq('id', roomId);
-      return;
-    }
-
+    var hasOtherUnfinishedRequests = false;
     if (status == MaintenanceStatus.completed ||
         status == MaintenanceStatus.cancelled) {
       final remaining = await client
@@ -1004,12 +1000,37 @@ class SupabaseService {
           .select('id')
           .eq('room_id', roomId)
           .inFilter('status', ['Pending', 'In-Progress']).limit(1);
+      hasOtherUnfinishedRequests = (remaining as List).isNotEmpty;
+    }
 
-      if ((remaining as List).isEmpty) {
-        await client
-            .from('rooms')
-            .update({'status': 'occupied'}).eq('id', roomId);
-      }
+    final newStatus = roomStatusForMaintenanceSync(
+      status: status,
+      hasOtherUnfinishedRequests: hasOtherUnfinishedRequests,
+    );
+    if (newStatus != null) {
+      await client
+          .from('rooms')
+          .update({'status': newStatus}).eq('id', roomId);
     }
   }
+}
+
+/// ตรรกะล้วนของ [SupabaseService._syncRoomStatusForMaintenance] — คืนสถานะ
+/// ใหม่ที่ห้องควรเป็น หรือ null ถ้าไม่ต้องเปลี่ยน แยกออกมาเป็น top-level
+/// function เพื่อให้ unit test ได้โดยไม่ต้องแตะ Supabase client จริง
+/// (เช่นเดียวกับ electricityMeterOverflowCheck ของ Feature 4)
+String? roomStatusForMaintenanceSync({
+  required MaintenanceStatus status,
+  required bool hasOtherUnfinishedRequests,
+}) {
+  if (status == MaintenanceStatus.pending ||
+      status == MaintenanceStatus.inProgress) {
+    return 'maintenance';
+  }
+  if ((status == MaintenanceStatus.completed ||
+          status == MaintenanceStatus.cancelled) &&
+      !hasOtherUnfinishedRequests) {
+    return 'occupied';
+  }
+  return null;
 }

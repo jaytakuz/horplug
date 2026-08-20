@@ -31,7 +31,6 @@ class MeterCharge {
 enum MessageType {
   text,
   maintenanceRequest,
-  parcelNotification,
   maintenanceUpdate,
   image,
   cleaningRequest,
