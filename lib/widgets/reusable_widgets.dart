@@ -324,46 +324,66 @@ class FilterChipGroup extends StatelessWidget {
   final String selectedValue;
   final ValueChanged<String> onSelected;
 
+  /// true = chips stay in one row and scroll horizontally instead of
+  /// wrapping to a new row. Default (false) keeps the existing Wrap
+  /// behavior everywhere this widget is already used.
+  final bool scrollable;
+
   const FilterChipGroup({
     super.key,
     required this.title,
     required this.options,
     required this.selectedValue,
     required this.onSelected,
+    this.scrollable = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final chips = options.map((option) {
+      final isActive = selectedValue == option;
+      return FilterChip(
+        label: Text(option),
+        selected: isActive,
+        onSelected: (_) => onSelected(option),
+        backgroundColor: AppColors.card,
+        selectedColor: AppColors.primary,
+        labelStyle: TextStyle(
+          color: isActive ? Colors.white : AppColors.primary,
+          fontSize: 12,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(999),
+          side: BorderSide(
+            color: isActive ? AppColors.primary : AppColors.border,
+          ),
+        ),
+        showCheckmark: false,
+      );
+    }).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: Theme.of(context).textTheme.labelSmall),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: options.map((option) {
-            final isActive = selectedValue == option;
-            return FilterChip(
-              label: Text(option),
-              selected: isActive,
-              onSelected: (_) => onSelected(option),
-              backgroundColor: AppColors.card,
-              selectedColor: AppColors.primary,
-              labelStyle: TextStyle(
-                color: isActive ? Colors.white : AppColors.primary,
-                fontSize: 12,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-                side: BorderSide(
-                  color: isActive ? AppColors.primary : AppColors.border,
+        scrollable
+            ? SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (var i = 0; i < chips.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 8),
+                      chips[i],
+                    ],
+                  ],
                 ),
+              )
+            : Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: chips,
               ),
-              showCheckmark: false,
-            );
-          }).toList(),
-        ),
       ],
     );
   }

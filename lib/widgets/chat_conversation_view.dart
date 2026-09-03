@@ -268,65 +268,70 @@ class _ChatConversationViewState extends State<ChatConversationView> {
       maxWidth: 900,
       gutter: 0,
       child: Stack(
-      children: [
-        // ครอบเฉพาะพื้นที่ข้อความ ไม่ครอบแถบพิมพ์ — แตะที่ว่างเพื่อปิดแป้นพิมพ์
-        //
-        // จำเป็นเพราะฝั่งผู้เช่าหน้านี้ถูกฝังเป็นแท็บใน shell ที่มี
-        // BottomNavigationBar: แป้นพิมพ์บัง nav ทั้งแถบ ถ้าไม่มีทางปิด
-        // ผู้ใช้ iOS (ไม่มีปุ่มซ่อนแป้นพิมพ์) จะออกจากแท็บแชทไม่ได้เลย
-        // ต้องมีคู่กับ keyboardDismissBehavior ด้านล่าง เพราะตอนยังไม่มี
-        // ข้อความจะไม่มี ListView ให้ลาก
-        //
-        // ปุ่มใน bubble (แตะรูป / แตะอัปเดตสถานะแจ้งซ่อม) อยู่ลึกกว่าจึงชนะ
-        // gesture arena ตามปกติ ไม่ถูกกลืน
-        GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: widget.messages.isEmpty
-              ? Center(
-                  child: Text(
-                    'ยังไม่มีข้อความ เริ่มพูดคุยได้เลย',
-                    style: Theme.of(context).textTheme.bodySmall,
+        children: [
+          // ครอบเฉพาะพื้นที่ข้อความ ไม่ครอบแถบพิมพ์ — แตะที่ว่างเพื่อปิดแป้นพิมพ์
+          //
+          // จำเป็นเพราะฝั่งผู้เช่าหน้านี้ถูกฝังเป็นแท็บใน shell ที่มี
+          // BottomNavigationBar: แป้นพิมพ์บัง nav ทั้งแถบ ถ้าไม่มีทางปิด
+          // ผู้ใช้ iOS (ไม่มีปุ่มซ่อนแป้นพิมพ์) จะออกจากแท็บแชทไม่ได้เลย
+          // ต้องมีคู่กับ keyboardDismissBehavior ด้านล่าง เพราะตอนยังไม่มี
+          // ข้อความจะไม่มี ListView ให้ลาก
+          //
+          // ปุ่มใน bubble (แตะรูป / แตะอัปเดตสถานะแจ้งซ่อม) อยู่ลึกกว่าจึงชนะ
+          // gesture arena ตามปกติ ไม่ถูกกลืน
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () => FocusScope.of(context).unfocus(),
+            child: widget.messages.isEmpty
+                ? Center(
+                    child: Text(
+                      'ยังไม่มีข้อความ เริ่มพูดคุยได้เลย',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  )
+                : Scrollbar(
+                    controller: _scrollController,
+                    thumbVisibility: true,
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+                      reverse: true,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemCount: widget.messages.length +
+                          (widget.hasMoreMessages ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        // Reverse:true renders the last index at the very top of
+                        // the screen — the correct spot for a "loading older" cue.
+                        if (index == widget.messages.length) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: widget.isLoadingMore
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                          );
+                        }
+                        final message =
+                            widget.messages.reversed.toList()[index];
+                        return _buildChatBubble(context, message);
+                      },
+                    ),
                   ),
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
-                  reverse: true,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  itemCount:
-                      widget.messages.length + (widget.hasMoreMessages ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    // Reverse:true renders the last index at the very top of
-                    // the screen — the correct spot for a "loading older" cue.
-                    if (index == widget.messages.length) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: Center(
-                          child: widget.isLoadingMore
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                      );
-                    }
-                    final message = widget.messages.reversed.toList()[index];
-                    return _buildChatBubble(context, message);
-                  },
-                ),
-        ),
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: _buildInputBar(),
-        ),
-      ],
+          ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _buildInputBar(),
+          ),
+        ],
       ),
     );
   }
@@ -393,8 +398,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                   )
                 : canOpenInvoice
                     ? GestureDetector(
-                        onTap: () =>
-                            widget.onOpenInvoice!(invoiceOfMessage),
+                        onTap: () => widget.onOpenInvoice!(invoiceOfMessage),
                         child: bubble,
                       )
                     : bubble,
@@ -484,8 +488,7 @@ class _ChatConversationViewState extends State<ChatConversationView> {
               Icon(
                 isCancelled ? Icons.cancel : Icons.check_circle,
                 size: 16,
-                color:
-                    isCancelled ? AppColors.destructive : AppColors.success,
+                color: isCancelled ? AppColors.destructive : AppColors.success,
               ),
               const SizedBox(width: 8),
               Expanded(
