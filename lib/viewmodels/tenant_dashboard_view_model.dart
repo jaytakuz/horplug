@@ -143,7 +143,6 @@ class TenantDashboardViewModel extends ChangeNotifier
   String? billErrorMessage;
   String? usageErrorMessage;
   String? maintenanceErrorMessage;
-  String? chatErrorMessage;
 
   Invoice? currentBill;
 
@@ -157,7 +156,6 @@ class TenantDashboardViewModel extends ChangeNotifier
   UtilityTrend? electricityTrend;
 
   List<MaintenanceRequest> openRequests = [];
-  ChatMessage? latestMessage;
 
   /// กำลังส่งคำขอแจ้งซ่อม/ทำความสะอาดจากปุ่มทางลัด
   bool isSubmittingRequest = false;
@@ -179,12 +177,10 @@ class TenantDashboardViewModel extends ChangeNotifier
     billErrorMessage = null;
     usageErrorMessage = null;
     maintenanceErrorMessage = null;
-    chatErrorMessage = null;
 
     await Future.wait([
       _loadBillAndUsage(),
       _loadMaintenance(),
-      _loadChat(),
     ]);
   }
 
@@ -235,20 +231,6 @@ class TenantDashboardViewModel extends ChangeNotifier
           .toList();
     } catch (error) {
       maintenanceErrorMessage = formatErrorMessage(error);
-    }
-  }
-
-  /// ดึงเฉพาะข้อความล่าสุด — จำนวนที่ยังไม่อ่านมาจาก TenantShellViewModel
-  /// ตัวเดียวทั้งหน้าจอ ไม่งั้น badge บน nav กับตัวเลขบนแดชบอร์ดจะไม่ตรงกัน
-  Future<void> _loadChat() async {
-    try {
-      latestMessage = await _service.fetchLatestMessage(
-        roomId: roomId!,
-        ownerName: 'เจ้าของหอ',
-        tenantName: tenantName,
-      );
-    } catch (error) {
-      chatErrorMessage = formatErrorMessage(error);
     }
   }
 
