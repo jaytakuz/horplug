@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../services/supabase_service.dart';
@@ -15,6 +17,26 @@ class TenantShellViewModel extends ChangeNotifier with SafeNotifier {
   final SupabaseService _service;
 
   int unreadMessageCount = 0;
+
+  StreamSubscription<void>? _messageSignalSubscription;
+
+  /// ฟังสัญญาณข้อความใหม่ตลอดที่แอปเปิดอยู่ (TenantShellViewModel มีชีวิต
+  /// เดียวคลุมทุกแท็บผ่าน IndexedStack) badge จึงขึ้นสดแม้ผู้เช่ากำลังอยู่
+  /// แท็บอื่นที่ไม่ใช่แชท ไม่ต้องรอสลับแท็บถึงจะเห็นว่ามีข้อความเข้ามา
+  void startListeningForNewMessages() {
+    if (roomId == null || tenantId == null) return;
+    _messageSignalSubscription?.cancel();
+    _messageSignalSubscription =
+        _service.watchLatestMessageSignal().listen((_) {
+      refreshUnreadCount();
+    });
+  }
+
+  @override
+  void dispose() {
+    _messageSignalSubscription?.cancel();
+    super.dispose();
+  }
 
   Future<void> refreshUnreadCount() async {
     final room = roomId;

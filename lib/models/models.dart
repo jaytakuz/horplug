@@ -323,9 +323,13 @@ class InvoiceDraft {
   final double electricityCost;
   final double waterCost;
 
-  /// รายการ "ทุกเดือน" ที่คัดลอกมาจากบิลงวดก่อนหน้าของห้องนี้ — ตัวตั้งต้น
-  /// ของบิลใหม่ ยังไม่ถูกเขียนลง invoice_extra_fees จนกว่าจะออกบิลจริง
-  /// (ดู InvoiceService._carryForwardExtraFeesBestEffort)
+  /// รายการค่าใช้จ่ายเพิ่มเติมของร่างบิลนี้ ก่อนถูกเขียนลง invoice_extra_fees
+  /// จริงตอนออกบิล (ดู InvoiceService.carryForwardExtraFeesForIssued) — มา
+  /// จากสองทาง: (1) รายการ "ทุกเดือน" ที่คัดลอกมาจากบิลงวดก่อนหน้าของห้องนี้
+  /// โดยอัตโนมัติ (isRecurring เป็น true เสมอ) และ (2) รายการที่เจ้าของหอ
+  /// พิมพ์เพิ่มเองในกล่องออกบิล ก่อนกดยืนยัน (ดู
+  /// InvoiceIssueViewModel.addExtraFeeToDraft — ครั้งนี้เท่านั้นหรือทุกเดือน
+  /// ก็ได้) แต่ละแถวเก็บ isRecurring ของตัวเอง ไม่ได้เป็น true ทั้งหมด
   final List<ExtraFee> carriedExtraFees;
   final SkipReason? skipReason;
 
@@ -351,6 +355,21 @@ class InvoiceDraft {
       electricityCost +
       waterCost +
       carriedExtraFees.fold(0.0, (sum, fee) => sum + fee.amount);
+
+  InvoiceDraft copyWith({List<ExtraFee>? carriedExtraFees}) => InvoiceDraft(
+        roomDbId: roomDbId,
+        roomNumber: roomNumber,
+        tenantId: tenantId,
+        tenantName: tenantName,
+        billingMonth: billingMonth,
+        billingYear: billingYear,
+        roomPrice: roomPrice,
+        electricityUnits: electricityUnits,
+        electricityCost: electricityCost,
+        waterCost: waterCost,
+        carriedExtraFees: carriedExtraFees ?? this.carriedExtraFees,
+        skipReason: skipReason,
+      );
 }
 
 enum UtilityType { electricity, water }

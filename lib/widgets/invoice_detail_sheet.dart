@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
@@ -578,21 +579,31 @@ class _AddExtraFeeCardState extends State<_AddExtraFeeCard> {
                 flex: 2,
                 child: TextField(
                   controller: _nameController,
+                  style: const TextStyle(fontSize: 13),
                   decoration: const InputDecoration(
                     isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     hintText: 'ชื่อรายการ เช่น ค่าปรับ',
                     border: OutlineInputBorder(),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              Expanded(
+              SizedBox(
+                width: 90,
                 child: TextField(
                   controller: _amountController,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                  style: const TextStyle(fontSize: 13),
                   decoration: const InputDecoration(
                     isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     prefixText: '฿ ',
                     hintText: '0',
                     border: OutlineInputBorder(),
@@ -606,6 +617,12 @@ class _AddExtraFeeCardState extends State<_AddExtraFeeCard> {
             children: [
               Expanded(
                 child: SegmentedButton<bool>(
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    textStyle: const TextStyle(fontSize: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                  ),
                   segments: const [
                     ButtonSegment(
                         value: false, label: Text('ครั้งนี้เท่านั้น')),

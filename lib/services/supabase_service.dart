@@ -603,6 +603,19 @@ class SupabaseService {
         });
   }
 
+  /// สตรีมสัญญาณเมื่อมีการเปลี่ยนแปลงในตาราง messages (ข้อความใหม่จากฝั่งไหน
+  /// ก็ได้) ไม่ใช้เนื้อหาแถวที่ได้แสดงผลตรงๆ แค่ใช้จับจังหวะกระตุ้นให้ผู้เรียก
+  /// ไปดึงจำนวน/รายการที่ถูกกรองสิทธิ์แล้วมาอีกที — แก้ปัญหา badge ข้อความ
+  /// ยังไม่อ่านค้างจนกว่าจะสลับแท็บหรือดึงรีเฟรชเอง
+  Stream<void> watchLatestMessageSignal() {
+    return client
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .limit(1)
+        .map((_) {});
+  }
+
   /// อัปโหลดรูปภาพไปยัง Storage bucket ส่วนตัว คืนค่าเป็น storage path
   /// (ไม่ใช่ URL) — path นี้จะถูกเก็บใน messages.attachment_url แล้วแปลงเป็น
   /// signed URL ตอนอ่านข้อความ เพราะ bucket เป็น private

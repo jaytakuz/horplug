@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
@@ -205,23 +206,178 @@ class _IssueInvoicesDialog extends StatelessWidget {
   }
 }
 
-class _DraftRow extends StatelessWidget {
+/// แถวร่างบิลของห้องหนึ่ง — เพิ่ม/ลบค่าใช้จ่ายเพิ่มเติมก่อนออกบิลได้ในตัว
+/// ต่างจาก [ExtraFee] ที่เติมได้จากแผ่นรายละเอียดบิล (หลังออกแล้วเท่านั้น):
+/// ที่นี่ยังไม่มีบิลจริงให้ผูก การเพิ่ม/ลบจึงแก้แค่ InvoiceDraft ในหน่วยความจำ
+/// ผ่าน [InvoiceIssueViewModel.addExtraFeeToDraft]/[removeExtraFeeFromDraft]
+/// ไม่แตะเครือข่ายจนกว่าจะกดออกบิลจริง
+class _DraftRow extends StatefulWidget {
   const _DraftRow({required this.draft});
   final InvoiceDraft draft;
 
   @override
+  State<_DraftRow> createState() => _DraftRowState();
+}
+
+class _DraftRowState extends State<_DraftRow> {
+  bool _isAdding = false;
+  bool _isRecurring = false;
+  final _nameController = TextEditingController();
+  final _amountController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    final amount = double.tryParse(_amountController.text.trim());
+    if (name.isEmpty || amount == null || amount <= 0) return;
+
+    context.read<InvoiceIssueViewModel>().addExtraFeeToDraft(
+          widget.draft,
+          name: name,
+          amount: amount,
+          isRecurring: _isRecurring,
+        );
+    _nameController.clear();
+    _amountController.clear();
+    setState(() {
+      _isRecurring = false;
+      _isAdding = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final draft = widget.draft;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 48, child: Text(draft.roomNumber)),
-          Expanded(
-            child: Text(draft.tenantName,
-                maxLines: 1, overflow: TextOverflow.ellipsis),
+          Row(
+            children: [
+              SizedBox(width: 48, child: Text(draft.roomNumber)),
+              Expanded(
+                child: Text(draft.tenantName,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              Text(formatBaht(draft.total),
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              IconButton(
+                icon: Icon(_isAdding ? Icons.close : Icons.add_circle_outline,
+                    size: 18),
+                visualDensity: VisualDensity.compact,
+                tooltip: 'เพิ่มค่าใช้จ่ายเพิ่มเติม',
+                onPressed: () => setState(() => _isAdding = !_isAdding),
+              ),
+            ],
           ),
-          Text(formatBaht(draft.total),
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+          for (final fee in draft.carriedExtraFees)
+            Padding(
+              padding: const EdgeInsets.only(left: 48, bottom: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${fee.name} (${fee.isRecurring ? 'ทุกเดือน' : 'ครั้งนี้เท่านั้น'})',
+                      style: Theme.of(context).textTheme.bodySmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(formatBaht(fee.amount),
+                      style: Theme.of(context).textTheme.bodySmall),
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline,
+                        size: 16, color: AppColors.destructive),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'ลบรายการ',
+                    onPressed: () => context
+                        .read<InvoiceIssueViewModel>()
+                        .removeExtraFeeFromDraft(draft, fee),
+                  ),
+                ],
+              ),
+            ),
+          if (_isAdding)
+            Padding(
+              padding: const EdgeInsets.only(left: 48, top: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: _nameController,
+                          autofocus: true,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 8),
+                            hintText: 'ชื่อรายการ',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        width: 90,
+                        child: TextField(
+                          controller: _amountController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.]')),
+                          ],
+                          style: const TextStyle(fontSize: 13),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 8),
+                            prefixText: '฿',
+                            hintText: '0',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.check,
+                            color: AppColors.success, size: 20),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'เพิ่มรายการ',
+                        onPressed: _submit,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  SegmentedButton<bool>(
+                    showSelectedIcon: false,
+                    style: SegmentedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      textStyle: const TextStyle(fontSize: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                    segments: const [
+                      ButtonSegment(
+                          value: false, label: Text('ครั้งนี้เท่านั้น')),
+                      ButtonSegment(value: true, label: Text('ทุกเดือน')),
+                    ],
+                    selected: {_isRecurring},
+                    onSelectionChanged: (selected) =>
+                        setState(() => _isRecurring = selected.first),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

@@ -431,7 +431,12 @@ class InvoiceService {
           'invoice_id': invoice.dbId,
           'name': fee.name,
           'amount': fee.amount,
-          'is_recurring': true,
+          // ไม่ใช่ true เสมอไป — เดิมใช่ เพราะ carriedExtraFees เคยมีแต่รายการ
+          // ที่คัดลอกมาจากบิลก่อนหน้า (เป็นทุกเดือนโดยนิยาม) แต่ตอนนี้เจ้าของหอ
+          // เพิ่มรายการครั้งนี้เท่านั้นเข้ามาในลิสต์เดียวกันได้ก่อนกดออกบิลด้วย
+          // (ดู InvoiceIssueViewModel.addExtraFeeToDraft) ต้องใช้ค่าจริงของ
+          // แต่ละแถว ไม่ใช่ตั้งเป็น true ทั้งหมด
+          'is_recurring': fee.isRecurring,
         });
       }
     }

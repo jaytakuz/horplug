@@ -87,6 +87,67 @@ class InvoiceIssueViewModel extends ChangeNotifier with SafeNotifier {
     }
   }
 
+  int _nextLocalFeeId = -1;
+
+  /// เพิ่มค่าใช้จ่ายเพิ่มเติมให้ร่างบิลของห้องหนึ่ง ก่อนกดออกบิลจริง —
+  /// ยังไม่แตะเครือข่ายเลย แค่แก้ [preview] ในหน่วยความจำ รายการนี้จะถูกเขียน
+  /// ลง invoice_extra_fees จริงพร้อมกับตอนออกบิล (ผ่าน
+  /// InvoiceService.carryForwardExtraFeesForIssued ซึ่งใช้ isRecurring ของ
+  /// แต่ละแถวตามจริง ไม่ได้ตั้งเป็นทุกเดือนทั้งหมด)
+  ///
+  /// id เป็นเลขติดลบไล่ลง — ไม่ใช่ id จริงจากฐานข้อมูล (ยังไม่มีบิลให้ผูก)
+  /// ใช้แค่แยกแต่ละแถวในลิสต์นี้ออกจากกันเพื่อให้กดลบรายการที่ถูกต้องได้
+  void addExtraFeeToDraft(
+    InvoiceDraft draft, {
+    required String name,
+    required double amount,
+    required bool isRecurring,
+  }) {
+    final currentPreview = preview;
+    if (currentPreview == null) return;
+
+    final fee = ExtraFee(
+      id: _nextLocalFeeId--,
+      invoiceId: 0,
+      name: name,
+      amount: amount,
+      isRecurring: isRecurring,
+    );
+    final updatedDraft = draft.copyWith(
+      carriedExtraFees: [...draft.carriedExtraFees, fee],
+    );
+
+    preview = InvoicePreview(
+      drafts: [
+        for (final d in currentPreview.drafts)
+          d.roomDbId == draft.roomDbId ? updatedDraft : d,
+      ],
+      skipped: currentPreview.skipped,
+    );
+    notifyListeners();
+  }
+
+  /// ถอนรายการที่เพิ่งเพิ่มไว้ในร่าง (ก่อนออกบิล) ออก — คนละอย่างกับ
+  /// [InvoiceActionsViewModel.removeExtraFee] ซึ่งลบรายการที่ออกบิลไปแล้วจริง
+  void removeExtraFeeFromDraft(InvoiceDraft draft, ExtraFee fee) {
+    final currentPreview = preview;
+    if (currentPreview == null) return;
+
+    final updatedDraft = draft.copyWith(
+      carriedExtraFees:
+          draft.carriedExtraFees.where((f) => f.id != fee.id).toList(),
+    );
+
+    preview = InvoicePreview(
+      drafts: [
+        for (final d in currentPreview.drafts)
+          d.roomDbId == draft.roomDbId ? updatedDraft : d,
+      ],
+      skipped: currentPreview.skipped,
+    );
+    notifyListeners();
+  }
+
   Future<ActionResult> issue() async {
     final drafts = preview?.drafts ?? const [];
     if (drafts.isEmpty) {

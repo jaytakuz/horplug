@@ -29,7 +29,9 @@ class TenantShell extends StatelessWidget {
       create: (_) => TenantShellViewModel(
         roomId: profile?.roomId,
         tenantId: profile?.id,
-      )..refreshUnreadCount(),
+      )
+        ..refreshUnreadCount()
+        ..startListeningForNewMessages(),
       child: const _TenantShellView(),
     );
   }

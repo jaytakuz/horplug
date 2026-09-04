@@ -25,7 +25,9 @@ class ChatScreen extends StatelessWidget {
         dormitoryId: profile?.dormitoryId ?? 0,
         ownerId: profile?.id ?? '',
         ownerName: ownerName,
-      )..loadChatPreviews(),
+      )
+        ..loadChatPreviews()
+        ..startWatchingPreviews(),
       child: const _ChatView(),
     );
   }

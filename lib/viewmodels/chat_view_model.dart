@@ -75,6 +75,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
 
   int _messageLimit = _pageSize;
   StreamSubscription<List<ChatMessage>>? _messagesSubscription;
+  StreamSubscription<void>? _previewsSignalSubscription;
 
   Map<int, Invoice> invoicesById = {};
 
@@ -94,6 +95,18 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
       invoicesById = {};
     }
     notifyListeners();
+  }
+
+  /// ฟังสัญญาณข้อความใหม่ตลอดที่แท็บแชทยังมีชีวิตอยู่ (IndexedStack ไม่เคย
+  /// dispose แท็บนี้) แล้วโหลดรายการห้องใหม่ทันที ไม่ต้องรอผู้ใช้ดึงรีเฟรช —
+  /// ข้ามไปถ้ากำลังเปิดสนทนาห้องใดห้องหนึ่งอยู่ เพราะ badge/ข้อความล่าสุดของ
+  /// ห้องนั้นแสดงผ่าน _subscribeToMessages อยู่แล้ว ไม่ต้องโหลดซ้ำ
+  void startWatchingPreviews() {
+    _previewsSignalSubscription?.cancel();
+    _previewsSignalSubscription =
+        _service.watchLatestMessageSignal().listen((_) {
+      if (selectedChat == null) loadChatPreviews();
+    });
   }
 
   Future<void> loadChatPreviews() async {
@@ -272,6 +285,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
   @override
   void dispose() {
     _messagesSubscription?.cancel();
+    _previewsSignalSubscription?.cancel();
     super.dispose();
   }
 }

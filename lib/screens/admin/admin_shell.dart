@@ -25,7 +25,9 @@ class AdminShell extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => AdminShellViewModel(
         dormitoryId: dormitoryId,
-      )..refreshUnreadCount(),
+      )
+        ..refreshUnreadCount()
+        ..startListeningForNewMessages(),
       child: const _AdminShellView(),
     );
   }
