@@ -38,6 +38,63 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
 
   bool isBusy = false;
 
+  /// รายการค่าใช้จ่ายเพิ่มเติมของบิลใบนี้ — โหลดแยกจาก [invoice] เพราะบิล
+  /// ส่วนใหญ่ที่ถูกสร้างขึ้น (รายการในหน้าบิลทั้งเดือน, การ์ดในแชท, PDF) ไม่ต้อง
+  /// รู้รายการย่อยเลย รู้แค่ยอดรวม การดึงมาด้วยทุกครั้งจะเป็น query ซ้อนที่ไม่จำเป็น
+  List<ExtraFee> extraFees = [];
+  bool isLoadingExtraFees = false;
+
+  Future<void> loadExtraFees() async {
+    isLoadingExtraFees = true;
+    notifyListeners();
+    try {
+      extraFees = await _service.fetchExtraFees(invoiceId: invoice.dbId);
+    } catch (_) {
+      // เงียบไว้ — แผ่นยังใช้งานได้ต่อ แค่ส่วนค่าใช้จ่ายเพิ่มเติมว่างชั่วคราว
+    } finally {
+      isLoadingExtraFees = false;
+      notifyListeners();
+    }
+  }
+
+  /// ยอดรวมที่ควรแสดงระหว่างเปิดแผ่นนี้อยู่ — [invoice.total] เป็นค่า ณ ตอนเปิด
+  /// แผ่น เก่าไปทันทีที่มีการเพิ่ม/ลบค่าใช้จ่ายเพิ่มเติมในเซสชันนี้ (ViewModel
+  /// นี้ไม่รีเฟรช [invoice] เอง — ผู้เรียกโหลดบิลใหม่หลังแผ่นปิดตามแบบเดิม)
+  double get liveTotal =>
+      invoice.roomPrice +
+      invoice.electricityCost +
+      invoice.waterCost +
+      extraFees.fold(0.0, (sum, fee) => sum + fee.amount);
+
+  Future<ActionResult> addExtraFee({
+    required String name,
+    required double amount,
+    required bool isRecurring,
+  }) async {
+    final result = await _run(
+      () => _service.addExtraFee(
+        invoiceId: invoice.dbId,
+        name: name,
+        amount: amount,
+        isRecurring: isRecurring,
+      ),
+      onSuccess: 'เพิ่มรายการ "$name" แล้ว',
+      onFailure: 'เพิ่มรายการไม่สำเร็จ',
+    );
+    if (result.success) await loadExtraFees();
+    return result;
+  }
+
+  Future<ActionResult> removeExtraFee(ExtraFee fee) async {
+    final result = await _run(
+      () => _service.removeExtraFee(extraFeeId: fee.id),
+      onSuccess: 'ลบรายการ "${fee.name}" แล้ว',
+      onFailure: 'ลบรายการไม่สำเร็จ',
+    );
+    if (result.success) await loadExtraFees();
+    return result;
+  }
+
   /// URL สลิปที่เซ็นแล้ว — สร้างใหม่ทุกครั้งที่เรียก ไม่ cache ข้าม session
   Future<String> slipUrl() => _service.signedSlipUrl(invoice.slipUrl!);
 

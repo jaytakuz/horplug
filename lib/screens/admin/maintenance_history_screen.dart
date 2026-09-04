@@ -136,8 +136,6 @@ class _MaintenanceHistoryView extends StatelessWidget {
                 request: request,
                 readOnly: readOnly,
                 isUpdating: viewModel.isUpdating,
-                onEditCleaningFee: (fee) =>
-                    viewModel.updateCleaningFee(request, fee),
                 onUpdateStatus: (status) =>
                     viewModel.updateStatus(request, status),
               ),

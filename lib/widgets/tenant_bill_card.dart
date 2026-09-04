@@ -71,8 +71,8 @@ class TenantBillCard extends StatelessWidget {
             amount: bill.electricityCost,
           ),
           _LineItem(label: '💧 ค่าน้ำ', amount: bill.waterCost),
-          if (bill.cleaningFee > 0)
-            _LineItem(label: '🧹 ค่าทำความสะอาด', amount: bill.cleaningFee),
+          if (bill.extraFeesTotal > 0)
+            _LineItem(label: '➕ ค่าใช้จ่ายเพิ่มเติม', amount: bill.extraFeesTotal),
           const Divider(height: 24),
           // ข้อมูลทั้งหมดก่อน แล้วปุ่มไว้ท้ายสุด — เดิมปุ่มอยู่ระหว่างยอดรวมกับ
           // วันครบกำหนด ผู้เช่าจึงเจอปุ่มให้กดก่อนจะอ่านครบว่าต้องจ่ายเมื่อไหร่

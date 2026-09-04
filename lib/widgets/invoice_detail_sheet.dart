@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import '../services/invoice_service.dart';
 import '../viewmodels/auth_view_model.dart' show AuthScope;
 import '../viewmodels/invoice_actions_view_model.dart';
 import '../viewmodels/tenant_dashboard_view_model.dart'
@@ -17,12 +18,17 @@ import 'slip_review_sheet.dart';
 /// แชท ไม่ผูกกับ ViewModel ตัวใดตัวหนึ่งโดยเฉพาะ [dormitoryId] ต้องส่งมาเพราะ
 /// การออกใบแทน (reissueInvoice) ต้องรู้ว่าจะประกอบร่างบิลจากหอไหน
 ///
+/// [service] มีไว้ให้เทสต์ฉีด fake เข้ามาแทน `InvoiceService()` จริง — ผู้เรียก
+/// ปกติไม่ต้องส่งมา (เหมือน [InvoiceActionsViewModel] เองที่รับ service?
+/// เป็น optional อยู่แล้ว)
+///
 /// คืน true เมื่อสถานะบิลถูกเปลี่ยนระหว่างเปิดแผ่นนี้ (ผ่านแผ่นตรวจสลิปหรือ
 /// การยกเลิกบิลที่เปิดต่อ) เพื่อให้หน้าที่เรียกรีเฟรชรายการของตัวเอง
 Future<bool> showInvoiceDetailSheet(
   BuildContext context, {
   required Invoice invoice,
   required int dormitoryId,
+  InvoiceService? service,
 }) async {
   final result = await showModalBottomSheet<bool>(
     context: context,
@@ -32,7 +38,8 @@ Future<bool> showInvoiceDetailSheet(
       create: (_) => InvoiceActionsViewModel(
         invoice: invoice,
         dormitoryId: dormitoryId,
-      ),
+        service: service,
+      )..loadExtraFees(),
       child: const _InvoiceDetailSheet(),
     ),
   );
@@ -110,7 +117,8 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
 
     final method = await showDialog<PaymentMethod>(
       context: context,
-      builder: (_) => _MarkPaidDialog(invoice: actions.invoice),
+      builder: (_) =>
+          _MarkPaidDialog(invoice: actions.invoice, total: actions.liveTotal),
     );
     if (method == null || !mounted) return;
 
@@ -137,7 +145,7 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('ยืนยันรับเงินสด'),
         content: Text(
-          'ได้รับเงินสด ${formatBaht(actions.invoice.total)} '
+          'ได้รับเงินสด ${formatBaht(actions.liveTotal)} '
           'จาก ${actions.invoice.tenantName} แล้วใช่ไหม\n\n'
           'บิลจะเปลี่ยนเป็น "ชำระแล้ว" ทันที และย้อนกลับไม่ได้',
         ),
@@ -277,10 +285,31 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
                       '${formatBaht(invoice.electricityCost)} (${formatUnits(invoice.electricityUnits)} หน่วย)',
                 ),
                 InfoRow(label: 'ค่าน้ำ', value: formatBaht(invoice.waterCost)),
-                InfoRow(
-                  label: 'ค่าทำความสะอาด',
-                  value: formatBaht(invoice.cleaningFee),
-                ),
+                const SizedBox(height: 4),
+                Text('ค่าใช้จ่ายเพิ่มเติม',
+                    style: Theme.of(context).textTheme.labelSmall),
+                const SizedBox(height: 8),
+                if (actions.isLoadingExtraFees)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Center(
+                        child: SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))),
+                  )
+                else
+                  for (final fee in actions.extraFees)
+                    _ExtraFeeRow(
+                      fee: fee,
+                      onRemove: invoice.status == InvoiceStatus.unpaid &&
+                              !actions.isBusy
+                          ? () => actions.removeExtraFee(fee)
+                          : null,
+                    ),
+                if (invoice.status == InvoiceStatus.unpaid) ...[
+                  const SizedBox(height: 4),
+                  const _AddExtraFeeCard(),
+                ],
                 const Divider(height: 24),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -288,7 +317,7 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
                     Text('ยอดรวมสุทธิ',
                         style: Theme.of(context).textTheme.titleMedium),
                     Text(
-                      formatBaht(invoice.total),
+                      formatBaht(actions.liveTotal),
                       style: Theme.of(context)
                           .textTheme
                           .titleLarge
@@ -419,6 +448,194 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
   }
 }
 
+/// แถวเดียวของรายการ "ค่าใช้จ่ายเพิ่มเติม" — ชื่อ, ป้ายบอกประเภท, จำนวนเงิน,
+/// ปุ่มลบ (ซ่อนเมื่อ [onRemove] เป็น null — บิลที่ไม่ใช่ ค้างชำระ แก้ไม่ได้แล้ว)
+class _ExtraFeeRow extends StatelessWidget {
+  const _ExtraFeeRow({required this.fee, required this.onRemove});
+
+  final ExtraFee fee;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.muted,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    fee.name,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  StatusBadge(
+                    label: fee.isRecurring ? 'ทุกเดือน' : 'ครั้งนี้เท่านั้น',
+                    variant: fee.isRecurring
+                        ? BadgeVariant.primary
+                        : BadgeVariant.info,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              formatBaht(fee.amount),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.primary, fontWeight: FontWeight.w600),
+            ),
+            if (onRemove != null)
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline,
+                    color: AppColors.destructive, size: 20),
+                onPressed: onRemove,
+                tooltip: 'ลบรายการ',
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// การ์ดเพิ่มรายการค่าใช้จ่ายเพิ่มเติมใหม่ — ชื่อ + จำนวนเงิน + เลือกว่าครั้งนี้
+/// เท่านั้นหรือทุกเดือน แล้วกด + เพื่อเพิ่ม เป็นเจ้าของ TextEditingController
+/// เองเหมือน _CleaningFeeDialog เดิม
+class _AddExtraFeeCard extends StatefulWidget {
+  const _AddExtraFeeCard();
+
+  @override
+  State<_AddExtraFeeCard> createState() => _AddExtraFeeCardState();
+}
+
+class _AddExtraFeeCardState extends State<_AddExtraFeeCard> {
+  final _nameController = TextEditingController();
+  final _amountController = TextEditingController();
+  bool _isRecurring = false;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _nameController.text.trim();
+    final amount = double.tryParse(_amountController.text.trim());
+    if (name.isEmpty || amount == null || amount <= 0 || _isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+
+    final actions = context.read<InvoiceActionsViewModel>();
+    final result = await actions.addExtraFee(
+      name: name,
+      amount: amount,
+      isRecurring: _isRecurring,
+    );
+
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (result.success) {
+      _nameController.clear();
+      _amountController.clear();
+      setState(() => _isRecurring = false);
+    } else {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(result.message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    hintText: 'ชื่อรายการ เช่น ค่าปรับ',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _amountController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    prefixText: '฿ ',
+                    hintText: '0',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                        value: false, label: Text('ครั้งนี้เท่านั้น')),
+                    ButtonSegment(value: true, label: Text('ทุกเดือน')),
+                  ],
+                  selected: {_isRecurring},
+                  onSelectionChanged: (selected) =>
+                      setState(() => _isRecurring = selected.first),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                onPressed: _isSubmitting ? null : _submit,
+                icon: _isSubmitting
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.add),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// ลำดับยกเลิกบิล: กล่องเหตุผล (บังคับ) → ยกเลิก → ถามแยกว่าจะออกใบแทนไหม
 ///
 /// ใช้ร่วมกันทั้งปุ่ม "ยกเลิกบิล" ในแผ่นรายละเอียดและเมนู ⋮ บนการ์ดบิลใน
@@ -432,9 +649,13 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
 /// เป็น StatefulWidget เพื่อให้ตัวเลือกที่กดค้างอยู่ในตัวมันเอง ไม่ต้องยก state
 /// ขึ้นไปไว้ที่แผ่นรายละเอียดซึ่งไม่ได้ใช้ค่านี้ต่อหลังกล่องปิด
 class _MarkPaidDialog extends StatefulWidget {
-  const _MarkPaidDialog({required this.invoice});
+  const _MarkPaidDialog({required this.invoice, required this.total});
 
   final Invoice invoice;
+
+  /// ยอดรวมสด ณ ตอนเปิดกล่อง — ไม่ใช่ [Invoice.total] เพราะอาจมีค่าใช้จ่าย
+  /// เพิ่มเติมที่เพิ่ง/ยังไม่ถูกเขียนลงบิลใบนี้ระหว่างเปิดแผ่นอยู่
+  final double total;
 
   @override
   State<_MarkPaidDialog> createState() => _MarkPaidDialogState();
@@ -456,7 +677,7 @@ class _MarkPaidDialogState extends State<_MarkPaidDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'ได้รับเงิน ${formatBaht(widget.invoice.total)} '
+            'ได้รับเงิน ${formatBaht(widget.total)} '
             'จาก ${widget.invoice.tenantName} แล้วใช่ไหม\n\n'
             'บิลจะเปลี่ยนเป็น "ชำระแล้ว" ทันทีโดยไม่ต้องรอผู้เช่าแจ้ง '
             'และย้อนกลับไม่ได้',

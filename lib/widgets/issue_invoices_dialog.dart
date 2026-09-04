@@ -114,14 +114,27 @@ class _IssueInvoicesDialog extends StatelessWidget {
               : () => Navigator.pop(context, viewModel.hasIssued),
           child: Text(viewModel.hasIssued ? 'ปิด' : 'ยกเลิก'),
         ),
-        // บิลออกไปแล้วแต่การ์ดในแชทยังไม่ได้โพสต์ — ปุ่มเปลี่ยนหน้าที่ไปเป็นการ
-        // ส่งซ้ำ เพราะการออกบิลไม่มีอะไรให้ทำอีกแล้ว
+        // บิลออกไปแล้วแต่มีบางขั้นหลังจากนั้นยังไม่สำเร็จ — ปุ่มเปลี่ยนหน้าที่
+        // ไปเป็นการลองซ้ำเฉพาะขั้นที่ค้าง เพราะการออกบิลไม่มีอะไรให้ทำอีกแล้ว
+        // (แจ้งเตือนในแชทมาก่อน เพราะเป็นสิ่งที่ผู้เช่าเห็นได้เร็วที่สุด)
         if (viewModel.unnotified.isNotEmpty)
           PrimaryButton(
             label: 'ส่งแจ้งเตือนอีกครั้ง',
             isLoading: viewModel.isIssuing,
             onPressed: () async {
               final result = await viewModel.retryNotices();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(result.message)));
+              if (result.success) Navigator.pop(context, true);
+            },
+          )
+        else if (viewModel.extraFeesCarryForwardFailed.isNotEmpty)
+          PrimaryButton(
+            label: 'คัดลอกค่าใช้จ่ายเพิ่มเติมอีกครั้ง',
+            isLoading: viewModel.isIssuing,
+            onPressed: () async {
+              final result = await viewModel.retryExtraFeesCarryForward();
               if (!context.mounted) return;
               ScaffoldMessenger.of(context)
                   .showSnackBar(SnackBar(content: Text(result.message)));
@@ -160,19 +173,31 @@ class _IssueInvoicesDialog extends StatelessWidget {
           ...preview.drafts.map((draft) => _DraftRow(draft: draft)),
           if (preview.skipped.isNotEmpty) ...[
             const Divider(height: 24),
-            Row(
-              children: [
-                const Icon(Icons.warning_amber_rounded,
-                    size: 16, color: AppColors.warning),
-                const SizedBox(width: 6),
-                Text('ข้าม ${preview.skipped.length} ห้อง',
-                    style: Theme.of(context).textTheme.titleSmall),
-              ],
+            // เดิมแสดงทุกห้องที่ข้ามเต็มๆ เสมอ ยาวจนต้องเลื่อนอ่านเหตุผลของ
+            // ห้องที่ออกบิลได้ไม่เจอ — ยุบไว้เป็นค่าเริ่มต้น (initiallyExpanded
+            // false) ต้องเห็นเหตุผลได้ถ้าอยากดูจริงๆ แต่ไม่บังคับดูทุกครั้ง
+            Theme(
+              data: Theme.of(context)
+                  .copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                title: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded,
+                        size: 16, color: AppColors.warning),
+                    const SizedBox(width: 6),
+                    Text('ข้าม ${preview.skipped.length} ห้อง',
+                        style: Theme.of(context).textTheme.titleSmall),
+                  ],
+                ),
+                children: [
+                  // ต้องเห็นเหตุผลทุกห้องเมื่อขยายดู ถ้าเงียบไปเจ้าของหอจะไม่รู้
+                  // ว่าลืมจดมิเตอร์ จนกระทั่งผู้เช่าทักมาถามว่าทำไมไม่ได้บิล
+                  ...preview.skipped.map((draft) => _SkippedRow(draft: draft)),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            // ต้องเห็นเหตุผลทุกห้อง ถ้าเงียบไปเจ้าของหอจะไม่รู้ว่าลืมจดมิเตอร์
-            // จนกระทั่งผู้เช่าทักมาถามว่าทำไมไม่ได้บิล
-            ...preview.skipped.map((draft) => _SkippedRow(draft: draft)),
           ],
         ],
       ),

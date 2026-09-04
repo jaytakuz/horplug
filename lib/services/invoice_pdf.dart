@@ -85,8 +85,8 @@ Future<Uint8List> buildInvoicePdf({
               _amount('ค่าไฟ ${formatUnits(invoice.electricityUnits)} หน่วย',
                   invoice.electricityCost),
               _amount('ค่าน้ำ', invoice.waterCost),
-              if (invoice.cleaningFee > 0)
-                _amount('ค่าทำความสะอาด', invoice.cleaningFee),
+              if (invoice.extraFeesTotal > 0)
+                _amount('ค่าใช้จ่ายเพิ่มเติม', invoice.extraFeesTotal),
               pw.Divider(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,

@@ -970,17 +970,6 @@ class SupabaseService {
     );
   }
 
-  /// กำหนดค่าบริการทำความสะอาด (เฉพาะคำขอประเภท Cleaning) — ยอดนี้จะถูกรวม
-  /// เข้าร่างบิลของห้องในเดือนที่คำขอนี้ "เสร็จสิ้น" ผ่าน
-  /// InvoiceService.previewDrafts
-  Future<void> updateCleaningFee({
-    required int requestId,
-    required double fee,
-  }) async {
-    await client
-        .from('maintenance_requests')
-        .update({'cleaning_fee': fee}).eq('id', requestId);
-  }
 
   /// ห้องที่มีแจ้งซ่อมค้างอยู่ (รอดำเนินการ/กำลังดำเนินการ) จะถูกตั้งเป็น
   /// 'maintenance' อัตโนมัติ และกลับเป็น 'occupied' เมื่อเสร็จสิ้น — แต่จะกลับ

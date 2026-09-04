@@ -319,12 +319,14 @@ class _ChatViewState extends State<_ChatView> {
                     requestType: requestType),
             invoicesById: viewModel.invoicesById,
             onOpenInvoice: (invoice) async {
-              final changed = await showInvoiceDetailSheet(
+              await showInvoiceDetailSheet(
                 context,
                 invoice: invoice,
                 dormitoryId: viewModel.dormitoryId,
               );
-              if (changed) await viewModel.refreshInvoices();
+              // เหตุผลเดียวกับ billing_screen.dart — เพิ่ม/ลบค่าใช้จ่าย
+              // เพิ่มเติมไม่ทำให้แผ่นคืน true แต่การ์ดบิลในแชทต้องอัปเดตยอด
+              await viewModel.refreshInvoices();
             },
           ),
         ),

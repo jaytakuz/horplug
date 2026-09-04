@@ -128,26 +128,4 @@ class MaintenanceViewModel extends ChangeNotifier with RefreshableViewModel {
       notifyListeners();
     }
   }
-
-  Future<ActionResult> updateCleaningFee(
-      MaintenanceRequest request, double fee) async {
-    if (isUpdating) return const ActionResult(success: true, message: '');
-
-    isUpdating = true;
-    notifyListeners();
-
-    try {
-      await _service.updateCleaningFee(requestId: request.id, fee: fee);
-      await loadRequests();
-      return const ActionResult(success: true, message: '');
-    } catch (error) {
-      return ActionResult(
-        success: false,
-        message: 'บันทึกค่าทำความสะอาดไม่สำเร็จ: ${formatErrorMessage(error)}',
-      );
-    } finally {
-      isUpdating = false;
-      notifyListeners();
-    }
-  }
 }
