@@ -29,9 +29,10 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
   final SupabaseService _service;
   final InvoiceService _invoiceService;
 
-  /// เรียกตอนออกจากห้องที่เพิ่งอ่าน — ใช้ให้ AdminShellViewModel (เจ้าของ
-  /// badge บนแท็บแชท) รีเฟรชจำนวนของตัวเอง เพราะเป็นคนละ ViewModel กับตัวนี้
-  /// และไม่ได้ฟังการเปลี่ยนแปลงของตาราง message_reads ที่ markRoomRead เขียน
+  /// เรียกทันทีที่ mark ห้องว่าอ่านแล้วสำเร็จตอนเปิดห้อง (ไม่ใช่ตอนปิด) —
+  /// ใช้ให้ AdminShellViewModel (เจ้าของ badge บนแท็บแชท) รีเฟรชจำนวนของตัวเอง
+  /// เพราะเป็นคนละ ViewModel กับตัวนี้ และไม่ได้ฟังการเปลี่ยนแปลงของตาราง
+  /// message_reads ที่ markRoomRead เขียน
   final VoidCallback? onRoomRead;
 
   static const String allFloors = 'ทั้งหมด';
@@ -141,8 +142,11 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     _subscribeToMessages(chat.roomDbId, chat.tenantName);
     // ไม่ await เพราะไม่ควรหน่วงการเปิดแชท แต่ต้องกลืน error เอง ไม่งั้น
     // ถ้า upsert ล้ม (ออฟไลน์ / RLS) จะกลายเป็น unhandled async exception
+    // badge บนแท็บแชทต้องหายทันทีที่เปิดห้องนี้ ไม่ใช่รอจนกดย้อนกลับไปหน้า
+    // รายการห้อง — เรียก onRoomRead ทันทีที่ mark ผ่าน
     _service
         .markRoomRead(roomId: chat.roomDbId, userId: ownerId)
+        .then((_) => onRoomRead?.call())
         .catchError((_) {});
     _loadInvoices(chat.roomDbId);
   }
@@ -197,7 +201,6 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     invoicesById = {};
     notifyListeners();
     loadChatPreviews();
-    onRoomRead?.call();
   }
 
   Future<void> sendMessage(String text) async {
