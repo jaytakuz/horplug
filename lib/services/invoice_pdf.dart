@@ -135,6 +135,20 @@ Future<Uint8List> buildInvoicePdf({
                     child: pw.Text('สแกนเพื่อชำระ ${formatBaht(invoice.total)}',
                         style: const pw.TextStyle(fontSize: 9)),
                   ),
+                  pw.SizedBox(height: 2),
+                  // เหมือน _ComingSoonNotice ในแอป (promptpay_qr.dart) — ฟีเจอร์
+                  // ชำระเงินผ่านแอปยังไม่เปิดใช้งาน คนที่ได้ไฟล์ PDF นี้ต้องรู้
+                  // ก่อนสแกนเหมือนคนที่เห็น QR ในแอป
+                  pw.Center(
+                    child: pw.Text(
+                      'ระบบชำระเงินจะมาเร็วๆ นี้',
+                      style: pw.TextStyle(
+                        font: bold,
+                        fontSize: 8,
+                        color: PdfColors.orange800,
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ],
