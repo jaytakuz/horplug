@@ -349,9 +349,8 @@ class _DraftRowState extends State<_DraftRow> {
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.check,
-                            color: AppColors.success, size: 20),
+                      IconButton.filled(
+                        icon: const Icon(Icons.add, size: 18),
                         visualDensity: VisualDensity.compact,
                         tooltip: 'เพิ่มรายการ',
                         onPressed: _submit,

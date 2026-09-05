@@ -6,6 +6,7 @@ import '../../utils/formatters.dart';
 import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
+import '../../viewmodels/admin_shell_view_model.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/chat_view_model.dart';
 import '../../widgets/chat_conversation_view.dart';
@@ -21,10 +22,12 @@ class ChatScreen extends StatelessWidget {
         profile?.fullName.isNotEmpty == true ? profile!.fullName : 'เจ้าของหอ';
 
     return ChangeNotifierProvider(
-      create: (_) => ChatViewModel(
+      create: (context) => ChatViewModel(
         dormitoryId: profile?.dormitoryId ?? 0,
         ownerId: profile?.id ?? '',
         ownerName: ownerName,
+        onRoomRead: () =>
+            context.read<AdminShellViewModel>().refreshUnreadCount(),
       )
         ..loadChatPreviews()
         ..startWatchingPreviews(),

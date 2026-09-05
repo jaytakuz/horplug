@@ -17,6 +17,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     required this.ownerName,
     SupabaseService? service,
     InvoiceService? invoiceService,
+    this.onRoomRead,
   })  : _service = service ?? SupabaseService(),
         _invoiceService = invoiceService ?? InvoiceService();
 
@@ -27,6 +28,11 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
   final String ownerName;
   final SupabaseService _service;
   final InvoiceService _invoiceService;
+
+  /// เรียกตอนออกจากห้องที่เพิ่งอ่าน — ใช้ให้ AdminShellViewModel (เจ้าของ
+  /// badge บนแท็บแชท) รีเฟรชจำนวนของตัวเอง เพราะเป็นคนละ ViewModel กับตัวนี้
+  /// และไม่ได้ฟังการเปลี่ยนแปลงของตาราง message_reads ที่ markRoomRead เขียน
+  final VoidCallback? onRoomRead;
 
   static const String allFloors = 'ทั้งหมด';
 
@@ -191,6 +197,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     invoicesById = {};
     notifyListeners();
     loadChatPreviews();
+    onRoomRead?.call();
   }
 
   Future<void> sendMessage(String text) async {
