@@ -116,12 +116,19 @@ Future<Uint8List> buildInvoicePdf({
                 ],
                 // วาด QR จาก payload ตรงๆ ไม่ต้องโหลดรูปจากเครือข่าย การสร้าง
                 // เอกสารจึงทำงานได้แม้ออฟไลน์ และไม่มีทางล้มกลางคันเพราะรูป
+                //
+                // qrPayload != null ยังคงใช้ตัดสินว่าควรมีบล็อก QR ในเอกสารไหม
+                // แต่ตัว QR ที่วาดจริงใช้ disabledPaymentQrPayload แทน — เหตุผล
+                // เดียวกับ PromptPayQr ในแอป (ดู widgets/promptpay_qr.dart):
+                // ฟีเจอร์ชำระเงินผ่านแอปยังไม่เปิดใช้งาน วาดจาก payload จริง
+                // ตอนนี้จะทำให้แอปธนาคารเปิดหน้าจ่ายเงินได้ทันทีทั้งที่ยังไม่มี
+                // ระบบยืนยันผลการชำระ
                 if (qrPayload != null) ...[
                   pw.SizedBox(height: 8),
                   pw.Center(
                     child: pw.BarcodeWidget(
                       barcode: pw.Barcode.qrCode(),
-                      data: qrPayload,
+                      data: disabledPaymentQrPayload,
                       width: 120,
                       height: 120,
                       // ไม่วาดข้อความใต้บาร์โค้ด — ค่าเริ่มต้นคือวาด payload

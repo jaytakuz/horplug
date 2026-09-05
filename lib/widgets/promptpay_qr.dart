@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../services/promptpay.dart';
 import '../theme/app_theme.dart';
 
 /// QR พร้อมเพย์จาก payload ที่สร้างไว้แล้ว
@@ -13,6 +14,14 @@ import '../theme/app_theme.dart';
 /// payload เองจาก generateQRCode ซึ่งยัง**ไม่ได้ซ่อม checksum ที่ยาวไม่ครบ**
 /// (ดู promptPayPayload) และหน้าตาเป็นกรอบสีน้ำเงินพร้อมโลโก้กับข้อความอังกฤษ
 /// ตายตัวที่แทรกเข้ากับหน้าจอของแอปไม่ได้
+///
+/// **[payload] ที่รับมาไม่ได้ถูกวาดลง QR จริงตอนนี้** — ฟีเจอร์ชำระเงินผ่านแอป
+/// ยังไม่เปิดใช้งาน (อยู่ในแผนพัฒนารอบถัดไป) วาด QR จาก payload พร้อมเพย์จริง
+/// ตอนนี้จะทำให้แอปธนาคารเปิดหน้าจ่ายเงินได้ทันทีเมื่อสแกน ทั้งที่แอปยังไม่มี
+/// ระบบยืนยันผลการชำระกลับมาเลย จึงวาดจาก [disabledPaymentQrPayload] แทน —
+/// ยังรับ [payload] ไว้เหมือนเดิมเพราะผู้เรียกทุกจุดใช้ผลลัพธ์ที่ไม่เป็น null
+/// ของมันตัดสินอยู่แล้วว่าควรแสดง QR หรือไม่ ไม่ต้องแก้จุดเรียกตอนเปิดใช้งานจริง
+/// แค่เปลี่ยนบรรทัดข้างล่างกลับไปใช้ payload
 class PromptPayQr extends StatelessWidget {
   const PromptPayQr({
     super.key,
@@ -38,7 +47,7 @@ class PromptPayQr extends StatelessWidget {
             border: Border.all(color: AppColors.border),
           ),
           child: QrImageView(
-            data: payload,
+            data: disabledPaymentQrPayload,
             version: QrVersions.auto,
             size: size,
             backgroundColor: Colors.white,
