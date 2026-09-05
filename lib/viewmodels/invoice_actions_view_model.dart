@@ -159,31 +159,46 @@ class InvoiceActionsViewModel extends ChangeNotifier with SafeNotifier {
   /// ข้อความที่คืนกลับเล่าทั้งสองขั้น (ยกเลิก + ออกใบแทน) เพราะผู้เรียกแสดง
   /// SnackBar เดียวท้ายสุด ไม่ใช่ยิงซ้อนกันทีละขั้น
   ///
-  /// `reissueInvoice` คืน null (ไม่ throw) เมื่อห้องไม่มีอยู่ในร่างบิลงวดนี้ —
-  /// ยังไม่จดมิเตอร์ หรือห้องไม่มีผู้เช่าแล้ว ถ้าไม่แยกเคสนี้ออกมา แผ่นจะปิดไป
-  /// เงียบๆ โดยไม่มีอะไรอธิบายว่าทำไมใบใหม่ไม่โผล่
+  /// `reissueInvoice` คืน invoice เป็น null (ไม่ throw) เมื่อห้องไม่มีอยู่ในร่าง
+  /// บิลงวดนี้ — ยังไม่จดมิเตอร์ หรือห้องไม่มีผู้เช่าแล้ว ถ้าไม่แยกเคสนี้ออกมา
+  /// แผ่นจะปิดไปเงียบๆ โดยไม่มีอะไรอธิบายว่าทำไมใบใหม่ไม่โผล่
+  ///
+  /// `extraFeesCopyFailed` แยกออกจาก catch ด้านล่างเพราะไม่ใช่ error ที่ทำให้
+  /// การออกใบแทนล้ม — ใบแทนถูกสร้างสำเร็จแล้วจริงๆ แค่การคัดลอกค่าใช้จ่าย
+  /// เพิ่มเติมของใบเดิมไม่ติดมาด้วย ต้องรายงานเป็นคำเตือนต่อท้ายผลสำเร็จ ไม่ใช่
+  /// รายงานว่า "ออกใบแทนไม่สำเร็จ" ซึ่งจะทำให้เจ้าของหอไม่รู้เลยว่ามีใบใหม่
+  /// เกิดขึ้นแล้วในฐานข้อมูล
   Future<ActionResult> reissue() async {
     isBusy = true;
     notifyListeners();
 
     try {
-      final reissued = await _service.reissueInvoice(
+      final result = await _service.reissueInvoice(
         voided: invoice,
         dormitoryId: dormitoryId,
       );
+      final reissued = result.invoice;
 
-      return reissued != null
-          ? ActionResult(
-              success: true,
-              message: 'ยกเลิกบิล ${invoice.invoiceNo} แล้ว '
-                  'ออกใบแทน ${reissued.invoiceNo} เรียบร้อย'
-                  '${await _sendCardOrDescribeFailure(reissued)}',
-            )
-          : ActionResult(
-              success: false,
-              message: 'ยกเลิกบิล ${invoice.invoiceNo} แล้ว แต่ออกใบแทนไม่ได้ '
-                  '— งวดนี้ยังไม่ได้จดมิเตอร์ หรือห้องไม่มีผู้เช่า',
-            );
+      if (reissued == null) {
+        return ActionResult(
+          success: false,
+          message: 'ยกเลิกบิล ${invoice.invoiceNo} แล้ว แต่ออกใบแทนไม่ได้ '
+              '— งวดนี้ยังไม่ได้จดมิเตอร์ หรือห้องไม่มีผู้เช่า',
+        );
+      }
+
+      final feesWarning = result.extraFeesCopyFailed
+          ? ' คัดลอกค่าใช้จ่ายเพิ่มเติมจากบิลเดิมไม่สำเร็จ '
+              '— เปิดบิลใบใหม่แล้วเพิ่มรายการเองอีกครั้ง'
+          : '';
+
+      return ActionResult(
+        success: true,
+        message: 'ยกเลิกบิล ${invoice.invoiceNo} แล้ว '
+            'ออกใบแทน ${reissued.invoiceNo} เรียบร้อย'
+            '$feesWarning'
+            '${await _sendCardOrDescribeFailure(reissued)}',
+      );
     } catch (error) {
       return ActionResult(
         success: false,

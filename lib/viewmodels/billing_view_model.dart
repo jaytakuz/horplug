@@ -87,16 +87,34 @@ class BillingViewModel extends ChangeNotifier with RefreshableViewModel {
   /// การเปิดแอปครั้งเดียวจะเขียนบิลทั้งหอโดยที่ไม่มีใครสั่ง
   ///
   /// เป็น no-op เมื่อไม่มีอะไรเปลี่ยน — ไม่มีการเขียน ไม่มีข้อความถึงผู้เช่า
+  ///
+  /// [InvoiceService.syncUnpaidInvoices] คืนใบที่ปรับสำเร็จแยกจากใบที่ปรับไม่
+  /// สำเร็จแล้ว จึงส่งแจ้งเตือนเฉพาะใบที่ปรับสำเร็จจริง (`applied`) และรายงาน
+  /// จำนวนใบที่ปรับไม่สำเร็จ (`failed`) แยกจากความล้มของการแจ้งเตือนเอง — สอง
+  /// อย่างนี้คนละสาเหตุ (เขียนตาราง invoices ล้ม ต่างจากเขียนตาราง messages ล้ม)
+  /// เจ้าของหอจึงควรอ่านออกว่าล้มขั้นไหน
   Future<void> refresh() async {
     syncErrorMessage = null;
     try {
-      final adjustments = await _service.syncUnpaidInvoices(
+      final result = await _service.syncUnpaidInvoices(
         dormitoryId: dormitoryId,
         month: selectedMonth,
         year: selectedYear,
       );
-      if (adjustments.isNotEmpty) {
-        await _service.postAdjustmentNotices(adjustments);
+
+      final failures = <String>[];
+      if (result.applied.isNotEmpty) {
+        try {
+          await _service.postAdjustmentNotices(result.applied);
+        } catch (_) {
+          failures.add('แจ้งผู้เช่าที่ยอดเปลี่ยนไม่สำเร็จ');
+        }
+      }
+      if (result.failed.isNotEmpty) {
+        failures.add('ปรับยอด ${result.failed.length} ใบไม่สำเร็จ');
+      }
+      if (failures.isNotEmpty) {
+        syncErrorMessage = failures.join(' และ');
       }
     } catch (error) {
       // ปรับยอดล้มไม่ควรแปลว่าผู้ใช้ไม่ได้เห็นรายการบิลเลย · เก็บไว้บอกทีหลัง

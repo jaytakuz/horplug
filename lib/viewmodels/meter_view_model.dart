@@ -198,24 +198,37 @@ class MeterViewModel extends ChangeNotifier with RefreshableViewModel {
   /// แยกจาก [saveAll] เพราะความล้มของสองอย่างนี้มีน้ำหนักต่างกัน — มิเตอร์คือ
   /// ของจริงที่บันทึกไปแล้ว การปรับบิลคือผลพวงของมัน ล้มแล้วบอกได้ ไม่ต้องย้อน
   ///
-  /// คืนทั้งจำนวนใบที่ปรับและผลของการแจ้ง เพราะสองอย่างนี้ล้มแยกกันได้ และการ
-  /// รายงานว่า "ปรับยอดไม่สำเร็จ" ทั้งที่ยอดเปลี่ยนไปแล้วแต่แจ้งไม่ออก จะทำให้
-  /// เจ้าของหอเข้าใจผิดว่าบิลยังเป็นยอดเดิม
-  Future<({int adjusted, bool noticesPosted})> syncInvoicesForPeriod() async {
-    final adjustments = await _invoices.syncUnpaidInvoices(
+  /// คืนทั้งจำนวนใบที่ปรับสำเร็จ จำนวนใบที่ปรับไม่สำเร็จ และผลของการแจ้ง —
+  /// สามอย่างนี้ล้มแยกกันได้ทั้งหมด และการรายงานว่า "ปรับยอดไม่สำเร็จ" ทั้งที่
+  /// ยอดเปลี่ยนไปแล้วบางใบแต่แจ้งไม่ออก จะทำให้เจ้าของหอเข้าใจผิดว่าบิลยังเป็น
+  /// ยอดเดิมทั้งหมด — [InvoiceService.syncUnpaidInvoices] คืนใบที่ปรับสำเร็จ
+  /// แยกจากใบที่ปรับไม่สำเร็จแล้ว จึงส่งแจ้งเตือนเฉพาะใบที่ปรับสำเร็จจริง
+  Future<({int adjusted, int failed, bool noticesPosted})>
+      syncInvoicesForPeriod() async {
+    final result = await _invoices.syncUnpaidInvoices(
       dormitoryId: dormitoryId,
       month: selectedMonth,
       year: selectedYear,
     );
-    if (adjustments.isEmpty) return (adjusted: 0, noticesPosted: true);
+    if (result.applied.isEmpty) {
+      return (adjusted: 0, failed: result.failed.length, noticesPosted: true);
+    }
 
     try {
-      await _invoices.postAdjustmentNotices(adjustments);
-      return (adjusted: adjustments.length, noticesPosted: true);
+      await _invoices.postAdjustmentNotices(result.applied);
+      return (
+        adjusted: result.applied.length,
+        failed: result.failed.length,
+        noticesPosted: true
+      );
     } catch (_) {
       // บิลถูกแก้ไปแล้ว การ์ดในแชทก็แสดงยอดใหม่เองอยู่แล้วเพราะ resolve สด
       // สิ่งที่หายไปคือข้อความที่บอกว่า "ยอดเปลี่ยนจากเท่าไร" เท่านั้น
-      return (adjusted: adjustments.length, noticesPosted: false);
+      return (
+        adjusted: result.applied.length,
+        failed: result.failed.length,
+        noticesPosted: false
+      );
     }
   }
 
