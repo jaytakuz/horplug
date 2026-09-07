@@ -109,8 +109,8 @@ TenantJoinRequest buildJoinRequest({
 
 void main() {
   group('Feature 2: Tenant management', () {
-    group('UTC-14 fetchAvailableTenants', () {
-      test('UTC-14-TC-01 returns a non-empty list of tenants', () async {
+    group('UTC-13 fetchAvailableTenants', () {
+      test('UTC-13-TC-01 returns a non-empty list of tenants', () async {
         final repository = FakeTenantManagementRepository(
           availableTenants: [
             buildTenant(
@@ -128,7 +128,7 @@ void main() {
         expect(result.first.name, 'Piphatpong Lalaka');
       });
 
-      test('UTC-14-TC-02 returns an empty list when no tenants exist', () async {
+      test('UTC-13-TC-02 returns an empty list when no tenants exist', () async {
         final repository =
             FakeTenantManagementRepository(availableTenants: []);
 
@@ -138,8 +138,8 @@ void main() {
       });
     });
 
-    group('UTC-15 createTenantJoinRequest', () {
-      test('UTC-15-TC-01 completes without exception on success', () async {
+    group('UTC-14 createTenantJoinRequest', () {
+      test('UTC-14-TC-01 completes without exception on success', () async {
         final repository = FakeTenantManagementRepository();
 
         await expectLater(
@@ -153,7 +153,7 @@ void main() {
         );
       });
 
-      test('UTC-15-TC-02 throws SocketException on network failure', () {
+      test('UTC-14-TC-02 throws SocketException on network failure', () {
         final repository = FakeTenantManagementRepository(
           shouldThrowOnCreateJoinRequest: true,
         );
@@ -170,8 +170,8 @@ void main() {
       });
     });
 
-    group('UTC-16 fetchPendingJoinRequestsForTenant', () {
-      test('UTC-16-TC-01 returns pending requests when they exist', () async {
+    group('UTC-15 fetchPendingJoinRequestsForTenant', () {
+      test('UTC-15-TC-01 returns pending requests when they exist', () async {
         final repository = FakeTenantManagementRepository(
           pendingRequests: [
             buildJoinRequest(
@@ -193,7 +193,7 @@ void main() {
         expect(result.first.dormitoryName, 'Test Dormitory');
       });
 
-      test('UTC-16-TC-02 returns an empty list when no requests exist', () async {
+      test('UTC-15-TC-02 returns an empty list when no requests exist', () async {
         final repository =
             FakeTenantManagementRepository(pendingRequests: []);
 
@@ -203,8 +203,8 @@ void main() {
       });
     });
 
-    group('UTC-17 respondToTenantJoinRequest', () {
-      test('UTC-17-TC-01 completes when tenant accepts', () async {
+    group('UTC-16 respondToTenantJoinRequest', () {
+      test('UTC-16-TC-01 completes when tenant accepts', () async {
         final repository = FakeTenantManagementRepository();
 
         await expectLater(
@@ -213,7 +213,7 @@ void main() {
         );
       });
 
-      test('UTC-17-TC-02 completes when tenant rejects', () async {
+      test('UTC-16-TC-02 completes when tenant rejects', () async {
         final repository = FakeTenantManagementRepository();
 
         await expectLater(
@@ -222,7 +222,7 @@ void main() {
         );
       });
 
-      test('UTC-17-TC-03 throws SocketException on network failure', () {
+      test('UTC-16-TC-03 throws SocketException on network failure', () {
         final repository = FakeTenantManagementRepository(
           shouldThrowOnRespondToRequest: true,
         );
@@ -237,8 +237,8 @@ void main() {
       });
     });
 
-    group('UTC-18 removeTenantFromRoom', () {
-      test('UTC-18-TC-01 completes without exception on success', () async {
+    group('UTC-17 removeTenantFromRoom', () {
+      test('UTC-17-TC-01 completes without exception on success', () async {
         final repository = FakeTenantManagementRepository();
 
         await expectLater(
@@ -247,7 +247,7 @@ void main() {
         );
       });
 
-      test('UTC-18-TC-02 throws SocketException on network failure', () {
+      test('UTC-17-TC-02 throws SocketException on network failure', () {
         final repository = FakeTenantManagementRepository(
           shouldThrowOnRemoveTenant: true,
         );

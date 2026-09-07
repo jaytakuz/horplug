@@ -226,23 +226,30 @@ class _FakeMeterService extends SupabaseService {
 class _FakeInvoiceService extends InvoiceService {
   _FakeInvoiceService({
     this.adjustments = const [],
+    this.failedAdjustments = const [],
     this.throwOnSync = false,
     this.throwOnNotice = false,
   });
 
   final List<InvoiceAdjustment> adjustments;
+
+  /// ใบที่จำลองว่า UPDATE ล้มระหว่างปรับยอด — คนละเคสกับ [throwOnSync] ซึ่ง
+  /// ล้มทั้งฟังก์ชันตั้งแต่ก่อนเขียนอะไรเลย ที่นี่บางใบเขียนสำเร็จ (อยู่ใน
+  /// [adjustments]) บางใบล้ม (อยู่ในนี้) พร้อมกันได้
+  final List<InvoiceAdjustment> failedAdjustments;
   final bool throwOnSync;
   final bool throwOnNotice;
   int noticeCallCount = 0;
 
   @override
-  Future<List<InvoiceAdjustment>> syncUnpaidInvoices({
+  Future<({List<InvoiceAdjustment> applied, List<InvoiceAdjustment> failed})>
+      syncUnpaidInvoices({
     required int dormitoryId,
     required int month,
     required int year,
   }) async {
     if (throwOnSync) throw Exception('42703 recalculated_at ไม่มีในตาราง');
-    return adjustments;
+    return (applied: adjustments, failed: failedAdjustments);
   }
 
   @override
@@ -274,7 +281,6 @@ InvoiceAdjustment buildAdjustment({double newElectricityCost = 540}) {
     electricityUnits: 90,
     electricityCost: newElectricityCost,
     waterCost: 0,
-    cleaningFee: 0,
   );
 }
 
@@ -431,6 +437,27 @@ void main() {
 
       expect(viewModel.syncInvoicesForPeriod(), throwsException);
     });
+
+    // ก่อนแก้บั๊ก syncUnpaidInvoices คืนแค่ List<InvoiceAdjustment> เดียว —
+    // ใบที่ update ล้มทำให้ทั้งฟังก์ชัน throw และใบที่สำเร็จไปแล้วก่อนหน้าหาย
+    // ไปจากผลลัพธ์ด้วย ไม่มีทางแจ้งผู้เช่าของใบที่สำเร็จ และรอบถัดไปก็ตรวจไม่
+    // เจอว่ายังต้องปรับอีกเพราะฐานข้อมูลถูกเขียนไปแล้วจริง ใบนั้นเลยไม่เคยถูก
+    // แจ้งผู้เช่าไปตลอดกาล ตอนนี้ใบที่สำเร็จกับใบที่ล้มแยกออกจากกันแล้ว
+    test('บางใบปรับสำเร็จ บางใบปรับไม่สำเร็จ — ยังแจ้งผู้เช่าของใบที่สำเร็จ '
+        'และรายงานจำนวนใบที่ล้มแยกไว้', () async {
+      final invoices = _FakeInvoiceService(
+        adjustments: [buildAdjustment()],
+        failedAdjustments: [buildAdjustment(newElectricityCost: 720)],
+      );
+      final viewModel = await buildLoadedMeterViewModel(invoices: invoices);
+
+      final result = await viewModel.syncInvoicesForPeriod();
+
+      expect(result.adjusted, 1);
+      expect(result.failed, 1);
+      expect(result.noticesPosted, isTrue);
+      expect(invoices.noticeCallCount, 1);
+    });
   });
 
   group('Feature 4: Utility Meter Recording', () {
@@ -438,8 +465,8 @@ void main() {
     // 4.1 Record Electricity Meter Readings
     // -----------------------------------------------------------------------
 
-    group('UTC-19 ElectricityRecord.unitsUsed', () {
-      test('UTC-19-TC-01 returns current − previous for normal reading', () {
+    group('UTC-18 ElectricityRecord.unitsUsed', () {
+      test('UTC-18-TC-01 returns current − previous for normal reading', () {
         final record = buildElecRecord(
           previousReading: 1000,
           currentReading: 1100,
@@ -448,7 +475,7 @@ void main() {
         expect(record.unitsUsed, 100);
       });
 
-      test('UTC-19-TC-02 handles 4-digit rollover (10000 − prev) + current', () {
+      test('UTC-18-TC-02 handles 4-digit rollover (10000 − prev) + current', () {
         final record = buildElecRecord(
           previousReading: 9990,
           currentReading: 50,
@@ -457,7 +484,7 @@ void main() {
         expect(record.unitsUsed, 60);
       });
 
-      test('UTC-19-TC-03 returns 0 when currentReading is null', () {
+      test('UTC-18-TC-03 returns 0 when currentReading is null', () {
         final record = buildElecRecord(
           previousReading: 1000,
           currentReading: null,
@@ -467,9 +494,9 @@ void main() {
       });
     });
 
-    group('UTC-20 ElectricityRecord.isOverflow', () {
+    group('UTC-19 ElectricityRecord.isOverflow', () {
       test(
-          'UTC-20-TC-01 returns true when current < previous; '
+          'UTC-19-TC-01 returns true when current < previous; '
           'false otherwise', () {
         final overflow = buildElecRecord(
           previousReading: 9990,
@@ -485,8 +512,8 @@ void main() {
       });
     });
 
-    group('UTC-21 ElectricityRecord.amount', () {
-      test('UTC-21-TC-01 amount = unitsUsed × unitRate for normal case', () {
+    group('UTC-20 ElectricityRecord.amount', () {
+      test('UTC-20-TC-01 amount = unitsUsed × unitRate for normal case', () {
         final record = buildElecRecord(
           previousReading: 1000,
           currentReading: 1100,
@@ -496,7 +523,7 @@ void main() {
         expect(record.amount, 800.0);
       });
 
-      test('UTC-21-TC-02 amount = unitsUsed × unitRate for rollover case', () {
+      test('UTC-20-TC-02 amount = unitsUsed × unitRate for rollover case', () {
         final record = buildElecRecord(
           previousReading: 9990,
           currentReading: 50,
@@ -507,23 +534,23 @@ void main() {
       });
     });
 
-    group('UTC-22 validateElecReading', () {
-      test('UTC-22-TC-01 returns range error when reading > 9999', () {
+    group('UTC-21 validateElecReading', () {
+      test('UTC-21-TC-01 returns range error when reading > 9999', () {
         expect(
           validateElecReading(12000),
           'ค่าต้องอยู่ในช่วง 0-9999',
         );
       });
 
-      test('UTC-22-TC-02 returns null for readings within 0–9999', () {
+      test('UTC-21-TC-02 returns null for readings within 0–9999', () {
         expect(validateElecReading(9999), isNull);
         expect(validateElecReading(0), isNull);
       });
     });
 
-    group('UTC-23 ElectricityRecord.toJson', () {
+    group('UTC-22 ElectricityRecord.toJson', () {
       test(
-          'UTC-23-TC-01 contains billing keys and computed amount', () {
+          'UTC-22-TC-01 contains billing keys and computed amount', () {
         final record = buildElecRecord(
           roomDbId: 1,
           billingMonth: 6,
@@ -542,8 +569,8 @@ void main() {
       });
     });
 
-    group('UTC-24 matchesFilters', () {
-      test('UTC-24-TC-01 matches by room number', () {
+    group('UTC-23 matchesFilters', () {
+      test('UTC-23-TC-01 matches by room number', () {
         expect(
           matchesFilters(
             roomNumber: '101',
@@ -570,7 +597,7 @@ void main() {
         );
       });
 
-      test('UTC-24-TC-02 matches by tenant name (case-insensitive)', () {
+      test('UTC-23-TC-02 matches by tenant name (case-insensitive)', () {
         expect(
           matchesFilters(
             roomNumber: '102',
@@ -585,7 +612,7 @@ void main() {
         );
       });
 
-      test('UTC-24-TC-03 applies floor filter', () {
+      test('UTC-23-TC-03 applies floor filter', () {
         expect(
           matchesFilters(
             roomNumber: '201',
@@ -612,7 +639,7 @@ void main() {
         );
       });
 
-      test('UTC-24-TC-04 applies room-status filter', () {
+      test('UTC-23-TC-04 applies room-status filter', () {
         expect(
           matchesFilters(
             roomNumber: '102',
@@ -640,8 +667,8 @@ void main() {
       });
     });
 
-    group('UTC-25 roomStatusLabel', () {
-      test('UTC-25-TC-01 maps each status to its Thai label', () {
+    group('UTC-24 roomStatusLabel', () {
+      test('UTC-24-TC-01 maps each status to its Thai label', () {
         expect(roomStatusLabel(RoomStatus.occupied), 'มีคนอยู่');
         expect(roomStatusLabel(RoomStatus.vacant), 'ว่าง');
         expect(roomStatusLabel(RoomStatus.maintenance), 'ซ่อมบำรุง');
@@ -649,9 +676,9 @@ void main() {
       });
     });
 
-    group('UTC-26 electricityProgress', () {
+    group('UTC-25 electricityProgress', () {
       test(
-          'UTC-26-TC-01 counts only rooms with a non-null currentReading', () {
+          'UTC-25-TC-01 counts only rooms with a non-null currentReading', () {
         final records = [
           buildElecRecord(roomDbId: 1, currentReading: 1100),
           buildElecRecord(roomDbId: 2, currentReading: 500),
@@ -662,9 +689,9 @@ void main() {
       });
     });
 
-    group('UTC-27 fetchElectricityRecords', () {
+    group('UTC-26 fetchElectricityRecords', () {
       test(
-          'UTC-27-TC-01 returns the records list when rooms exist', () async {
+          'UTC-26-TC-01 returns the records list when rooms exist', () async {
         final repository = FakeMeterRepository(
           electricityRecords: [
             buildElecRecord(roomDbId: 1, roomNumber: '101'),
@@ -683,7 +710,7 @@ void main() {
       });
 
       test(
-          'UTC-27-TC-02 returns empty list when no rooms exist', () async {
+          'UTC-26-TC-02 returns empty list when no rooms exist', () async {
         final repository = FakeMeterRepository(electricityRecords: []);
 
         final result = await repository.fetchElectricityRecords(
@@ -696,8 +723,8 @@ void main() {
       });
     });
 
-    group('UTC-28 saveElectricityRecords', () {
-      test('UTC-28-TC-01 completes when save succeeds', () async {
+    group('UTC-27 saveElectricityRecords', () {
+      test('UTC-27-TC-01 completes when save succeeds', () async {
         final repository = FakeMeterRepository();
 
         await expectLater(
@@ -709,7 +736,7 @@ void main() {
       });
 
       test(
-          'UTC-28-TC-02 throws SocketException on network failure', () {
+          'UTC-27-TC-02 throws SocketException on network failure', () {
         final repository =
             FakeMeterRepository(shouldThrowOnSaveElec: true);
 
@@ -726,9 +753,9 @@ void main() {
     // 4.2 Record Water Charges
     // -----------------------------------------------------------------------
 
-    group('UTC-29 waterRecordsToSave', () {
+    group('UTC-28 waterRecordsToSave', () {
       test(
-          'UTC-29-TC-01 keeps only new (id==null) or modified records', () {
+          'UTC-28-TC-01 keeps only new (id==null) or modified records', () {
         final existing = buildWaterRecord(id: '1', roomDbId: 1, amount: 80);
         final newRecord = buildWaterRecord(id: null, roomDbId: 2, amount: 100);
         final modified = buildWaterRecord(id: '3', roomDbId: 3, amount: 120);
@@ -744,9 +771,9 @@ void main() {
       });
     });
 
-    group('UTC-30 waterProgress', () {
+    group('UTC-29 waterProgress', () {
       test(
-          'UTC-30-TC-01 counts only rooms with an existing record (id != null)',
+          'UTC-29-TC-01 counts only rooms with an existing record (id != null)',
           () {
         final records = [
           buildWaterRecord(id: '1', roomDbId: 1, amount: 100),
@@ -758,9 +785,9 @@ void main() {
       });
     });
 
-    group('UTC-31 fetchWaterRecords', () {
+    group('UTC-30 fetchWaterRecords', () {
       test(
-          'UTC-31-TC-01 returns the records list with correct amount', () async {
+          'UTC-30-TC-01 returns the records list with correct amount', () async {
         final repository = FakeMeterRepository(
           waterRecords: [
             buildWaterRecord(id: '1', roomDbId: 1, amount: 100.0),
@@ -778,7 +805,7 @@ void main() {
       });
 
       test(
-          'UTC-31-TC-02 returns empty list when no rooms exist', () async {
+          'UTC-30-TC-02 returns empty list when no rooms exist', () async {
         final repository = FakeMeterRepository(waterRecords: []);
 
         final result = await repository.fetchWaterRecords(
@@ -791,8 +818,8 @@ void main() {
       });
     });
 
-    group('UTC-32 saveWaterRecords', () {
-      test('UTC-32-TC-01 completes when save succeeds', () async {
+    group('UTC-31 saveWaterRecords', () {
+      test('UTC-31-TC-01 completes when save succeeds', () async {
         final repository = FakeMeterRepository();
 
         await expectLater(
@@ -804,7 +831,7 @@ void main() {
       });
 
       test(
-          'UTC-32-TC-02 throws SocketException on network failure', () {
+          'UTC-31-TC-02 throws SocketException on network failure', () {
         final repository =
             FakeMeterRepository(shouldThrowOnSaveWater: true);
 

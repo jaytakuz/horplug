@@ -429,41 +429,45 @@ void main() {
       });
     });
 
-    group('UTC-04 formatRoomErrorMessage', () {
-      test('UTC-04-TC-01 maps SocketException to Thai network message', () {
+    // ไม่มี Test ID ผูกกับกลุ่มนี้ใน TP — formatRoomErrorMessage เป็นตัวช่วยที่
+    // เทสต์อื่นในไฟล์นี้ (เช่น addRoom, deleteRoom) พึ่งพาอยู่แล้ว แต่ TP ไม่มี
+    // Test ID เฉพาะของมันเอง คงไว้เป็นเทสต์เสริม ไม่ใส่เลข UTC ที่จะไปชนกับ
+    // UTC-04 validateAddRoomInput ของจริง
+    group('formatRoomErrorMessage', () {
+      test('maps SocketException to Thai network message', () {
         final result =
             formatRoomErrorMessage(const SocketException('Failed host lookup'));
 
         expect(result, 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่');
       });
 
-      test('UTC-04-TC-02 strips Exception prefix for non-network errors', () {
+      test('strips Exception prefix for non-network errors', () {
         final result = formatRoomErrorMessage(Exception('already exist'));
 
         expect(result, 'already exist');
       });
     });
 
-    group('UTC-05 validateAddRoomInput', () {
-      test('UTC-05-TC-01 returns error for empty required fields', () {
+    group('UTC-04 validateAddRoomInput', () {
+      test('UTC-04-TC-01 returns error for empty required fields', () {
         expect(
           validateAddRoomInput(' ', ' '),
           'กรุณากรอกข้อมูลที่จำเป็นทั้งหมด',
         );
       });
 
-      test('UTC-05-TC-02 returns error for invalid price', () {
+      test('UTC-04-TC-02 returns error for invalid price', () {
         expect(validateAddRoomInput('101', '-50'), 'ราคาไม่ถูกต้อง');
         expect(validateAddRoomInput('101', 'abc'), 'ราคาไม่ถูกต้อง');
       });
 
-      test('UTC-05-TC-03 returns null for valid input', () {
+      test('UTC-04-TC-03 returns null for valid input', () {
         expect(validateAddRoomInput('101', '3000'), isNull);
       });
     });
 
-    group('UTC-06 addRoom', () {
-      test('UTC-06-TC-01 completes when creation succeeds', () async {
+    group('UTC-05 addRoom', () {
+      test('UTC-05-TC-01 completes when creation succeeds', () async {
         final repository = FakeRoomRepository(
           rooms: [
             buildRoom(
@@ -486,7 +490,7 @@ void main() {
         );
       });
 
-      test('UTC-06-TC-02 throws on duplicate room number', () {
+      test('UTC-05-TC-02 throws on duplicate room number', () {
         final repository = FakeRoomRepository(
           rooms: [
             buildRoom(
@@ -515,7 +519,7 @@ void main() {
         );
       });
 
-      test('UTC-06-TC-03 throws SocketException on network failure', () {
+      test('UTC-05-TC-03 throws SocketException on network failure', () {
         final repository = FakeRoomRepository(shouldThrowOnAdd: true);
 
         expect(
@@ -530,16 +534,16 @@ void main() {
       });
     });
 
-    group('UTC-07 canDeleteRoom', () {
-      test('UTC-07-TC-01 returns true only for vacant rooms', () {
+    group('UTC-06 canDeleteRoom', () {
+      test('UTC-06-TC-01 returns true only for vacant rooms', () {
         expect(canDeleteRoom(RoomStatus.vacant), isTrue);
         expect(canDeleteRoom(RoomStatus.occupied), isFalse);
         expect(canDeleteRoom(RoomStatus.maintenance), isFalse);
       });
     });
 
-    group('UTC-08 deleteRoom', () {
-      test('UTC-08-TC-01 completes when deletion succeeds', () async {
+    group('UTC-07 deleteRoom', () {
+      test('UTC-07-TC-01 completes when deletion succeeds', () async {
         final repository = FakeRoomRepository(
           rooms: [
             buildRoom(
@@ -554,7 +558,7 @@ void main() {
         await expectLater(repository.deleteRoom(roomDbId: 1), completes);
       });
 
-      test('UTC-08-TC-02 throws SocketException on network failure', () {
+      test('UTC-07-TC-02 throws SocketException on network failure', () {
         final repository = FakeRoomRepository(shouldThrowOnDelete: true);
 
         expect(
@@ -564,8 +568,8 @@ void main() {
       });
     });
 
-    group('UTC-09 updateRoomStatus', () {
-      test('UTC-09-TC-01 completes when update succeeds', () async {
+    group('UTC-08 updateRoomStatus', () {
+      test('UTC-08-TC-01 completes when update succeeds', () async {
         final repository = FakeRoomRepository(
           rooms: [
             buildRoom(
@@ -586,7 +590,7 @@ void main() {
         );
       });
 
-      test('UTC-09-TC-02 throws SocketException on network failure', () {
+      test('UTC-08-TC-02 throws SocketException on network failure', () {
         final repository = FakeRoomRepository(shouldThrowOnStatusUpdate: true);
 
         expect(
@@ -599,16 +603,16 @@ void main() {
       });
     });
 
-    group('UTC-10 priceUnchanged', () {
-      test('UTC-10-TC-01 returns true for unchanged or empty input', () {
+    group('UTC-09 priceUnchanged', () {
+      test('UTC-09-TC-01 returns true for unchanged or empty input', () {
         expect(priceUnchanged(3000, '3000'), isTrue);
         expect(priceUnchanged(3000, ''), isTrue);
         expect(priceUnchanged(3000, '3500'), isFalse);
       });
     });
 
-    group('UTC-11 updateRoomPrice', () {
-      test('UTC-11-TC-01 rejects negative or non-numeric input', () {
+    group('UTC-10 updateRoomPrice', () {
+      test('UTC-10-TC-01 rejects negative or non-numeric input', () {
         String? validatePriceInput(String input) {
           final parsed = double.tryParse(input);
           if (parsed == null || parsed <= 0) {
@@ -621,7 +625,7 @@ void main() {
         expect(validatePriceInput('xyz'), 'ราคาไม่ถูกต้อง');
       });
 
-      test('UTC-11-TC-02 completes when update succeeds', () async {
+      test('UTC-10-TC-02 completes when update succeeds', () async {
         final repository = FakeRoomRepository(
           rooms: [
             buildRoom(
@@ -640,7 +644,7 @@ void main() {
         );
       });
 
-      test('UTC-11-TC-03 throws SocketException on network failure', () {
+      test('UTC-10-TC-03 throws SocketException on network failure', () {
         final repository = FakeRoomRepository(shouldThrowOnPriceUpdate: true);
 
         expect(
@@ -650,8 +654,8 @@ void main() {
       });
     });
 
-    group('UTC-12 validateRoomNumber', () {
-      test('UTC-12-TC-01 returns error for empty value and null for valid', () {
+    group('UTC-11 validateRoomNumber', () {
+      test('UTC-11-TC-01 returns error for empty value and null for valid', () {
         expect(
           validateUpdatedRoomNumber('', '100'),
           'กรุณากรอกเลขห้องใหม่',
@@ -663,7 +667,7 @@ void main() {
         expect(validateUpdatedRoomNumber('101', '100'), isNull);
       });
 
-      test('UTC-12-TC-02 returns error when room number is unchanged', () {
+      test('UTC-11-TC-02 returns error when room number is unchanged', () {
         expect(
           validateUpdatedRoomNumber('101', '101'),
           'เลขห้องใหม่ต้องแตกต่างจากเดิม',
@@ -671,8 +675,8 @@ void main() {
       });
     });
 
-    group('UTC-13 updateRoomNumber', () {
-      test('UTC-13-TC-01 completes when update succeeds', () async {
+    group('UTC-12 updateRoomNumber', () {
+      test('UTC-12-TC-01 completes when update succeeds', () async {
         final repository = FakeRoomRepository(
           rooms: [
             buildRoom(
@@ -696,7 +700,7 @@ void main() {
         );
       });
 
-      test('UTC-13-TC-02 throws on duplicate room number', () {
+      test('UTC-12-TC-02 throws on duplicate room number', () {
         final repository = FakeRoomRepository(
           rooms: [
             buildRoom(
@@ -729,7 +733,7 @@ void main() {
         );
       });
 
-      test('UTC-13-TC-03 throws SocketException on network failure', () {
+      test('UTC-12-TC-03 throws SocketException on network failure', () {
         final repository = FakeRoomRepository(shouldThrowOnNumberUpdate: true);
 
         expect(
