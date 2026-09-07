@@ -19,18 +19,19 @@ class _PeriodInputs {
   const _PeriodInputs({
     required this.electricity,
     required this.water,
-    required this.cleaning,
+    required this.carriedExtraFees,
   });
 
   final Map<int, MeterCharge> electricity;
   final Map<int, double> water;
-  final Map<int, double> cleaning;
+  final Map<int, List<ExtraFee>> carriedExtraFees;
 
   MeterCharge? electricityFor(int roomDbId) => electricity[roomDbId];
   double? waterFor(int roomDbId) => water[roomDbId];
 
-  /// ไม่มีงานทำความสะอาดในงวด = ฿0 ซึ่งเป็นยอดจริง ไม่ใช่ข้อมูลที่ขาด
-  double cleaningFor(int roomDbId) => cleaning[roomDbId] ?? 0;
+  /// ไม่มีบิลก่อนหน้า หรือบิลก่อนหน้าไม่มีรายการ "ทุกเดือน" = ไม่มีอะไรให้พก
+  List<ExtraFee> carriedExtraFeesFor(int roomDbId) =>
+      carriedExtraFees[roomDbId] ?? const [];
 }
 
 /// ผลของการตรวจก่อนออกบิล — แยกห้องที่ออกได้ออกจากห้องที่ข้าม
@@ -212,7 +213,7 @@ class InvoiceService {
         billingYear: year,
         electricity: inputs.electricityFor(room.dbId),
         waterAmount: inputs.waterFor(room.dbId),
-        cleaningFee: inputs.cleaningFor(room.dbId),
+        carriedExtraFees: inputs.carriedExtraFeesFor(room.dbId),
         alreadyIssued: issuedRoomIds.contains(room.dbId),
       );
 
@@ -241,7 +242,7 @@ class InvoiceService {
         .inFilter('room_id', roomIds)
         .eq('billing_month', month)
         .eq('billing_year', year);
-    final cleaningByRoom = await _fetchCleaningFeesByRoom(
+    final carriedExtraFeesByRoom = await _fetchCarriedExtraFeesByRoom(
       roomIds: roomIds,
       month: month,
       year: year,
@@ -276,26 +277,35 @@ class InvoiceService {
     return _PeriodInputs(
       electricity: electricity,
       water: water,
-      cleaning: cleaningByRoom,
+      carriedExtraFees: carriedExtraFeesByRoom,
     );
   }
 
-  /// ปรับยอดบิลค้างชำระของงวดให้ตรงกับข้อมูลล่าสุด · คืนเฉพาะใบที่เปลี่ยนจริง
+  /// ปรับยอดบิลค้างชำระของงวดให้ตรงกับข้อมูลล่าสุด · คืนใบที่ปรับสำเร็จแยกจาก
+  /// ใบที่ปรับไม่สำเร็จ
   ///
   /// เขียนตอนที่เจ้าของหอทำอะไรบางอย่าง ไม่ใช่ตอนที่ใครสักคนเปิดหน้าดู —
   /// ผู้เช่าไม่มีสิทธิ์ UPDATE ตารางนี้ (RLS) และถ้าคำนวณสดตอนแสดงผล QR
   /// พร้อมเพย์กับแถวในฐานข้อมูลจะพูดคนละยอด
   ///
   /// ต้องรัน `database/invoices_recalculation.sql` ก่อน ไม่งั้น UPDATE จะตกด้วย
-  /// 42703 (ไม่มีคอลัมน์ recalculated_at) · ผู้เรียกรายงานความล้มโดยไม่ย้อน
-  /// สิ่งที่ทำสำเร็จไปก่อนหน้า
-  Future<List<InvoiceAdjustment>> syncUnpaidInvoices({
+  /// 42703 (ไม่มีคอลัมน์ recalculated_at)
+  ///
+  /// แต่ละใบ UPDATE แยกคำสั่งกัน (ไม่ใช่ batch เดียวเหมือน [issueInvoices])
+  /// ก่อนแก้ ใบที่ 3 จาก 5 ล้มทำให้ทั้งฟังก์ชัน throw — ใบที่ 1-2 ที่ถูกเขียน
+  /// ไปแล้วในฐานข้อมูลจริงๆ ก็หายไปจากผลลัพธ์ที่คืน ผู้เรียกจึงไม่มีทางรู้ว่าต้อง
+  /// ส่ง postAdjustmentNotices ให้สองใบนั้น และรอบถัดไปก็จะไม่เห็นว่ามันยังต้อง
+  /// ปรับอีก (revalueInvoice เทียบกับแถวที่ถูกต้องแล้ว) ใบที่ถูกปรับไปแล้วแต่ยัง
+  /// ไม่เคยแจ้งผู้เช่าจึงติดอยู่แบบนั้นถาวร ตอนนี้แต่ละใบจึงล้มแยกจากกันได้ ไม่
+  /// ทำให้ใบอื่นที่ update สำเร็จหายไปจากผลลัพธ์ด้วย
+  Future<({List<InvoiceAdjustment> applied, List<InvoiceAdjustment> failed})>
+      syncUnpaidInvoices({
     required int dormitoryId,
     required int month,
     required int year,
   }) async {
     final rooms = await _service.fetchRooms(dormitoryId: dormitoryId);
-    if (rooms.isEmpty) return [];
+    if (rooms.isEmpty) return (applied: <InvoiceAdjustment>[], failed: <InvoiceAdjustment>[]);
 
     final invoices = await fetchInvoices(
       dormitoryId: dormitoryId,
@@ -307,7 +317,7 @@ class InvoiceService {
         .toList();
     // ไม่มีใบที่แก้ได้ = ไม่ต้องยิงคิวรีข้อมูลงวดเลย · ท่าทางลากรีเฟรชเรียก
     // เมธอดนี้ทุกครั้ง งวดที่เก็บเงินครบแล้วจึงไม่ควรจ่ายค่าคิวรีสามชุด
-    if (unpaid.isEmpty) return [];
+    if (unpaid.isEmpty) return (applied: <InvoiceAdjustment>[], failed: <InvoiceAdjustment>[]);
 
     final inputs = await _fetchPeriodInputs(
       roomIds: rooms.map((room) => room.dbId).toList(),
@@ -326,33 +336,42 @@ class InvoiceService {
         room: room,
         electricity: inputs.electricityFor(invoice.roomDbId),
         waterAmount: inputs.waterFor(invoice.roomDbId),
-        cleaningFee: inputs.cleaningFor(invoice.roomDbId),
       );
       if (adjustment != null) adjustments.add(adjustment);
     }
 
+    final applied = <InvoiceAdjustment>[];
+    final failed = <InvoiceAdjustment>[];
     for (final adjustment in adjustments) {
-      await _client
-          .from('invoices')
-          .update({
-            'room_price': adjustment.roomPrice,
-            'electricity_units': adjustment.electricityUnits,
-            'electricity_cost': adjustment.electricityCost,
-            'water_cost': adjustment.waterCost,
-            'cleaning_fee': adjustment.cleaningFee,
-            'previous_total': adjustment.previousTotal,
-            'recalculated_at': DateTime.now().toUtc().toIso8601String(),
-            // total ไม่อยู่ในชุดนี้ เพราะเป็น GENERATED ALWAYS AS — ฐานข้อมูล
-            // คำนวณเอง จึงเป็นไปไม่ได้ที่ยอดรวมจะไม่ตรงกับผลบวกของรายการ
-          })
-          .eq('id', adjustment.invoice.dbId)
-          // ไม่ใช่ของประดับ — ถ้าผู้เช่ากดส่งสลิปในวินาทีเดียวกัน แถวจะเป็น
-          // pending ไปแล้วและคำสั่งนี้จะไม่ match อะไรเลย บิลที่มีสลิปแนบอยู่
-          // จึงไม่มีทางถูกขยับยอดแม้ในภาวะแข่งกัน
-          .eq('status', InvoiceStatus.unpaid.name);
+      try {
+        await _client
+            .from('invoices')
+            .update({
+              'room_price': adjustment.roomPrice,
+              'electricity_units': adjustment.electricityUnits,
+              'electricity_cost': adjustment.electricityCost,
+              'water_cost': adjustment.waterCost,
+              // cleaning_fee/extra_fees_total ไม่อยู่ในชุดนี้อีกต่อไป — ไม่มีการ
+              // ดึงค่าใช้จ่ายเพิ่มเติมมาจากที่ไหนแล้วเขียนทับแบบเดิม รายการพวกนี้
+              // เป็นของบิลใบนี้เอง (เพิ่ม/ลบทีละแถวผ่าน invoice_extra_fees)
+              // trigger ฝั่งฐานข้อมูลรักษายอดรวมให้อยู่แล้ว
+              'previous_total': adjustment.previousTotal,
+              'recalculated_at': DateTime.now().toUtc().toIso8601String(),
+              // total ไม่อยู่ในชุดนี้ เพราะเป็น GENERATED ALWAYS AS — ฐานข้อมูล
+              // คำนวณเอง จึงเป็นไปไม่ได้ที่ยอดรวมจะไม่ตรงกับผลบวกของรายการ
+            })
+            .eq('id', adjustment.invoice.dbId)
+            // ไม่ใช่ของประดับ — ถ้าผู้เช่ากดส่งสลิปในวินาทีเดียวกัน แถวจะเป็น
+            // pending ไปแล้วและคำสั่งนี้จะไม่ match อะไรเลย บิลที่มีสลิปแนบอยู่
+            // จึงไม่มีทางถูกขยับยอดแม้ในภาวะแข่งกัน
+            .eq('status', InvoiceStatus.unpaid.name);
+        applied.add(adjustment);
+      } catch (_) {
+        failed.add(adjustment);
+      }
     }
 
-    return adjustments;
+    return (applied: applied, failed: failed);
   }
 
   /// ออกบิลทั้งชุดใน insert เดียว
@@ -392,7 +411,6 @@ class InvoiceService {
         'electricity_units': draft.electricityUnits,
         'electricity_cost': draft.electricityCost,
         'water_cost': draft.waterCost,
-        'cleaning_fee': draft.cleaningFee,
         'due_date':
             '${due.year}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}',
         'issued_by': issuedBy,
@@ -407,6 +425,40 @@ class InvoiceService {
         .cast<Map<String, dynamic>>()
         .map(_invoiceFromRow)
         .toList();
+  }
+
+  /// คัดลอกรายการค่าใช้จ่ายเพิ่มเติมแบบทุกเดือนที่ร่างบิลพกมา ลงบิลที่เพิ่ง
+  /// ออกจริง — แยกเป็นขั้นที่สอง ไม่ได้อยู่ใน [issueInvoices] เอง เพราะเป็นการ
+  /// insert อีกครั้งหนึ่งที่ไม่ได้อยู่ใน transaction เดียวกับการออกบิล (เหมือน
+  /// [postIssueNotices]) ถ้าล้ม บิลยังอยู่ครบ แค่ยังไม่มีรายการต่อเนื่องติดมา —
+  /// ผู้เรียกต้องรายงานแยกให้เจ้าของหอกดลองใหม่ ไม่ใช่กลืนทิ้งเงียบๆ
+  Future<void> carryForwardExtraFeesForIssued({
+    required List<Invoice> invoices,
+    required List<InvoiceDraft> drafts,
+  }) async {
+    final draftsByRoom = {for (final draft in drafts) draft.roomDbId: draft};
+
+    final rows = <Map<String, dynamic>>[];
+    for (final invoice in invoices) {
+      final draft = draftsByRoom[invoice.roomDbId];
+      if (draft == null) continue;
+      for (final fee in draft.carriedExtraFees) {
+        rows.add({
+          'invoice_id': invoice.dbId,
+          'name': fee.name,
+          'amount': fee.amount,
+          // ไม่ใช่ true เสมอไป — เดิมใช่ เพราะ carriedExtraFees เคยมีแต่รายการ
+          // ที่คัดลอกมาจากบิลก่อนหน้า (เป็นทุกเดือนโดยนิยาม) แต่ตอนนี้เจ้าของหอ
+          // เพิ่มรายการครั้งนี้เท่านั้นเข้ามาในลิสต์เดียวกันได้ก่อนกดออกบิลด้วย
+          // (ดู InvoiceIssueViewModel.addExtraFeeToDraft) ต้องใช้ค่าจริงของ
+          // แต่ละแถว ไม่ใช่ตั้งเป็น true ทั้งหมด
+          'is_recurring': fee.isRecurring,
+        });
+      }
+    }
+    if (rows.isEmpty) return;
+
+    await _client.from('invoice_extra_fees').insert(rows);
   }
 
   /// บิลใบล่าสุดของแต่ละห้องในงวดที่กำลังจะออก — รวมใบที่ยกเลิกแล้ว
@@ -558,37 +610,51 @@ class InvoiceService {
     return {for (final invoice in invoices) invoice.dbId: invoice};
   }
 
-  /// ค่าทำความสะอาดจากคำขอที่เสร็จสิ้นในงวดนั้น แยกตามห้อง
-  Future<Map<int, double>> _fetchCleaningFeesByRoom({
+  /// สำหรับแต่ละห้อง หาบิลล่าสุดที่ไม่ใช่ของงวดนี้และไม่ถูกยกเลิก แล้วดึง
+  /// รายการค่าใช้จ่ายเพิ่มเติมแบบ "ทุกเดือน" ของบิลใบนั้นมาเป็นตัวตั้งต้น
+  /// ของร่างบิลใหม่ — แทนที่กลไกเดิมที่ดึงค่าทำความสะอาดจากคำขอที่เสร็จสิ้น
+  Future<Map<int, List<ExtraFee>>> _fetchCarriedExtraFeesByRoom({
     required List<int> roomIds,
     required int month,
     required int year,
   }) async {
-    final periodStart = DateTime(year, month, 1);
-    final periodEnd =
-        DateTime(month == 12 ? year + 1 : year, month == 12 ? 1 : month + 1, 1);
-
-    // .toUtc() ก่อนแปลงเป็นสตริงเสมอ — เหตุผลเดียวกับ paid_at ใน approveSlip
-    // DateTime ที่ไม่ใช่ UTC ให้สตริงที่ไม่มี offset แล้ว Postgres ตีความเป็น
-    // UTC ขอบของงวดจึงเลื่อนไปเท่ากับ timezone ของเครื่อง (ไทย +7) งานทำความ
-    // สะอาดที่เสร็จช่วง 00:00–07:00 ของวันที่ 1 จะตกไปอยู่ในงวดก่อนหน้าซึ่ง
-    // ออกบิลไปแล้ว แปลว่าไม่ถูกเรียกเก็บเลยสักงวด
-    final data = await _client
-        .from('maintenance_requests')
-        .select('room_id, cleaning_fee')
+    // งวดก่อนงวดนี้ (ปีน้อยกว่า หรือปีเท่ากันแต่เดือนน้อยกว่า) ไม่นับใบที่
+    // ยกเลิก เพราะใบยกเลิกไม่ใช่ตัวแทนของ "สิ่งที่เรียกเก็บจริงเดือนก่อน"
+    final priorInvoices = await _client
+        .from('invoices')
+        .select('id, room_id, billing_year, billing_month')
         .inFilter('room_id', roomIds)
-        .eq('request_type', 'Cleaning')
-        .eq('status', 'Completed')
-        .gte('completed_at', periodStart.toUtc().toIso8601String())
-        .lt('completed_at', periodEnd.toUtc().toIso8601String());
+        .neq('status', InvoiceStatus.voided.name)
+        .or('billing_year.lt.$year,'
+            'and(billing_year.eq.$year,billing_month.lt.$month)')
+        .order('billing_year', ascending: false)
+        .order('billing_month', ascending: false);
 
-    final feeByRoom = <int, double>{};
-    for (final row in (data as List).cast<Map<String, dynamic>>()) {
+    // เก็บเฉพาะบิลล่าสุดต่อห้อง — putIfAbsent เพราะแถวเรียงใหม่สุดมาก่อนแล้ว
+    final latestInvoiceIdByRoom = <int, int>{};
+    for (final row in (priorInvoices as List).cast<Map<String, dynamic>>()) {
       final roomId = row['room_id'] as int;
-      feeByRoom[roomId] =
-          (feeByRoom[roomId] ?? 0) + _toDouble(row['cleaning_fee']);
+      latestInvoiceIdByRoom.putIfAbsent(roomId, () => row['id'] as int);
     }
-    return feeByRoom;
+    if (latestInvoiceIdByRoom.isEmpty) return {};
+
+    final feeRows = await _client
+        .from('invoice_extra_fees')
+        .select()
+        .inFilter('invoice_id', latestInvoiceIdByRoom.values.toList())
+        .eq('is_recurring', true);
+
+    final feesByInvoiceId = <int, List<ExtraFee>>{};
+    for (final row in (feeRows as List).cast<Map<String, dynamic>>()) {
+      feesByInvoiceId
+          .putIfAbsent(row['invoice_id'] as int, () => [])
+          .add(_extraFeeFromRow(row));
+    }
+
+    return {
+      for (final entry in latestInvoiceIdByRoom.entries)
+        entry.key: feesByInvoiceId[entry.value] ?? const [],
+    };
   }
 
   // ── สลิป ────────────────────────────────────────────────────────────────
@@ -820,7 +886,13 @@ class InvoiceService {
   /// ไม่ควรรายงานว่า "ออกใบแทนไม่สำเร็จ" ซึ่งถูกครึ่งเดียว: ผลที่ได้จริงคือ
   /// เจ้าของหอออกใบแทนสำเร็จ ผู้เช่าไม่ได้รับการ์ด และไม่มีใครในสองฝั่งรู้เลย
   /// ว่าเกิดอะไรขึ้น · การแยกสองขั้นออกจากกันทำให้ผู้เรียกเล่าได้ครบทั้งสองผล
-  Future<Invoice?> reissueInvoice({
+  ///
+  /// `extraFeesCopyFailed` แยกไว้ด้วยเหตุผลเดียวกัน: การคัดลอกรายการค่าใช้จ่าย
+  /// เพิ่มเติมของใบเดิมเป็น insert อีกก้อนที่ไม่ได้อยู่ใน transaction เดียวกับ
+  /// การสร้างใบใหม่ ถ้าล้ม ใบแทนก็ยังถูกสร้างสำเร็จอยู่ดี — เดิมปล่อยให้ throw
+  /// หลุดออกไปทั้งฟังก์ชัน ผู้เรียกจึงรายงานว่า "ออกใบแทนไม่สำเร็จ" ทั้งที่มีใบ
+  /// ใหม่เกิดขึ้นจริงแล้วในฐานข้อมูล แค่ยังไม่มีรายการค่าใช้จ่ายเพิ่มเติมติดมา
+  Future<({Invoice? invoice, bool extraFeesCopyFailed})> reissueInvoice({
     required Invoice voided,
     required int dormitoryId,
   }) async {
@@ -837,7 +909,7 @@ class InvoiceService {
         break;
       }
     }
-    if (draft == null) return null;
+    if (draft == null) return (invoice: null, extraFeesCopyFailed: false);
 
     final issuedBy = _client.auth.currentUser?.id;
     if (issuedBy == null) throw Exception('ยังไม่ได้เข้าสู่ระบบ');
@@ -863,7 +935,6 @@ class InvoiceService {
           'electricity_units': draft.electricityUnits,
           'electricity_cost': draft.electricityCost,
           'water_cost': draft.waterCost,
-          'cleaning_fee': draft.cleaningFee,
           'due_date':
               '${due.year}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}',
           'issued_by': issuedBy,
@@ -873,7 +944,75 @@ class InvoiceService {
         .select(_columns)
         .single();
 
-    return _invoiceFromRow(inserted);
+    final reissued = _invoiceFromRow(inserted);
+
+    // reissue คือใบแทนของ "งวดเดียวกัน" ไม่ใช่งวดถัดไป — previewDrafts ข้างบน
+    // จึงไม่มีทางเห็นรายการของ [voided] เอง (carry-forward มองย้อนไปแค่งวด
+    // ก่อนหน้า) คัดลอกรายการทั้งหมดของใบที่ถูกยกเลิก ทั้งครั้งนี้เท่านั้นและ
+    // ทุกเดือน มาลงใบใหม่ตรงๆ ไม่งั้นค่าใช้จ่ายที่เพิ่งเพิ่มเข้าไปจะหายไปเงียบๆ
+    // ตอนยกเลิก+ออกใบแทน
+    //
+    // insert อีกก้อนที่ไม่ได้อยู่ใน transaction เดียวกับใบแทนที่เพิ่งสร้างเสร็จ
+    // ข้างบน — ล้มได้เองโดยที่ใบแทนยังอยู่ครบ จึงจับ error ไว้ที่นี่ ไม่ปล่อยให้
+    // ทั้งฟังก์ชัน throw ซึ่งจะทำให้ผู้เรียกไม่มีทางรู้เลยว่าใบแทนถูกสร้างไปแล้ว
+    var extraFeesCopyFailed = false;
+    try {
+      final voidedFees = await fetchExtraFees(invoiceId: voided.dbId);
+      if (voidedFees.isNotEmpty) {
+        await _client.from('invoice_extra_fees').insert([
+          for (final fee in voidedFees)
+            {
+              'invoice_id': reissued.dbId,
+              'name': fee.name,
+              'amount': fee.amount,
+              'is_recurring': fee.isRecurring,
+            },
+        ]);
+      }
+    } catch (_) {
+      extraFeesCopyFailed = true;
+    }
+
+    return (invoice: reissued, extraFeesCopyFailed: extraFeesCopyFailed);
+  }
+
+  // ── ค่าใช้จ่ายเพิ่มเติม ────────────────────────────────────────────────────
+
+  /// รายการค่าใช้จ่ายเพิ่มเติมทั้งหมดของบิลใบหนึ่ง เรียงตามลำดับที่เพิ่ม
+  Future<List<ExtraFee>> fetchExtraFees({required int invoiceId}) async {
+    final rows = await _client
+        .from('invoice_extra_fees')
+        .select()
+        .eq('invoice_id', invoiceId)
+        .order('created_at');
+
+    return (rows as List)
+        .cast<Map<String, dynamic>>()
+        .map(_extraFeeFromRow)
+        .toList();
+  }
+
+  /// เพิ่มรายการค่าใช้จ่ายเพิ่มเติมหนึ่งแถวให้บิลใบนี้ — trigger ฝั่งฐานข้อมูล
+  /// (sync_invoice_extra_fees_total) จะรวมยอดกลับไปที่ invoices.extra_fees_total
+  /// เอง ไม่ต้องคำนวณซ้ำที่นี่
+  Future<void> addExtraFee({
+    required int invoiceId,
+    required String name,
+    required double amount,
+    required bool isRecurring,
+  }) async {
+    await _client.from('invoice_extra_fees').insert({
+      'invoice_id': invoiceId,
+      'name': name,
+      'amount': amount,
+      'is_recurring': isRecurring,
+    });
+  }
+
+  /// ลบรายการค่าใช้จ่ายเพิ่มเติมหนึ่งแถว — ดีไซน์นี้ไม่มีการแก้ในที่ (edit)
+  /// การแก้คือลบแล้วเพิ่มใหม่
+  Future<void> removeExtraFee({required int extraFeeId}) async {
+    await _client.from('invoice_extra_fees').delete().eq('id', extraFeeId);
   }
 
   void _assertTransition(InvoiceStatus from, InvoiceStatus to) {
@@ -936,6 +1075,14 @@ Map<String, dynamic>? _embedded(dynamic value) {
   return null;
 }
 
+ExtraFee _extraFeeFromRow(Map<String, dynamic> row) => ExtraFee(
+      id: row['id'] as int,
+      invoiceId: row['invoice_id'] as int,
+      name: row['name'] as String,
+      amount: _toDouble(row['amount']),
+      isRecurring: row['is_recurring'] as bool? ?? false,
+    );
+
 Invoice _invoiceFromRow(Map<String, dynamic> row) {
   final room = _embedded(row['rooms']);
   final tenant = _embedded(row['tenant_profiles']);
@@ -957,7 +1104,7 @@ Invoice _invoiceFromRow(Map<String, dynamic> row) {
     electricityUnits: _toDouble(row['electricity_units']),
     electricityCost: _toDouble(row['electricity_cost']),
     waterCost: _toDouble(row['water_cost']),
-    cleaningFee: _toDouble(row['cleaning_fee']),
+    extraFeesTotal: _toDouble(row['extra_fees_total']),
     total: _toDouble(row['total']),
     status: _statusFromName(row['status'] as String?),
     // due_date เป็น DATE ไม่ใช่ TIMESTAMPTZ — ใส่ toLocal() จะเลื่อนไปหนึ่งวัน

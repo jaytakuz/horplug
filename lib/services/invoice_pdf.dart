@@ -85,8 +85,8 @@ Future<Uint8List> buildInvoicePdf({
               _amount('ค่าไฟ ${formatUnits(invoice.electricityUnits)} หน่วย',
                   invoice.electricityCost),
               _amount('ค่าน้ำ', invoice.waterCost),
-              if (invoice.cleaningFee > 0)
-                _amount('ค่าทำความสะอาด', invoice.cleaningFee),
+              if (invoice.extraFeesTotal > 0)
+                _amount('ค่าใช้จ่ายเพิ่มเติม', invoice.extraFeesTotal),
               pw.Divider(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -114,26 +114,35 @@ Future<Uint8List> buildInvoicePdf({
                   _row('ชำระผ่าน', channel.bankName!),
                   _row('เลขบัญชี', channel.accountNo!),
                 ],
-                // วาด QR จาก payload ตรงๆ ไม่ต้องโหลดรูปจากเครือข่าย การสร้าง
-                // เอกสารจึงทำงานได้แม้ออฟไลน์ และไม่มีทางล้มกลางคันเพราะรูป
+                // เดิมวาด QR จาก payload ตรงๆ — ตอนนี้แสดงกล่องบอก "เร็วๆ นี้"
+                // แทน เหตุผลเดียวกับ PromptPayQr ในแอป (ดู
+                // widgets/promptpay_qr.dart): ลองแค่เปลี่ยนข้อมูลที่เข้ารหัส
+                // เป็นสตริงเฉื่อยมาก่อน แต่ภาพยังหน้าตาเหมือน QR ใช้จ่ายได้จริง
+                // ทุกประการ คนที่ได้ไฟล์ PDF ไปจะสับสนว่าทำไมสแกนแล้วไม่มีอะไร
+                // เกิดขึ้น — qrPayload != null ยังคงใช้ตัดสินว่าควรมีบล็อกนี้
+                // ในเอกสารไหม (บิลที่ยังไม่มีช่องทางพร้อมเพย์ไม่ต้องมี)
                 if (qrPayload != null) ...[
                   pw.SizedBox(height: 8),
                   pw.Center(
-                    child: pw.BarcodeWidget(
-                      barcode: pw.Barcode.qrCode(),
-                      data: qrPayload,
+                    child: pw.Container(
                       width: 120,
                       height: 120,
-                      // ไม่วาดข้อความใต้บาร์โค้ด — ค่าเริ่มต้นคือวาด payload
-                      // ดิบด้วยฟอนต์ Courier ซึ่งไม่รองรับ Unicode (มี warning
-                      // ตอนสร้างเอกสาร) และผู้อ่านไม่ได้ประโยชน์อะไรจากสตริง
-                      // EMVCo ยาวๆ อยู่แล้ว บรรทัดที่มีความหมายเราวาดเองข้างล่าง
-                      drawText: false,
+                      alignment: pw.Alignment.center,
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.grey200,
+                        borderRadius: pw.BorderRadius.circular(8),
+                        border: pw.Border.all(color: PdfColors.grey400),
+                      ),
+                      child: pw.Text(
+                        'ระบบชำระเงิน\nจะมาเร็วๆ นี้',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(
+                          font: bold,
+                          fontSize: 10,
+                          color: PdfColors.grey700,
+                        ),
+                      ),
                     ),
-                  ),
-                  pw.Center(
-                    child: pw.Text('สแกนเพื่อชำระ ${formatBaht(invoice.total)}',
-                        style: const pw.TextStyle(fontSize: 9)),
                   ),
                 ],
               ],

@@ -20,7 +20,6 @@ import '../../widgets/payment_sheet.dart';
 import '../../widgets/quick_actions_editor.dart';
 import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
-import '../../utils/chat_preview.dart';
 import '../../utils/formatters.dart';
 
 class TenantDashboardScreen extends StatelessWidget {
@@ -188,8 +187,6 @@ class _TenantDashboardView extends StatelessWidget {
       _BillHeroCard(viewModel: viewModel),
       const SizedBox(height: 16),
       _UsageSection(viewModel: viewModel),
-      const SizedBox(height: 16),
-      _LatestMessageCard(viewModel: viewModel),
       const SizedBox(height: 16),
       _QuickActions(viewModel: viewModel),
       const SizedBox(height: 16),
@@ -708,87 +705,6 @@ class _OpenRequestRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ── ข้อความล่าสุด ──────────────────────────────────────────────────────────
-
-class _LatestMessageCard extends StatelessWidget {
-  const _LatestMessageCard({required this.viewModel});
-
-  final TenantDashboardViewModel viewModel;
-
-  @override
-  Widget build(BuildContext context) {
-    final message = viewModel.latestMessage;
-    // อ่านจาก shell VM ตัวเดียวกับ badge บน nav เพื่อให้ตัวเลขตรงกันเสมอ
-    final unreadCount =
-        context.watch<TenantShellViewModel>().unreadMessageCount;
-
-    return PaperCard(
-      onTap: () => context.go('/tenant/chat'),
-      child: viewModel.chatErrorMessage != null
-          ? SectionErrorNote(
-              message: viewModel.chatErrorMessage!,
-              onRetry: viewModel.load,
-            )
-          : Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: const BoxDecoration(
-                    color: AppColors.muted,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.support_agent,
-                      size: 20, color: AppColors.primary),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'เจ้าของหอ',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        message == null
-                            ? 'ยังไม่มีข้อความ — แตะเพื่อเริ่มแชท'
-                            // ผู้เช่าเป็นคนดู จึงเห็น "คุณ:" เมื่อตัวเองเป็น
-                            // คนส่งล่าสุด ซึ่งบอกได้ทันทีว่ากำลังรอเจ้าของหอ
-                            // ตอบอยู่ โดยไม่ต้องเปิดห้องแชทเข้าไปดู
-                            : chatPreviewLine(message, viewerIsOwner: false),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-                if (message != null) ...[
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (unreadCount > 0)
-                        Badge(label: Text('$unreadCount'))
-                      else
-                        const SizedBox(height: 16),
-                      const SizedBox(height: 4),
-                      Text(chatTimestampLabel(message.timestamp),
-                          style: Theme.of(context).textTheme.labelSmall),
-                    ],
-                  ),
-                ],
-              ],
-            ),
     );
   }
 }

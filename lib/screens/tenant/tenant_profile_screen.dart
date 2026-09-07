@@ -219,7 +219,11 @@ class _TenantProfileView extends StatelessWidget {
             Text('ไม่พบข้อมูลผู้ติดต่อ',
                 style: Theme.of(context).textTheme.bodySmall)
           else ...[
-            InfoRow(label: 'ชื่อ', value: dormitory.landlordName ?? '—'),
+            _CopyableRow(
+              icon: Icons.person_outline,
+              value: dormitory.landlordName ?? '—',
+              copiedMessage: 'คัดลอกชื่อแล้ว',
+            ),
             if (dormitory.landlordPhone != null)
               _CopyableRow(
                 icon: Icons.phone,

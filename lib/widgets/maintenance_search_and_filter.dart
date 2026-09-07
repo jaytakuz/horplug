@@ -75,6 +75,7 @@ class _MaintenanceSearchAndFilterState
           options: widget.statusOptions,
           selectedValue: widget.selectedStatus,
           onSelected: widget.onStatusChanged,
+          scrollable: true,
         ),
       ],
     );

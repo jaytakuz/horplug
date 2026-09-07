@@ -156,14 +156,20 @@ class _MeterViewState extends State<_MeterView>
   ) async {
     try {
       final result = await viewModel.syncInvoicesForPeriod();
-      if (!mounted || result.adjusted == 0) return;
+      if (!mounted || (result.adjusted == 0 && result.failed == 0)) return;
 
-      messenger.showSnackBar(SnackBar(
-        content: Text(result.noticesPosted
+      final parts = <String>[];
+      if (result.adjusted > 0) {
+        parts.add(result.noticesPosted
             ? 'ปรับยอดบิลที่ยังค้างชำระ ${result.adjusted} ใบ และแจ้งผู้เช่าแล้ว'
             : 'ปรับยอดบิลที่ยังค้างชำระ ${result.adjusted} ใบแล้ว '
-                'แต่ส่งข้อความแจ้งผู้เช่าไม่สำเร็จ'),
-      ));
+                'แต่ส่งข้อความแจ้งผู้เช่าไม่สำเร็จ');
+      }
+      if (result.failed > 0) {
+        parts.add('ปรับยอด ${result.failed} ใบไม่สำเร็จ');
+      }
+
+      messenger.showSnackBar(SnackBar(content: Text(parts.join(' — '))));
     } catch (error) {
       if (!mounted) return;
       // ต้องบอก ไม่ใช่เงียบ — เจ้าของหอเพิ่งแก้เลขมิเตอร์แล้วจะเข้าใจว่าบิล

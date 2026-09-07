@@ -1601,7 +1601,7 @@ class _RoomCard extends StatelessWidget {
                           Icon(Icons.build_outlined,
                               size: 18, color: AppColors.primary),
                           SizedBox(width: 10),
-                          Text('ประวัติการแจ้งซ่อม'),
+                          Text('ประวัติการแจ้งซ่อม/ทำความสะอาด'),
                         ],
                       ),
                     ),

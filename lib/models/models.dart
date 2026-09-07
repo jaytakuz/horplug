@@ -31,7 +31,6 @@ class MeterCharge {
 enum MessageType {
   text,
   maintenanceRequest,
-  parcelNotification,
   maintenanceUpdate,
   image,
   cleaningRequest,
@@ -167,7 +166,13 @@ class Invoice {
   final double electricityUnits;
   final double electricityCost;
   final double waterCost;
-  final double cleaningFee;
+
+  /// ผลรวมของรายการ "ค่าใช้จ่ายเพิ่มเติม" ของบิลใบนี้ (ตาราง
+  /// invoice_extra_fees) — trigger ฝั่งฐานข้อมูลคำนวณให้เสมอ ไม่มีที่ไหนใน
+  /// แอปเขียนค่านี้ตรงๆ รายการแยกแต่ละแถวไม่ได้ฝังอยู่ในคลาสนี้ (ดึงแยกผ่าน
+  /// InvoiceActionsViewModel.extraFees เฉพาะตอนเปิดแผ่นรายละเอียด เพื่อไม่ต้อง
+  /// query ซ้อนทุกครั้งที่ดึงรายการบิลทั้งเดือน)
+  final double extraFeesTotal;
   final double total;
 
   final InvoiceStatus status;
@@ -211,7 +216,7 @@ class Invoice {
     this.electricityUnits = 0,
     this.electricityCost = 0,
     this.waterCost = 0,
-    this.cleaningFee = 0,
+    this.extraFeesTotal = 0,
     required this.total,
     required this.status,
     required this.dueDate,
@@ -263,7 +268,7 @@ class Invoice {
       electricityUnits: electricityUnits,
       electricityCost: electricityCost,
       waterCost: waterCost,
-      cleaningFee: cleaningFee,
+      extraFeesTotal: extraFeesTotal,
       total: total,
       status: status ?? this.status,
       dueDate: dueDate,
@@ -283,6 +288,25 @@ class Invoice {
   }
 }
 
+/// รายการ "ค่าใช้จ่ายเพิ่มเติม" หนึ่งแถวของบิลใบหนึ่ง — ชื่อ+จำนวนเงินที่
+/// เจ้าของหอพิมพ์เอง ครั้งนี้เท่านั้น (isRecurring = false) หรือทุกเดือน
+/// (true, ถูกคัดลอกไปบิลงวดถัดไปเองตอนออกบิลใหม่จนกว่าจะถูกลบ)
+class ExtraFee {
+  final int id;
+  final int invoiceId;
+  final String name;
+  final double amount;
+  final bool isRecurring;
+
+  const ExtraFee({
+    required this.id,
+    required this.invoiceId,
+    required this.name,
+    required this.amount,
+    required this.isRecurring,
+  });
+}
+
 /// ร่างบิลที่คำนวณสดจากมิเตอร์ ยังไม่มีตัวตนในฐานข้อมูล
 ///
 /// แยกจาก [Invoice] ที่เป็นแถวจริง เพื่อให้ compiler ปฏิเสธการเผลอเอาตัวเลข
@@ -298,7 +322,15 @@ class InvoiceDraft {
   final double electricityUnits;
   final double electricityCost;
   final double waterCost;
-  final double cleaningFee;
+
+  /// รายการค่าใช้จ่ายเพิ่มเติมของร่างบิลนี้ ก่อนถูกเขียนลง invoice_extra_fees
+  /// จริงตอนออกบิล (ดู InvoiceService.carryForwardExtraFeesForIssued) — มา
+  /// จากสองทาง: (1) รายการ "ทุกเดือน" ที่คัดลอกมาจากบิลงวดก่อนหน้าของห้องนี้
+  /// โดยอัตโนมัติ (isRecurring เป็น true เสมอ) และ (2) รายการที่เจ้าของหอ
+  /// พิมพ์เพิ่มเองในกล่องออกบิล ก่อนกดยืนยัน (ดู
+  /// InvoiceIssueViewModel.addExtraFeeToDraft — ครั้งนี้เท่านั้นหรือทุกเดือน
+  /// ก็ได้) แต่ละแถวเก็บ isRecurring ของตัวเอง ไม่ได้เป็น true ทั้งหมด
+  final List<ExtraFee> carriedExtraFees;
   final SkipReason? skipReason;
 
   const InvoiceDraft({
@@ -312,13 +344,32 @@ class InvoiceDraft {
     this.electricityUnits = 0,
     this.electricityCost = 0,
     this.waterCost = 0,
-    this.cleaningFee = 0,
+    this.carriedExtraFees = const [],
     this.skipReason,
   });
 
   bool get canIssue => skipReason == null;
 
-  double get total => roomPrice + electricityCost + waterCost + cleaningFee;
+  double get total =>
+      roomPrice +
+      electricityCost +
+      waterCost +
+      carriedExtraFees.fold(0.0, (sum, fee) => sum + fee.amount);
+
+  InvoiceDraft copyWith({List<ExtraFee>? carriedExtraFees}) => InvoiceDraft(
+        roomDbId: roomDbId,
+        roomNumber: roomNumber,
+        tenantId: tenantId,
+        tenantName: tenantName,
+        billingMonth: billingMonth,
+        billingYear: billingYear,
+        roomPrice: roomPrice,
+        electricityUnits: electricityUnits,
+        electricityCost: electricityCost,
+        waterCost: waterCost,
+        carriedExtraFees: carriedExtraFees ?? this.carriedExtraFees,
+        skipReason: skipReason,
+      );
 }
 
 enum UtilityType { electricity, water }

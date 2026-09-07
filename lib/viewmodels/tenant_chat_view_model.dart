@@ -113,6 +113,18 @@ class TenantChatViewModel extends ChangeNotifier
       isLoading = false;
       isLoadingMore = false;
       notifyListeners();
+
+      // invoicesById โหลดครั้งเดียวตอน start()/reloadAfterSlip() — บิลที่ออก
+      // ใหม่ระหว่างที่แชทเปิดค้างอยู่แล้ว (IndexedStack ไม่เคย dispose แท็บนี้)
+      // จะมาถึงเป็นข้อความจริงผ่าน stream นี้ แต่การ์ดยังไม่มีข้อมูลบิลให้แสดง
+      // (ตกไปเป็นข้อความสำรอง กดจ่ายไม่ได้) จนกว่าจะ resolve เพิ่ม — เช็คว่ามี
+      // ข้อความประเภทบิลที่ยังไม่มีใน map ไหม ถ้ามีค่อยโหลด invoicesById ใหม่
+      // แทนที่จะโหลดทุกครั้งที่มีข้อความมา ซึ่งจะยิง query เกินจำเป็น
+      final hasUnresolvedInvoice = messages.any((message) =>
+          message.type == MessageType.invoice &&
+          message.invoiceId != null &&
+          !invoicesById.containsKey(message.invoiceId));
+      if (hasUnresolvedInvoice) _loadInvoices();
     }, onError: (error) {
       errorMessage = error.toString();
       isLoading = false;

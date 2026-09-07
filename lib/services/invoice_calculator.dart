@@ -16,7 +16,7 @@ InvoiceDraft buildDraft({
   required int billingYear,
   MeterCharge? electricity,
   double? waterAmount,
-  double cleaningFee = 0,
+  List<ExtraFee> carriedExtraFees = const [],
   bool alreadyIssued = false,
 }) {
   final electricityCost = electricity?.amount ?? 0;
@@ -32,9 +32,7 @@ InvoiceDraft buildDraft({
   } else if (electricity == null) {
     // เลขมิเตอร์ไฟเป็นเงื่อนไขบังคับ ไม่ใช่หนึ่งในสามอย่างที่มีอย่างใดก็พอ
     //
-    // เกณฑ์เดิมข้ามห้องก็ต่อเมื่อขาดครบทั้งไฟ น้ำ และค่าทำความสะอาด ห้องที่มีงาน
-    // ทำความสะอาดในงวดนั้นจึงได้บิลที่มีค่าไฟ ฿0 ทั้งที่ยังไม่มีใครอ่านมิเตอร์
-    // เลย และเพราะบิลตรึงตัวเลข ณ วันออก การแก้ทีหลังต้องยกเลิกใบนั้นแล้วออกใหม่
+    // เพราะบิลตรึงตัวเลข ณ วันออก การแก้ทีหลังต้องยกเลิกใบนั้นแล้วออกใหม่
     // ระหว่างนั้นผู้เช่าถือ QR ระบุยอดที่ยอดผิดอยู่ในมือแล้ว
     //
     // ค่าไฟเป็นก้อนที่ผันแปรที่สุดในบิล บิลที่ออกโดยยังไม่รู้ค่าไฟจึงไม่ใช่บิลที่
@@ -54,10 +52,16 @@ InvoiceDraft buildDraft({
     electricityUnits: electricity?.units ?? 0,
     electricityCost: electricityCost,
     waterCost: waterCost,
-    cleaningFee: cleaningFee,
+    carriedExtraFees: carriedExtraFees,
     skipReason: skipReason,
   );
 }
+
+/// เลือกรายการค่าใช้จ่ายเพิ่มเติมแบบ "ทุกเดือน" จากบิลใบล่าสุดของห้องก่อน
+/// งวดนี้ ให้เป็นตัวตั้งต้นของร่างบิลใหม่ — รายการ "ครั้งนี้เท่านั้น" ไม่ถูก
+/// คัดลอกต่อ
+List<ExtraFee> carryForwardExtraFees(List<ExtraFee> previousInvoiceFees) =>
+    previousInvoiceFees.where((fee) => fee.isRecurring).toList();
 
 /// ครบกำหนดชำระวันที่ 5 ของเดือนถัดจากงวด
 ///
@@ -85,7 +89,6 @@ class InvoiceAdjustment {
     required this.electricityUnits,
     required this.electricityCost,
     required this.waterCost,
-    required this.cleaningFee,
   });
 
   /// ใบเดิม — เลขที่บิลและ revision ติดมากับมัน เพราะนี่คือการแก้ยอดของใบนี้
@@ -96,14 +99,19 @@ class InvoiceAdjustment {
   final double electricityUnits;
   final double electricityCost;
   final double waterCost;
-  final double cleaningFee;
 
   double get previousTotal => invoice.total;
 
   /// สูตรเดียวกับ GENERATED column `invoices.total` — ที่นี่คำนวณไว้เพื่อบอก
   /// ผู้เช่าว่ายอดจะเปลี่ยนเป็นเท่าไร ส่วนตัวเลขที่นับเป็นทางการยังเป็นของ
   /// ฐานข้อมูล ซึ่งไม่มีทางไม่ตรงกับผลบวกของรายการ
-  double get newTotal => roomPrice + electricityCost + waterCost + cleaningFee;
+  //
+  // ค่าใช้จ่ายเพิ่มเติม (extraFeesTotal) ไม่ได้ถูกคำนวณใหม่ตรงนี้ — ต่างจาก
+  // ค่าไฟ/ค่าน้ำที่มาจากมิเตอร์งวดนี้ รายการเพิ่มเติมเป็นของบิลใบนี้เอง (เพิ่ม/
+  // ลบทีละแถวผ่าน invoice_extra_fees) ตัว trigger ฝั่งฐานข้อมูลรักษายอดให้
+  // อยู่แล้ว การคำนวณซ้ำที่นี่จะไปเขียนทับได้
+  double get newTotal =>
+      roomPrice + electricityCost + waterCost + invoice.extraFeesTotal;
 }
 
 /// เทียบบิลใบหนึ่งกับข้อมูลล่าสุดของงวด · null = ไม่ต้องแตะใบนี้
@@ -117,7 +125,6 @@ InvoiceAdjustment? revalueInvoice({
   required Room room,
   MeterCharge? electricity,
   double? waterAmount,
-  required double cleaningFee,
 }) {
   // ใบที่ส่งสลิป/จ่าย/ยกเลิกแล้วตรึงตลอดไป — ผู้เช่าจ่ายตามยอดที่เห็น
   // การขยับยอดทีหลังทำให้สลิปกับบิลไม่ตรงกันโดยไม่มีใครผิด
@@ -135,7 +142,6 @@ InvoiceAdjustment? revalueInvoice({
     // "ยังไม่กรอกค่าน้ำ" กับ "กรอกว่าไม่เก็บค่าน้ำ" คนละความหมาย อย่างแรกต้อง
     // คงยอดเดิมของบิลไว้ อย่างหลังคือ 0 ที่ตั้งใจ
     waterCost: waterAmount ?? invoice.waterCost,
-    cleaningFee: cleaningFee,
   );
 
   return _isUnchanged(adjustment) ? null : adjustment;
@@ -152,8 +158,7 @@ bool _isUnchanged(InvoiceAdjustment a) {
   return (a.roomPrice - invoice.roomPrice).abs() < epsilon &&
       (a.electricityUnits - invoice.electricityUnits).abs() < epsilon &&
       (a.electricityCost - invoice.electricityCost).abs() < epsilon &&
-      (a.waterCost - invoice.waterCost).abs() < epsilon &&
-      (a.cleaningFee - invoice.cleaningFee).abs() < epsilon;
+      (a.waterCost - invoice.waterCost).abs() < epsilon;
 }
 
 /// ข้อความที่แสดงในรายการ "ข้าม N ห้อง" ของกล่องตรวจก่อนออกบิล

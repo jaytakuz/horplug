@@ -369,12 +369,15 @@ class _InvoiceCard extends StatelessWidget {
 
     return PaperCard(
       onTap: () async {
-        final changed = await showInvoiceDetailSheet(
+        await showInvoiceDetailSheet(
           context,
           invoice: invoice,
           dormitoryId: context.read<BillingViewModel>().dormitoryId,
         );
-        if (changed && context.mounted) {
+        // โหลดใหม่เสมอไม่ว่าแผ่นจะคืน true หรือไม่ — การเพิ่ม/ลบค่าใช้จ่าย
+        // เพิ่มเติมในแผ่นไม่ได้ทำให้แผ่นคืนค่า true (ไม่ใช่การเปลี่ยนสถานะบิล)
+        // แต่ยอดรวมในรายการต้องอัปเดตเหมือนกัน
+        if (context.mounted) {
           await context.read<BillingViewModel>().loadInvoices();
         }
       },
@@ -442,8 +445,8 @@ class _InvoiceCard extends StatelessWidget {
           _buildItemRow('🏠 ค่าห้อง', formatBaht(invoice.roomPrice)),
           _buildItemRow('⚡ ไฟ ${formatUnits(invoice.electricityUnits)} หน่วย', formatBaht(invoice.electricityCost)),
           _buildItemRow('💧 ค่าน้ำ', formatBaht(invoice.waterCost)),
-          if (invoice.cleaningFee > 0)
-            _buildItemRow('🧹 ค่าทำความสะอาด', formatBaht(invoice.cleaningFee)),
+          if (invoice.extraFeesTotal > 0)
+            _buildItemRow('➕ ค่าใช้จ่ายเพิ่มเติม', formatBaht(invoice.extraFeesTotal)),
           const Divider(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

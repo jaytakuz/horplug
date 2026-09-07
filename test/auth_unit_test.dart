@@ -104,11 +104,11 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // UTC-33: AuthViewModel.signIn()
+  // UTC-32: AuthViewModel.signIn()
   // -------------------------------------------------------------------------
-  group('UTC-33 AuthViewModel.signIn()', () {
+  group('UTC-32 AuthViewModel.signIn()', () {
     test(
-        'UTC-33-TC-01: status becomes authenticated and role is landlord '
+        'UTC-32-TC-01: status becomes authenticated and role is landlord '
         'after successful sign in with landlord credentials', () async {
       final service = FakeAuthService()..profile = landlordProfile();
       final controller = AuthViewModel(authService: service);
@@ -124,7 +124,7 @@ void main() {
     });
 
     test(
-        'UTC-33-TC-02: status becomes authenticated and role is tenant '
+        'UTC-32-TC-02: status becomes authenticated and role is tenant '
         'after successful sign in with tenant credentials', () async {
       final service = FakeAuthService()..profile = tenantProfile();
       final controller = AuthViewModel(authService: service);
@@ -140,7 +140,7 @@ void main() {
     });
 
     test(
-        'UTC-33-TC-03: exception is rethrown and status stays unauthenticated '
+        'UTC-32-TC-03: exception is rethrown and status stays unauthenticated '
         'when credentials are incorrect', () async {
       final service = FakeAuthService()
         ..signInError = Exception('invalid login credentials');
@@ -157,7 +157,7 @@ void main() {
     });
 
     test(
-        'UTC-33-TC-04: exception is rethrown and status stays unauthenticated '
+        'UTC-32-TC-04: exception is rethrown and status stays unauthenticated '
         'when email and password are empty', () async {
       final service = FakeAuthService()
         ..signInError = Exception('invalid login credentials');
@@ -174,7 +174,7 @@ void main() {
     });
 
     test(
-        'UTC-33-TC-05: SocketException is rethrown and status stays unauthenticated '
+        'UTC-32-TC-05: SocketException is rethrown and status stays unauthenticated '
         'when network is unavailable', () async {
       final service = FakeAuthService()
         ..signInError = const SocketException('Failed host lookup');
@@ -192,11 +192,11 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // UTC-34: AuthViewModel.registerTenant()
+  // UTC-33: AuthViewModel.registerTenant()
   // -------------------------------------------------------------------------
-  group('UTC-34 AuthViewModel.registerTenant()', () {
+  group('UTC-33 AuthViewModel.registerTenant()', () {
     test(
-        'UTC-34-TC-01: status becomes authenticated and role is tenant '
+        'UTC-33-TC-01: status becomes authenticated and role is tenant '
         'after successful tenant registration', () async {
       final service = FakeAuthService()
         ..profile = tenantProfile(email: 'tenant_new@test.com');
@@ -241,7 +241,7 @@ void main() {
     });
 
     test(
-        'UTC-34-TC-03: exception is rethrown and status stays unauthenticated '
+        'UTC-33-TC-03: exception is rethrown and status stays unauthenticated '
         'when name is already taken', () async {
       final service = FakeAuthService()
         ..signUpTenantError = Exception('database error saving new user');
@@ -264,7 +264,7 @@ void main() {
     });
 
     test(
-        'UTC-34-TC-04: SocketException is rethrown and status stays unauthenticated '
+        'UTC-33-TC-04: SocketException is rethrown and status stays unauthenticated '
         'when network is unavailable during tenant registration', () async {
       final service = FakeAuthService()
         ..signUpTenantError = const SocketException('Failed host lookup');
@@ -288,11 +288,11 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // UTC-35: AuthViewModel.registerLandlord()
+  // UTC-34: AuthViewModel.registerLandlord()
   // -------------------------------------------------------------------------
-  group('UTC-35 AuthViewModel.registerLandlord()', () {
+  group('UTC-34 AuthViewModel.registerLandlord()', () {
     test(
-        'UTC-35-TC-01: status becomes authenticated and role is landlord '
+        'UTC-34-TC-01: status becomes authenticated and role is landlord '
         'after successful landlord registration', () async {
       final service = FakeAuthService()
         ..profile = landlordProfile(email: 'owner_new@test.com');
@@ -320,7 +320,7 @@ void main() {
     });
 
     test(
-        'UTC-35-TC-02: exception is rethrown and status stays unauthenticated '
+        'UTC-34-TC-02: exception is rethrown and status stays unauthenticated '
         'when email is already registered', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = Exception('email_exists');
@@ -349,7 +349,7 @@ void main() {
     });
 
     test(
-        'UTC-35-TC-03: exception is rethrown and status stays unauthenticated '
+        'UTC-34-TC-03: exception is rethrown and status stays unauthenticated '
         'when dormitory name is already taken', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = Exception('dormitory_name_exists');
@@ -378,7 +378,7 @@ void main() {
     });
 
     test(
-        'UTC-35-TC-04: exception is rethrown and status stays unauthenticated '
+        'UTC-34-TC-04: exception is rethrown and status stays unauthenticated '
         'when name is already taken', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = Exception('database error saving new user');
@@ -407,7 +407,7 @@ void main() {
     });
 
     test(
-        'UTC-35-TC-05: SocketException is rethrown and status stays unauthenticated '
+        'UTC-34-TC-05: SocketException is rethrown and status stays unauthenticated '
         'when network is unavailable during landlord registration', () async {
       final service = FakeAuthService()
         ..signUpLandlordError = const SocketException('Failed host lookup');

@@ -43,22 +43,32 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-Project Documents
-pubspec.lock
-pubspec.lock
-.env
-pubspec.lock
-documents
-ios/Podfile.lock
-MIGRATION_SUMMARY.md
-ROOM_MANAGEMENT_FEATURE.md
-devtools_options.yaml
 
-# ข้อมูลผู้เช่าจริงที่ export มาจากฐานข้อมูล — ชื่อ เบอร์โทร เลขห้อง
-# ห้ามเข้า git เด็ดขาด ไฟล์ที่เคยขึ้นไปแล้วลบทีหลังยังอยู่ในประวัติตลอดไป
-database/csv/
-sample_documents/
+# เครื่องมือของ editor และ AI agent ไม่ใช่ของโปรเจกต์ · .github/ ไม่มี workflow
+# จริงสักอัน มีแต่ของที่ส่วนขยาย java-upgrade ทิ้งไว้ · ถ้าวันไหนเพิ่ม GitHub
+# Actions จริง ให้เติม !/.github/workflows/ ต่อท้ายบล็อกนี้
+/.claude/
+/.superpowers/
+/.github/
+/devtools_options.yaml
 
-# ไฟล์ที่ส่วนขยายของ editor สร้างเอง ไม่ใช่ของโปรเจกต์นี้ (java-upgrade ในโปรเจกต์
-# Flutter) · ถ้าวันไหนเพิ่ม GitHub Actions จริง ให้ยกเว้น .github/workflows/ ออกมา
-.github/
+# ความลับและข้อมูลผู้เช่าจริง (ชื่อ เบอร์โทร เลขห้อง) ห้ามเข้า git เด็ดขาด
+# ไฟล์ที่เคยขึ้นไปแล้วลบทีหลังยังอยู่ในประวัติตลอดไป · ดู .env.example เป็นแบบ
+/.env
+/.env.local
+/database/csv/
+*.jks
+*.keystore
+key.properties
+**/google-services.json
+**/GoogleService-Info.plist
+
+# เอกสารส่งงานและไฟล์อ้างอิงของทีม เก็บไว้ในเครื่อง ไม่ใช่ส่วนหนึ่งของซอร์ส
+/documents/
+/sample_documents/
+/MIGRATION_SUMMARY.md
+/ROOM_MANAGEMENT_FEATURE.md
+
+# ไอคอนต้นฉบับ 4000×4000 หนัก 13MB · ใช้แค่ตอนรัน scripts/generate_web_icons.py
+# ผลลัพธ์ที่ generate แล้วอยู่ใน web/icons/ ซึ่ง commit ไว้เรียบร้อย
+/lib/assets/horplug_icon1.png

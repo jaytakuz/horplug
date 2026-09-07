@@ -6,6 +6,7 @@ import '../../utils/formatters.dart';
 import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../models/models.dart';
+import '../../viewmodels/admin_shell_view_model.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/chat_view_model.dart';
 import '../../widgets/chat_conversation_view.dart';
@@ -21,11 +22,15 @@ class ChatScreen extends StatelessWidget {
         profile?.fullName.isNotEmpty == true ? profile!.fullName : 'เจ้าของหอ';
 
     return ChangeNotifierProvider(
-      create: (_) => ChatViewModel(
+      create: (context) => ChatViewModel(
         dormitoryId: profile?.dormitoryId ?? 0,
         ownerId: profile?.id ?? '',
         ownerName: ownerName,
-      )..loadChatPreviews(),
+        onRoomRead: () =>
+            context.read<AdminShellViewModel>().refreshUnreadCount(),
+      )
+        ..loadChatPreviews()
+        ..startWatchingPreviews(),
       child: const _ChatView(),
     );
   }
@@ -319,12 +324,14 @@ class _ChatViewState extends State<_ChatView> {
                     requestType: requestType),
             invoicesById: viewModel.invoicesById,
             onOpenInvoice: (invoice) async {
-              final changed = await showInvoiceDetailSheet(
+              await showInvoiceDetailSheet(
                 context,
                 invoice: invoice,
                 dormitoryId: viewModel.dormitoryId,
               );
-              if (changed) await viewModel.refreshInvoices();
+              // เหตุผลเดียวกับ billing_screen.dart — เพิ่ม/ลบค่าใช้จ่าย
+              // เพิ่มเติมไม่ทำให้แผ่นคืน true แต่การ์ดบิลในแชทต้องอัปเดตยอด
+              await viewModel.refreshInvoices();
             },
           ),
         ),

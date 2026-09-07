@@ -603,6 +603,19 @@ class SupabaseService {
         });
   }
 
+  /// สตรีมสัญญาณเมื่อมีการเปลี่ยนแปลงในตาราง messages (ข้อความใหม่จากฝั่งไหน
+  /// ก็ได้) ไม่ใช้เนื้อหาแถวที่ได้แสดงผลตรงๆ แค่ใช้จับจังหวะกระตุ้นให้ผู้เรียก
+  /// ไปดึงจำนวน/รายการที่ถูกกรองสิทธิ์แล้วมาอีกที — แก้ปัญหา badge ข้อความ
+  /// ยังไม่อ่านค้างจนกว่าจะสลับแท็บหรือดึงรีเฟรชเอง
+  Stream<void> watchLatestMessageSignal() {
+    return client
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .limit(1)
+        .map((_) {});
+  }
+
   /// อัปโหลดรูปภาพไปยัง Storage bucket ส่วนตัว คืนค่าเป็น storage path
   /// (ไม่ใช่ URL) — path นี้จะถูกเก็บใน messages.attachment_url แล้วแปลงเป็น
   /// signed URL ตอนอ่านข้อความ เพราะ bucket เป็น private
@@ -970,33 +983,18 @@ class SupabaseService {
     );
   }
 
-  /// กำหนดค่าบริการทำความสะอาด (เฉพาะคำขอประเภท Cleaning) — ยอดนี้จะถูกรวม
-  /// เข้าร่างบิลของห้องในเดือนที่คำขอนี้ "เสร็จสิ้น" ผ่าน
-  /// InvoiceService.previewDrafts
-  Future<void> updateCleaningFee({
-    required int requestId,
-    required double fee,
-  }) async {
-    await client
-        .from('maintenance_requests')
-        .update({'cleaning_fee': fee}).eq('id', requestId);
-  }
 
   /// ห้องที่มีแจ้งซ่อมค้างอยู่ (รอดำเนินการ/กำลังดำเนินการ) จะถูกตั้งเป็น
   /// 'maintenance' อัตโนมัติ และกลับเป็น 'occupied' เมื่อเสร็จสิ้น — แต่จะกลับ
   /// เฉพาะตอนไม่มีแจ้งซ่อมอื่นของห้องเดียวกันที่ยังไม่เสร็จค้างอยู่แล้วเท่านั้น
+  ///
+  /// ตรรกะการตัดสินใจล้วนอยู่ใน [roomStatusForMaintenanceSync] (ไม่มี I/O จึง
+  /// unit test ตรงๆ ได้) ส่วนตรงนี้ทำหน้าที่แค่ query ข้อมูลที่จำเป็นแล้วส่งต่อ
   Future<void> _syncRoomStatusForMaintenance({
     required int roomId,
     required MaintenanceStatus status,
   }) async {
-    if (status == MaintenanceStatus.pending ||
-        status == MaintenanceStatus.inProgress) {
-      await client
-          .from('rooms')
-          .update({'status': 'maintenance'}).eq('id', roomId);
-      return;
-    }
-
+    var hasOtherUnfinishedRequests = false;
     if (status == MaintenanceStatus.completed ||
         status == MaintenanceStatus.cancelled) {
       final remaining = await client
@@ -1004,12 +1002,37 @@ class SupabaseService {
           .select('id')
           .eq('room_id', roomId)
           .inFilter('status', ['Pending', 'In-Progress']).limit(1);
+      hasOtherUnfinishedRequests = (remaining as List).isNotEmpty;
+    }
 
-      if ((remaining as List).isEmpty) {
-        await client
-            .from('rooms')
-            .update({'status': 'occupied'}).eq('id', roomId);
-      }
+    final newStatus = roomStatusForMaintenanceSync(
+      status: status,
+      hasOtherUnfinishedRequests: hasOtherUnfinishedRequests,
+    );
+    if (newStatus != null) {
+      await client
+          .from('rooms')
+          .update({'status': newStatus}).eq('id', roomId);
     }
   }
+}
+
+/// ตรรกะล้วนของ [SupabaseService._syncRoomStatusForMaintenance] — คืนสถานะ
+/// ใหม่ที่ห้องควรเป็น หรือ null ถ้าไม่ต้องเปลี่ยน แยกออกมาเป็น top-level
+/// function เพื่อให้ unit test ได้โดยไม่ต้องแตะ Supabase client จริง
+/// (เช่นเดียวกับ electricityMeterOverflowCheck ของ Feature 4)
+String? roomStatusForMaintenanceSync({
+  required MaintenanceStatus status,
+  required bool hasOtherUnfinishedRequests,
+}) {
+  if (status == MaintenanceStatus.pending ||
+      status == MaintenanceStatus.inProgress) {
+    return 'maintenance';
+  }
+  if ((status == MaintenanceStatus.completed ||
+          status == MaintenanceStatus.cancelled) &&
+      !hasOtherUnfinishedRequests) {
+    return 'occupied';
+  }
+  return null;
 }

@@ -17,6 +17,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     required this.ownerName,
     SupabaseService? service,
     InvoiceService? invoiceService,
+    this.onRoomRead,
   })  : _service = service ?? SupabaseService(),
         _invoiceService = invoiceService ?? InvoiceService();
 
@@ -27,6 +28,12 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
   final String ownerName;
   final SupabaseService _service;
   final InvoiceService _invoiceService;
+
+  /// เรียกทันทีที่ mark ห้องว่าอ่านแล้วสำเร็จตอนเปิดห้อง (ไม่ใช่ตอนปิด) —
+  /// ใช้ให้ AdminShellViewModel (เจ้าของ badge บนแท็บแชท) รีเฟรชจำนวนของตัวเอง
+  /// เพราะเป็นคนละ ViewModel กับตัวนี้ และไม่ได้ฟังการเปลี่ยนแปลงของตาราง
+  /// message_reads ที่ markRoomRead เขียน
+  final VoidCallback? onRoomRead;
 
   static const String allFloors = 'ทั้งหมด';
 
@@ -75,6 +82,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
 
   int _messageLimit = _pageSize;
   StreamSubscription<List<ChatMessage>>? _messagesSubscription;
+  StreamSubscription<void>? _previewsSignalSubscription;
 
   Map<int, Invoice> invoicesById = {};
 
@@ -94,6 +102,18 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
       invoicesById = {};
     }
     notifyListeners();
+  }
+
+  /// ฟังสัญญาณข้อความใหม่ตลอดที่แท็บแชทยังมีชีวิตอยู่ (IndexedStack ไม่เคย
+  /// dispose แท็บนี้) แล้วโหลดรายการห้องใหม่ทันที ไม่ต้องรอผู้ใช้ดึงรีเฟรช —
+  /// ข้ามไปถ้ากำลังเปิดสนทนาห้องใดห้องหนึ่งอยู่ เพราะ badge/ข้อความล่าสุดของ
+  /// ห้องนั้นแสดงผ่าน _subscribeToMessages อยู่แล้ว ไม่ต้องโหลดซ้ำ
+  void startWatchingPreviews() {
+    _previewsSignalSubscription?.cancel();
+    _previewsSignalSubscription =
+        _service.watchLatestMessageSignal().listen((_) {
+      if (selectedChat == null) loadChatPreviews();
+    });
   }
 
   Future<void> loadChatPreviews() async {
@@ -122,8 +142,11 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     _subscribeToMessages(chat.roomDbId, chat.tenantName);
     // ไม่ await เพราะไม่ควรหน่วงการเปิดแชท แต่ต้องกลืน error เอง ไม่งั้น
     // ถ้า upsert ล้ม (ออฟไลน์ / RLS) จะกลายเป็น unhandled async exception
+    // badge บนแท็บแชทต้องหายทันทีที่เปิดห้องนี้ ไม่ใช่รอจนกดย้อนกลับไปหน้า
+    // รายการห้อง — เรียก onRoomRead ทันทีที่ mark ผ่าน
     _service
         .markRoomRead(roomId: chat.roomDbId, userId: ownerId)
+        .then((_) => onRoomRead?.call())
         .catchError((_) {});
     _loadInvoices(chat.roomDbId);
   }
@@ -195,6 +218,11 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
         isFromOwner: true,
         body: trimmed,
       );
+    } catch (error) {
+      // เดิมมีแต่ finally — error หลุดเป็น unhandled async exception
+      // (ผู้เรียกไม่ await) เจ้าของหอเห็นแค่ข้อความที่พิมพ์หายไปเฉยๆ เหมือนที่
+      // เคยเกิดกับฝั่งผู้เช่ามาก่อน ใช้ sendErrorMessage ตัวเดียวกับที่ส่งรูปใช้
+      sendErrorMessage = 'ส่งข้อความไม่สำเร็จ: ${formatErrorMessage(error)}';
     } finally {
       isSending = false;
       notifyListeners();
@@ -226,9 +254,6 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
         attachmentUrl: path,
       );
     } catch (error) {
-      // เดิมมีแต่ finally · error หลุดออกไปเป็น unhandled async exception
-      // (ผู้เรียกไม่ await) เจ้าของหอจึงเห็นแค่วงกลมหมุนแล้วหายไป ไม่มีรูป
-      // ไม่มีข้อความบอกว่าเกิดอะไรขึ้น — เป็นเหตุผลที่บั๊กบนเว็บซ่อนอยู่ได้นาน
       sendErrorMessage = 'ส่งรูปไม่สำเร็จ: ${formatErrorMessage(error)}';
     } finally {
       isUploadingImage = false;
@@ -270,6 +295,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
   @override
   void dispose() {
     _messagesSubscription?.cancel();
+    _previewsSignalSubscription?.cancel();
     super.dispose();
   }
 }
