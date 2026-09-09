@@ -573,6 +573,22 @@ class _AddExtraFeeCardState extends State<_AddExtraFeeCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SegmentedButton<bool>(
+            showSelectedIcon: false,
+            style: SegmentedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              textStyle: const TextStyle(fontSize: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+            segments: const [
+              ButtonSegment(value: false, label: Text('ครั้งนี้เท่านั้น')),
+              ButtonSegment(value: true, label: Text('ทุกเดือน')),
+            ],
+            selected: {_isRecurring},
+            onSelectionChanged: (selected) =>
+                setState(() => _isRecurring = selected.first),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -608,29 +624,6 @@ class _AddExtraFeeCardState extends State<_AddExtraFeeCard> {
                     hintText: '0',
                     border: OutlineInputBorder(),
                   ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: SegmentedButton<bool>(
-                  showSelectedIcon: false,
-                  style: SegmentedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    textStyle: const TextStyle(fontSize: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                  ),
-                  segments: const [
-                    ButtonSegment(
-                        value: false, label: Text('ครั้งนี้เท่านั้น')),
-                    ButtonSegment(value: true, label: Text('ทุกเดือน')),
-                  ],
-                  selected: {_isRecurring},
-                  onSelectionChanged: (selected) =>
-                      setState(() => _isRecurring = selected.first),
                 ),
               ),
               const SizedBox(width: 8),
