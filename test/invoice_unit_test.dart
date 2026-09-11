@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:horplug/models/models.dart';
 import 'package:horplug/services/invoice_calculator.dart';
@@ -365,6 +366,7 @@ InvoiceAdjustment buildAdjustment({
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  debugPrint = (String? message, {int? wrapWidth}) {};
 
   group('Feature 8: Invoice Generation', () {
     // -----------------------------------------------------------------------

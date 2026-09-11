@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:horplug/models/models.dart';
 import 'package:horplug/models/picked_image.dart';
@@ -221,6 +222,7 @@ QuickActionsViewModel<QuickAction> buildQuickActions({
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  debugPrint = (String? message, {int? wrapWidth}) {};
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
