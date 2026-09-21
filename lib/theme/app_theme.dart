@@ -25,6 +25,10 @@ class AppColors {
   static const muted = Color(0xFFEEF1F4);
   static const mutedForeground = Color(0xFF6B7C90);
   static const border = Color(0xFFDDE3EA);
+
+  /// จังหวะสว่างของโครงร่างตอนโหลด · กระดูกเต้นระหว่าง [muted] กับสีนี้
+  /// ต้องต่างจาก muted พอให้เห็นว่ามีอะไรกำลังเกิดขึ้น แต่ไม่มากจนกระพริบใส่ตา
+  static const skeletonHighlight = Color(0xFFF7F9FB);
 }
 
 class AppShadows {
@@ -46,14 +50,14 @@ ThemeData buildAppTheme() {
   final baseTheme = ThemeData(
     useMaterial3: true,
     // Open Sans ไม่มีอักษรไทยสักตัว (มีแค่ latin/greek/cyrillic/hebrew) ตัวไทย
-    // จึงตกไป Noto Sans Thai ผ่าน fallback — ซึ่งทำงานทีละ **ตัวอักษร** ไม่ใช่
+    // จึงตกไป Google Sans ผ่าน fallback — ซึ่งทำงานทีละ **ตัวอักษร** ไม่ใช่
     // ทั้งบรรทัด เลขกับคำอังกฤษในประโยคไทยเดียวกันจึงยังเป็น Open Sans
     //
     // ถ้าไม่ประกาศ fallback ตัวไทยจะตกไปใช้ฟอนต์ของระบบ ซึ่งต่างกันทุกเครื่อง
     // (Android=Noto, Windows=Tahoma, iOS=Thonburi) และคุมระยะสระบน-ล่างไม่ได้
     // — ทั้งที่ UI ของแอปนี้เป็นภาษาไทยเกือบทั้งหมด
     fontFamily: 'Open Sans',
-    fontFamilyFallback: const ['Noto Sans Thai'],
+    fontFamilyFallback: const ['Google Sans'],
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       primary: AppColors.primary,

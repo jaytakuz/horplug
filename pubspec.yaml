@@ -51,13 +51,17 @@ flutter:
     # ใบอนุญาตของฟอนต์ที่ฝังมา · main() อ่านผ่าน rootBundle แล้วลงทะเบียนกับ
     # LicenseRegistry เพื่อให้โผล่ในหน้า licenses ของแอปตามที่ OFL กำหนด
     - lib/assets/fonts/OFL-OpenSans.txt
-    - lib/assets/fonts/OFL-NotoSansThai.txt
+    - lib/assets/fonts/OFL-GoogleSans.txt
 
   # คนละที่กับ assets: ด้านบนโดยตั้งใจ — ที่นี่คือฟอนต์ที่ระบบฟอนต์ของ Flutter
   # ต้องรู้จักชื่อตระกูลและน้ำหนัก เพื่อให้ธีมอ้างถึงด้วย fontFamily ได้
   #
   # Open Sans ไม่มีอักษรไทยสักตัว (latin/greek/cyrillic/hebrew เท่านั้น) จึงต้อง
-  # มี Noto Sans Thai คู่มาเสมอ ดู fontFamilyFallback ใน theme/app_theme.dart
+  # มี Google Sans คู่มาเสมอ ดู fontFamilyFallback ใน theme/app_theme.dart
+  #
+  # ไฟล์ GoogleSansThai-* ตัดมาจาก variable font ของ Google Sans (OFL) ให้เหลือ
+  # แค่บล็อกไทย U+0E00–0E7F และแยกเป็นน้ำหนักคงที่ — Flutter ไม่แปลง fontWeight
+  # ไปเป็นแกน wght ให้เอง และตัวเต็มหนักเกือบ 5MB เพราะมีอักษรอีกหลายสิบระบบ
   fonts:
     - family: Open Sans
       fonts:
@@ -67,11 +71,11 @@ flutter:
           weight: 600
         - asset: lib/assets/fonts/OpenSans-Bold.ttf
           weight: 700
-    - family: Noto Sans Thai
+    - family: Google Sans
       fonts:
-        - asset: lib/assets/fonts/NotoSansThai-Regular.ttf
+        - asset: lib/assets/fonts/GoogleSansThai-Regular.ttf
           weight: 400
-        - asset: lib/assets/fonts/NotoSansThai-SemiBold.ttf
+        - asset: lib/assets/fonts/GoogleSansThai-SemiBold.ttf
           weight: 600
-        - asset: lib/assets/fonts/NotoSansThai-Bold.ttf
+        - asset: lib/assets/fonts/GoogleSansThai-Bold.ttf
           weight: 700

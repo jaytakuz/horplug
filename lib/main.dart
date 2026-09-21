@@ -65,14 +65,14 @@ Future<void> main() async {
 
 /// ใบอนุญาตของฟอนต์ที่ฝังมากับแอป
 ///
-/// Open Sans และ Noto Sans Thai เป็น SIL OFL 1.1 ทั้งคู่ ซึ่งกำหนดให้แจกใบอนุญาต
+/// Open Sans และ Google Sans เป็น SIL OFL 1.1 ทั้งคู่ ซึ่งกำหนดให้แจกใบอนุญาต
 /// ไปพร้อมกับฟอนต์ · หน้า licenses ของ Flutter (`showLicensePage`) คือที่ที่ผู้ใช้
 /// หามันเจอ แต่มันรู้จักเฉพาะแพ็กเกจ ไม่รู้จักไฟล์ที่เราหยิบมาใส่เอง
 void _registerFontLicenses() {
   LicenseRegistry.addLicense(() async* {
     for (final path in const [
       'lib/assets/fonts/OFL-OpenSans.txt',
-      'lib/assets/fonts/OFL-NotoSansThai.txt',
+      'lib/assets/fonts/OFL-GoogleSans.txt',
     ]) {
       yield LicenseEntryWithLineBreaks(
         const ['ฟอนต์ที่ฝังมากับแอป'],
