@@ -73,3 +73,4 @@ key.properties
 # ผลลัพธ์ที่ generate แล้วอยู่ใน web/icons/ ซึ่ง commit ไว้เรียบร้อย
 /lib/assets/horplug_icon1.png
 docs
+scripts

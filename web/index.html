@@ -17,10 +17,22 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="HorPlug">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <!--
+    ไอคอนของ iOS ต้องเป็นไฟล์แยก ไม่ใช่ Icon-192 ที่ใช้กับ PWA — สองอย่างนี้
+    ต่างกันสองข้อ · iOS ไม่รองรับ alpha มุมโค้งที่โปร่งจะกลายเป็นสีดำรอบไอคอน
+    บนหน้าจอโฮม ไฟล์นี้จึงแบนพื้นครีมของตัวโลโก้ลงไปแล้ว · และขนาดมาตรฐานคือ
+    180 ไม่ใช่ 192 ซึ่งถ้าส่งผิดขนาด iOS จะย่อเอง แล้วได้ขอบฟุ้ง
+  -->
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon-180.png">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <!--
+    Favicon สามขนาด ไม่ใช่ขนาดเดียว — เบราว์เซอร์เลือกไฟล์ที่ตรงกับที่ต้องใช้
+    แทนที่จะย่อไฟล์เดียวลงมาเอง ซึ่งได้ขอบฟุ้งบนแท็บที่กว้างแค่ 16px
+    ทุกไฟล์ถูกเรนเดอร์จากต้นฉบับ 4000px ผ่าน scripts/generate_web_icons.py
+  -->
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png"/>
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon.png"/>
+  <link rel="icon" type="image/png" sizes="48x48" href="favicon-48.png"/>
 
   <title>HorPlug — ระบบจัดการหอพัก</title>
   <link rel="manifest" href="manifest.json">
