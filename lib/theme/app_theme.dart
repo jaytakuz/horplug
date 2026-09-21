@@ -25,6 +25,10 @@ class AppColors {
   static const muted = Color(0xFFEEF1F4);
   static const mutedForeground = Color(0xFF6B7C90);
   static const border = Color(0xFFDDE3EA);
+
+  /// จังหวะสว่างของโครงร่างตอนโหลด · กระดูกเต้นระหว่าง [muted] กับสีนี้
+  /// ต้องต่างจาก muted พอให้เห็นว่ามีอะไรกำลังเกิดขึ้น แต่ไม่มากจนกระพริบใส่ตา
+  static const skeletonHighlight = Color(0xFFF7F9FB);
 }
 
 class AppShadows {
