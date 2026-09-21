@@ -50,14 +50,14 @@ ThemeData buildAppTheme() {
   final baseTheme = ThemeData(
     useMaterial3: true,
     // Open Sans ไม่มีอักษรไทยสักตัว (มีแค่ latin/greek/cyrillic/hebrew) ตัวไทย
-    // จึงตกไป Noto Sans Thai ผ่าน fallback — ซึ่งทำงานทีละ **ตัวอักษร** ไม่ใช่
+    // จึงตกไป Google Sans ผ่าน fallback — ซึ่งทำงานทีละ **ตัวอักษร** ไม่ใช่
     // ทั้งบรรทัด เลขกับคำอังกฤษในประโยคไทยเดียวกันจึงยังเป็น Open Sans
     //
     // ถ้าไม่ประกาศ fallback ตัวไทยจะตกไปใช้ฟอนต์ของระบบ ซึ่งต่างกันทุกเครื่อง
     // (Android=Noto, Windows=Tahoma, iOS=Thonburi) และคุมระยะสระบน-ล่างไม่ได้
     // — ทั้งที่ UI ของแอปนี้เป็นภาษาไทยเกือบทั้งหมด
     fontFamily: 'Open Sans',
-    fontFamilyFallback: const ['Noto Sans Thai'],
+    fontFamilyFallback: const ['Google Sans'],
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       primary: AppColors.primary,
