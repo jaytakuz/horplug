@@ -10,8 +10,13 @@ import '../utils/formatters.dart';
 import '../viewmodels/tenant_dashboard_view_model.dart' show thaiMonthName;
 import 'promptpay.dart';
 
-const _regularFont = 'lib/assets/fonts/Sarabun-Regular.ttf';
-const _boldFont = 'lib/assets/fonts/Sarabun-Bold.ttf';
+// ชุดเดียวกับที่แอปใช้ (ดู theme/app_theme.dart) เอกสารกับหน้าจอจะได้หน้าตา
+// เดียวกัน — ไฟล์ที่ประกาศใต้ fonts: ใน pubspec ถูก bundle ไว้ที่พาธเดิมด้วย
+// rootBundle จึงโหลดได้โดยไม่ต้องประกาศซ้ำใน assets:
+const _regularFont = 'lib/assets/fonts/OpenSans-Regular.ttf';
+const _boldFont = 'lib/assets/fonts/OpenSans-Bold.ttf';
+const _thaiRegularFont = 'lib/assets/fonts/GoogleSansThai-Regular.ttf';
+const _thaiBoldFont = 'lib/assets/fonts/GoogleSansThai-Bold.ttf';
 
 /// payload ของ QR ที่ควรอยู่ในเอกสารของบิลใบนี้ · null แปลว่าไม่ต้องมี QR
 ///
@@ -50,11 +55,23 @@ Future<Uint8List> buildInvoicePdf({
   // และตอนรัน
   final regular = pw.Font.ttf(await rootBundle.load(_regularFont));
   final bold = pw.Font.ttf(await rootBundle.load(_boldFont));
+  final thaiRegular = pw.Font.ttf(await rootBundle.load(_thaiRegularFont));
+  final thaiBold = pw.Font.ttf(await rootBundle.load(_thaiBoldFont));
+
+  // Open Sans ไม่มีอักษรไทย ตัวไทยจึงตกไป Google Sans ทีละตัวอักษร · แพ็กเกจ
+  // pdf เลือก fallback ตัวแรกในรายการที่มี glyph โดยไม่ดูน้ำหนัก ข้อความหนาจึง
+  // ต้องใส่ตัวหนาของมันเองไว้ — merge กับธีมแล้วจะได้ [thaiBold, thaiRegular]
+  // ถ้าไม่ใส่ ตัวอังกฤษหนาแต่ตัวไทยในบรรทัดเดียวกันบาง
+  final boldStyle = pw.TextStyle(font: bold, fontFallback: [thaiBold]);
 
   final qrPayload = invoiceQrPayload(invoice: invoice, channel: channel);
 
   final document = pw.Document(
-    theme: pw.ThemeData.withFont(base: regular, bold: bold),
+    theme: pw.ThemeData.withFont(
+      base: regular,
+      bold: bold,
+      fontFallback: [thaiRegular],
+    ),
   );
 
   document.addPage(
@@ -69,9 +86,9 @@ Future<Uint8List> buildInvoicePdf({
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(dormitoryName,
-                      style: pw.TextStyle(font: bold, fontSize: 14)),
+                      style: boldStyle.copyWith(fontSize: 14)),
                   pw.Text('ใบแจ้งค่าเช่า',
-                      style: pw.TextStyle(font: bold, fontSize: 14)),
+                      style: boldStyle.copyWith(fontSize: 14)),
                 ],
               ),
               pw.Divider(),
@@ -92,9 +109,9 @@ Future<Uint8List> buildInvoicePdf({
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('ยอดรวมสุทธิ',
-                      style: pw.TextStyle(font: bold, fontSize: 13)),
+                      style: boldStyle.copyWith(fontSize: 13)),
                   pw.Text(formatBaht(invoice.total),
-                      style: pw.TextStyle(font: bold, fontSize: 16)),
+                      style: boldStyle.copyWith(fontSize: 16)),
                 ],
               ),
               _row('ครบกำหนดชำระ', _thaiDate(invoice.dueDate)),
@@ -136,8 +153,7 @@ Future<Uint8List> buildInvoicePdf({
                       child: pw.Text(
                         'ระบบชำระเงิน\nจะมาเร็วๆ นี้',
                         textAlign: pw.TextAlign.center,
-                        style: pw.TextStyle(
-                          font: bold,
+                        style: boldStyle.copyWith(
                           fontSize: 10,
                           color: PdfColors.grey700,
                         ),
@@ -150,8 +166,8 @@ Future<Uint8List> buildInvoicePdf({
           ),
           // PDF ที่แชร์ออกไปแล้วเรียกคืนไม่ได้ ใบที่ยกเลิกจึงต้องบอกตัวเองได้
           if (invoice.status == InvoiceStatus.paid)
-            _watermark('ชำระแล้ว', PdfColors.green300, bold),
-          if (invoice.isVoided) _watermark('ยกเลิก', PdfColors.red300, bold),
+            _watermark('ชำระแล้ว', PdfColors.green300, boldStyle),
+          if (invoice.isVoided) _watermark('ยกเลิก', PdfColors.red300, boldStyle),
         ],
       ),
     ),
@@ -198,12 +214,13 @@ pw.Widget _amount(String label, double value) => pw.Padding(
       ),
     );
 
-pw.Widget _watermark(String text, PdfColor color, pw.Font font) => pw.Center(
+pw.Widget _watermark(String text, PdfColor color, pw.TextStyle style) =>
+    pw.Center(
       child: pw.Transform.rotate(
         angle: 0.6,
         child: pw.Text(
           text,
-          style: pw.TextStyle(font: font, fontSize: 60, color: color),
+          style: style.copyWith(fontSize: 60, color: color),
         ),
       ),
     );

@@ -50,6 +50,17 @@
         href="assets/lib/assets/fonts/GoogleSansThai-Regular.ttf">
 
   <style>
+    /* ไฟล์เดียวกับที่ preload ไว้ด้านบน — URL ต้องตรงกันทุกตัวอักษร ไม่งั้น
+       เบราว์เซอร์จะโหลดซ้ำอีกรอบแทนที่จะหยิบจาก preload
+       unicode-range จำกัดให้ใช้กับตัวไทยเท่านั้น (ไฟล์นี้ตัดมาแค่บล็อกไทย) */
+    @font-face {
+      font-family: "Google Sans";
+      src: url("assets/lib/assets/fonts/GoogleSansThai-Regular.ttf") format("truetype");
+      font-weight: 400;
+      font-display: swap;
+      unicode-range: U+0E00-0E7F, U+200B-200D, U+25CC;
+    }
+
     /* พื้นหลังสีเดียวกับธีมของแอป · ระหว่างที่ยังโหลด engine ไม่เสร็จ ผู้ใช้จะ
        เห็นสีนี้แทนหน้าขาวที่กระพริบเป็นสีขาวแล้วตัดเป็นสีเข้ม */
     html, body {
@@ -69,10 +80,10 @@
       align-items: center;
       justify-content: center;
       height: 100%;
-      /* ฟอนต์ระบบตามเดิม — ข้อความนี้ขึ้นก่อนที่ฟอนต์ของแอปจะโหลดเสร็จ
-         การประกาศ Google Sans ตรงนี้จึงได้แค่เครื่องที่บังเอิญมีติดมาอยู่แล้ว
-         ส่วนเครื่องอื่นจะเห็นข้อความว่างจนกว่าไฟล์จะมาถึง ซึ่งแย่กว่าเดิม */
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      /* ตัวไทยใช้ Google Sans ให้ตรงกับแอป · font-display: swap ทำให้ข้อความ
+         ขึ้นด้วยฟอนต์ระบบก่อนระหว่างรอไฟล์ แล้วค่อยสลับ แทนที่จะว่างเปล่า
+         ส่วนตัวที่ไม่ใช่ไทย (…) ตกไปฟอนต์ระบบตามเดิม */
+      font-family: "Google Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
       color: #5A6B80;
       font-size: 14px;
     }
