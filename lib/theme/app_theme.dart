@@ -31,6 +31,32 @@ class AppColors {
   static const skeletonHighlight = Color(0xFFF7F9FB);
 }
 
+/// ฟอนต์ของแอป — ที่เดียวที่ประกาศชื่อตระกูล
+///
+/// ThemeData(fontFamily:) เติมฟอนต์ให้แค่ textTheme ที่มันสร้างเอง ส่วน widget ที่
+/// ใช้ TextStyle ที่ส่งเข้าไป **แทน** สไตล์ที่สืบทอดมา (ไม่ได้ merge) ได้สไตล์ที่
+/// ไม่มีฟอนต์เลย ตัวไทยจึงหลุดไปฟอนต์ของระบบ ได้แก่ `ButtonStyle.textStyle`,
+/// `NavigationRail.*LabelTextStyle` และ `DialogThemeData.*TextStyle` · สไตล์
+/// ที่ส่งให้จุดพวกนี้ต้องต่อจาก [base] เสมอ — test/widgets/thai_font_widget_test
+/// จับกรณีนี้ไว้
+///
+/// ส่วน `Text(style: TextStyle(...))` ทั่วไป merge กับ DefaultTextStyle ให้เอง
+/// ไม่ต้องใช้ [base]
+abstract final class AppFonts {
+  static const family = 'Open Sans';
+
+  // Open Sans ไม่มีอักษรไทยสักตัว (มีแค่ latin/greek/cyrillic/hebrew) ตัวไทย
+  // จึงตกไป Google Sans ผ่าน fallback — ซึ่งทำงานทีละ **ตัวอักษร** ไม่ใช่
+  // ทั้งบรรทัด เลขกับคำอังกฤษในประโยคไทยเดียวกันจึงยังเป็น Open Sans
+  //
+  // ถ้าไม่ประกาศ fallback ตัวไทยจะตกไปใช้ฟอนต์ของระบบ ซึ่งต่างกันทุกเครื่อง
+  // (Android=Noto, Windows=Tahoma, iOS=Thonburi) และคุมระยะสระบน-ล่างไม่ได้
+  // — ทั้งที่ UI ของแอปนี้เป็นภาษาไทยเกือบทั้งหมด
+  static const fallback = ['Google Sans'];
+
+  static const base = TextStyle(fontFamily: family, fontFamilyFallback: fallback);
+}
+
 class AppShadows {
   static const md = [
     BoxShadow(
@@ -49,15 +75,9 @@ class AppShadows {
 ThemeData buildAppTheme() {
   final baseTheme = ThemeData(
     useMaterial3: true,
-    // Open Sans ไม่มีอักษรไทยสักตัว (มีแค่ latin/greek/cyrillic/hebrew) ตัวไทย
-    // จึงตกไป Google Sans ผ่าน fallback — ซึ่งทำงานทีละ **ตัวอักษร** ไม่ใช่
-    // ทั้งบรรทัด เลขกับคำอังกฤษในประโยคไทยเดียวกันจึงยังเป็น Open Sans
-    //
-    // ถ้าไม่ประกาศ fallback ตัวไทยจะตกไปใช้ฟอนต์ของระบบ ซึ่งต่างกันทุกเครื่อง
-    // (Android=Noto, Windows=Tahoma, iOS=Thonburi) และคุมระยะสระบน-ล่างไม่ได้
-    // — ทั้งที่ UI ของแอปนี้เป็นภาษาไทยเกือบทั้งหมด
-    fontFamily: 'Open Sans',
-    fontFamilyFallback: const ['Google Sans'],
+    // เหตุผลที่ต้องมี fallback อยู่ที่ AppFonts
+    fontFamily: AppFonts.family,
+    fontFamilyFallback: AppFonts.fallback,
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       primary: AppColors.primary,
@@ -110,12 +130,18 @@ ThemeData buildAppTheme() {
       // ที่มีช่องกรอกเดียว · กำหนดที่ธีมทีเดียวครอบทุกกล่องในแอป แทนที่จะไล่ใส่
       // ตามจุดเรียกทั้งสิบกว่าแห่งแล้วลืมบางแห่ง
       constraints: BoxConstraints(maxWidth: Breakpoints.sheetMaxWidth),
+      // ต้องใส่ฟอนต์ของ AppFonts เอง — กล่องโต้ตอบใช้สไตล์นี้แทนที่ ไม่ได้ merge
+      // (เขียนเป็นฟิลด์แทน AppFonts.base.copyWith เพื่อให้ธีมนี้ยังเป็น const)
       titleTextStyle: TextStyle(
+        fontFamily: AppFonts.family,
+        fontFamilyFallback: AppFonts.fallback,
         fontSize: 18,
         fontWeight: FontWeight.bold,
         color: AppColors.primary,
       ),
       contentTextStyle: TextStyle(
+        fontFamily: AppFonts.family,
+        fontFamilyFallback: AppFonts.fallback,
         fontSize: 14,
         color: AppColors.primary,
       ),

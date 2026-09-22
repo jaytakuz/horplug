@@ -107,7 +107,7 @@ class _BillingView extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 minimumSize: const Size(0, 36),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: const TextStyle(fontSize: 12),
+                textStyle: AppFonts.base.copyWith(fontSize: 12),
               ),
               onPressed: () => showPaymentChannelScreen(
                 context,

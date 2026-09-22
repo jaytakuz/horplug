@@ -176,12 +176,13 @@ class _Rail extends StatelessWidget {
               selectedIconTheme: const IconThemeData(color: AppColors.primary),
               unselectedIconTheme:
                   const IconThemeData(color: AppColors.mutedForeground),
-              selectedLabelTextStyle: const TextStyle(
+              // ต่อจาก AppFonts.base — rail ใช้สไตล์นี้แทนที่ ไม่ได้ merge
+              selectedLabelTextStyle: AppFonts.base.copyWith(
                 color: AppColors.primary,
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
               ),
-              unselectedLabelTextStyle: const TextStyle(
+              unselectedLabelTextStyle: AppFonts.base.copyWith(
                 color: AppColors.mutedForeground,
                 fontSize: 13,
               ),

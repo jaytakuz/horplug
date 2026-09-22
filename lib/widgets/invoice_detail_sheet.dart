@@ -577,7 +577,7 @@ class _AddExtraFeeCardState extends State<_AddExtraFeeCard> {
             showSelectedIcon: false,
             style: SegmentedButton.styleFrom(
               visualDensity: VisualDensity.compact,
-              textStyle: const TextStyle(fontSize: 12),
+              textStyle: AppFonts.base.copyWith(fontSize: 12),
               padding: const EdgeInsets.symmetric(horizontal: 4),
             ),
             segments: const [
