@@ -661,9 +661,17 @@ class SupabaseService {
   /// จำนวนข้อความที่ยังไม่ได้อ่านรวมทุกห้อง (ใช้กับ badge หน้าแดชบอร์ด)
   /// Total unread messages across a dormitory (badges) — reuses the same
   /// server-side aggregate as fetchChatPreviews instead of a bespoke query.
-  Future<int> countUnreadMessages({required int dormitoryId}) async {
+  ///
+  /// [excludeRoomId] คือห้องที่เจ้าของหอกำลังเปิดอ่านอยู่ตรงหน้า — ข้อความของห้อง
+  /// นั้นเห็นแล้วจึงไม่นับ แม้ last_read_at บนเซิร์ฟเวอร์ยังไม่ทันขยับตาม
+  Future<int> countUnreadMessages({
+    required int dormitoryId,
+    int? excludeRoomId,
+  }) async {
     final previews = await fetchChatPreviews(dormitoryId: dormitoryId);
-    return previews.fold<int>(0, (sum, preview) => sum + preview.unreadCount);
+    return previews
+        .where((preview) => preview.roomDbId != excludeRoomId)
+        .fold<int>(0, (sum, preview) => sum + preview.unreadCount);
   }
 
   /// จำนวนข้อความจากเจ้าของหอที่ผู้เช่ายังไม่ได้อ่านในห้องนี้

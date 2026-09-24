@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
@@ -28,6 +29,8 @@ class ChatScreen extends StatelessWidget {
         ownerName: ownerName,
         onRoomRead: () =>
             context.read<AdminShellViewModel>().refreshUnreadCount(),
+        onViewedRoomChanged: (roomId) =>
+            context.read<AdminShellViewModel>().setViewedRoom(roomId),
       )
         ..loadChatPreviews()
         ..startWatchingPreviews(),
@@ -55,6 +58,15 @@ class _ChatViewState extends State<_ChatView> {
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<ChatViewModel>();
+
+    // IndexedStack build แท็บนี้ตลอดแม้ไม่ได้แสดงอยู่ · อ่านตำแหน่งจริงจาก router
+    // (ไม่ใช่จากการแตะ nav bar) แล้วบอก ViewModel ว่าข้อความที่เข้ามาตอนนี้ถูก
+    // เห็นแล้วหรือยัง
+    final tabVisible = GoRouterState.of(context).uri.path.endsWith('/chat');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
+      viewModel.setTabVisible(tabVisible);
+    });
 
     // การส่งรูปที่ล้มเหลวเคยเงียบสนิท — เห็นแค่วงกลมหมุนแล้วไม่มีอะไรขึ้น
     final sendError = viewModel.sendErrorMessage;
