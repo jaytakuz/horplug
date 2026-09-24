@@ -126,20 +126,37 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     _previewsSignalSubscription?.cancel();
     _previewsSignalSubscription =
         _service.watchLatestMessageSignal().listen((_) {
-      if (selectedChat == null) loadChatPreviews();
+      if (selectedChat == null) loadChatPreviews(background: true);
     });
   }
 
-  Future<void> loadChatPreviews() async {
-    isLoadingPreviews = true;
-    previewsErrorMessage = null;
-    notifyListeners();
+  bool _previewsLoadedOnce = false;
+
+  /// [background] = ดึงเงียบๆ ตอนมีข้อความใหม่/กลับจากห้องแชท — ผู้ใช้ไม่ได้สั่ง
+  /// จึงไม่ควรเห็นอะไรเปลี่ยนนอกจากแถวที่อัปเดต
+  ///
+  /// ตัวหมุนเต็มหน้าจอโชว์เฉพาะตอนยังไม่มีรายการให้ดู (โหลดครั้งแรก หรือกดลอง
+  /// ใหม่หลังล้ม) เดิมทุกครั้งที่ผู้เช่าส่งข้อความ รายการทั้งหน้าหายกลายเป็นตัว
+  /// หมุนแล้วโผล่กลับมาใหม่ ทั้งที่แค่ต้องอัปเดตแถวเดียว
+  Future<void> loadChatPreviews({bool background = false}) async {
+    final showSpinner = !_previewsLoadedOnce || previewsErrorMessage != null;
+    if (showSpinner) {
+      isLoadingPreviews = true;
+      previewsErrorMessage = null;
+      notifyListeners();
+    }
 
     try {
       chatPreviews = await _service.fetchChatPreviews(dormitoryId: dormitoryId);
+      _previewsLoadedOnce = true;
+      previewsErrorMessage = null;
       isLoadingPreviews = false;
       notifyListeners();
     } catch (error) {
+      // การดึงเบื้องหลังที่ล้ม (เน็ตหลุดชั่วครู่) ไม่ควรแทนรายการที่มีอยู่ด้วยหน้า
+      // error — ผู้ใช้ไม่ได้สั่ง และของเดิมยังใช้ได้ · การสั่งเอง (ลากรีเฟรช) ยัง
+      // รายงาน error ตามเดิม
+      if (background && _previewsLoadedOnce) return;
       previewsErrorMessage = error.toString();
       isLoadingPreviews = false;
       notifyListeners();
@@ -246,7 +263,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     invoicesById = {};
     notifyListeners();
     _syncViewedRoom();
-    loadChatPreviews();
+    loadChatPreviews(background: true);
   }
 
   Future<void> sendMessage(String text) async {
