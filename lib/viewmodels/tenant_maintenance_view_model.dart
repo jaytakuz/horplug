@@ -18,7 +18,7 @@ const tenantMaintenanceFilters = [
 ];
 
 class TenantMaintenanceViewModel extends ChangeNotifier
-    with SafeNotifier, RefreshableViewModel {
+    with SafeNotifier, RefreshableViewModel, RefreshOnSignal {
   TenantMaintenanceViewModel({
     required this.roomId,
     required this.tenantId,
@@ -55,6 +55,9 @@ class TenantMaintenanceViewModel extends ChangeNotifier
     searchQuery = value;
     notifyListeners();
   }
+
+  @override
+  Future<void> load() => loadRequests();
 
   Future<void> loadRequests() async {
     final room = roomId;

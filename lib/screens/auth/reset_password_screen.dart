@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../viewmodels/auth_view_model.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/password_form_field.dart';
 import '../../widgets/reusable_widgets.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
@@ -13,13 +14,11 @@ class ResetPasswordScreen extends StatefulWidget {
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _passwordController = TextEditingController();
-  final _confirmController = TextEditingController();
+  final _passwordController = MaskedTextEditingController();
+  final _confirmController = MaskedTextEditingController();
   final _confirmFocusNode = FocusNode();
 
   bool _isLoading = false;
-  bool _obscurePassword = true;
-  bool _obscureConfirm = true;
   String? _errorMessage;
 
   @override
@@ -96,20 +95,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 24),
-                      TextFormField(
+                      PasswordFormField(
                         controller: _passwordController,
-                        obscureText: _obscurePassword,
+                        labelText: 'รหัสผ่านใหม่',
                         textInputAction: TextInputAction.next,
-                        decoration: InputDecoration(
-                          labelText: 'รหัสผ่านใหม่',
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined),
-                            onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword),
-                          ),
-                        ),
                         onFieldSubmitted: (_) =>
                             _confirmFocusNode.requestFocus(),
                         validator: (value) {
@@ -123,21 +112,11 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      TextFormField(
+                      PasswordFormField(
                         controller: _confirmController,
                         focusNode: _confirmFocusNode,
-                        obscureText: _obscureConfirm,
+                        labelText: 'ยืนยันรหัสผ่านใหม่',
                         textInputAction: TextInputAction.done,
-                        decoration: InputDecoration(
-                          labelText: 'ยืนยันรหัสผ่านใหม่',
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscureConfirm
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined),
-                            onPressed: () => setState(
-                                () => _obscureConfirm = !_obscureConfirm),
-                          ),
-                        ),
                         onFieldSubmitted: (_) =>
                             _isLoading ? null : _submit(),
                         validator: (value) {

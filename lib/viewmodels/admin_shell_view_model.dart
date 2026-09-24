@@ -17,12 +17,31 @@ class AdminShellViewModel extends ChangeNotifier {
 
   StreamSubscription<void>? _messageSignalSubscription;
 
+  /// ห้องที่เจ้าของหอกำลังเปิดอ่านอยู่บนแท็บแชทตอนนี้ (null = ไม่ได้อ่านห้องไหน)
+  int? _viewedRoomId;
+
+  /// นับรอบล่าสุดที่ยิง — คำตอบของรอบเก่าที่มาช้ากว่าต้องไม่ทับรอบใหม่ ไม่งั้น
+  /// badge กลับไปโชว์เลขเก่าหลังจากเคลียร์ไปแล้ว
+  int _refreshGeneration = 0;
+
+  /// เรียกจากแท็บแชทเมื่อเปิด/ปิดห้อง หรือสลับเข้า/ออกจากแท็บแชท
+  void setViewedRoom(int? roomId) {
+    if (_viewedRoomId == roomId) return;
+    _viewedRoomId = roomId;
+    refreshUnreadCount();
+  }
+
   Future<void> refreshUnreadCount() async {
     if (dormitoryId == 0) return;
 
+    final generation = ++_refreshGeneration;
     try {
-      unreadMessageCount =
-          await _service.countUnreadMessages(dormitoryId: dormitoryId);
+      final count = await _service.countUnreadMessages(
+        dormitoryId: dormitoryId,
+        excludeRoomId: _viewedRoomId,
+      );
+      if (generation != _refreshGeneration) return;
+      unreadMessageCount = count;
       notifyListeners();
     } catch (_) {
       // Non-critical — badge just keeps its last known value.

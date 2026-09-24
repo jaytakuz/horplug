@@ -19,6 +19,7 @@ class TenantChatViewModel extends ChangeNotifier
     required this.tenantId,
     required this.tenantName,
     this.dormitoryId,
+    this.onLandlordUpdate,
     SupabaseService? service,
     InvoiceService? invoiceService,
     TenantBillingSource? billingSource,
@@ -33,6 +34,14 @@ class TenantChatViewModel extends ChangeNotifier
   final String tenantId;
   final String tenantName;
   final int? dormitoryId;
+
+  /// เรียกเมื่อเจ้าของหอส่งข้อความที่หมายถึง "ข้อมูลของผู้เช่าเปลี่ยน" เข้ามาใหม่
+  /// ระหว่างที่แอปเปิดอยู่ — เรื่องบิล (การ์ดบิล, รับ/ปฏิเสธการชำระ, ยกเลิกบิล,
+  /// แจ้งยอดเปลี่ยน ซึ่งผูก invoice_id) และอัปเดตสถานะแจ้งซ่อม/ทำความสะอาด
+  /// ผู้เช่าไม่มี realtime ของตารางพวกนี้ ข้อความในแชทจึงเป็นสัญญาณเดียวที่บอกว่า
+  /// แท็บหน้าหลัก/บิล/แจ้งซ่อมควรดึงข้อมูลใหม่
+  final VoidCallback? onLandlordUpdate;
+
   final SupabaseService _service;
   final InvoiceService _invoiceService;
   final TenantBillingSource _billingSource;
@@ -113,6 +122,7 @@ class TenantChatViewModel extends ChangeNotifier
       isLoading = false;
       isLoadingMore = false;
       notifyListeners();
+      _signalIfNewLandlordUpdate(messages);
 
       // invoicesById โหลดครั้งเดียวตอน start()/reloadAfterSlip() — บิลที่ออก
       // ใหม่ระหว่างที่แชทเปิดค้างอยู่แล้ว (IndexedStack ไม่เคย dispose แท็บนี้)
@@ -131,6 +141,40 @@ class TenantChatViewModel extends ChangeNotifier
       isLoadingMore = false;
       notifyListeners();
     });
+  }
+
+  static bool _isLandlordUpdate(ChatMessage message) =>
+      message.type == MessageType.invoice ||
+      message.type == MessageType.maintenanceUpdate ||
+      message.type == MessageType.cleaningUpdate ||
+      message.invoiceId != null;
+
+  bool _updateBaselineSet = false;
+  DateTime? _latestUpdateAt;
+
+  /// เทียบตามเวลาของข้อความที่เข้าเงื่อนไขที่ใหม่ที่สุด ไม่ใช่ตาม id ที่เคยเห็น —
+  /// [loadMoreMessages] ขยายหน้าต่างให้เห็นข้อความเก่าขึ้น ซึ่งไม่ใช่เหตุการณ์ใหม่
+  /// และต้องไม่ยิงสัญญาณ · การส่งครั้งแรกเป็นแค่ฐานเทียบ (ประวัติที่มีอยู่แล้วตอน
+  /// เปิดแอป) ไม่ยิงสัญญาณ · นับเฉพาะที่เจ้าของหอส่ง เพราะสิ่งที่ผู้เช่าทำเอง
+  /// (แนบสลิป ฯลฯ) โหลดข้อมูลใหม่ของตัวเองอยู่แล้ว
+  void _signalIfNewLandlordUpdate(List<ChatMessage> messages) {
+    DateTime? newest;
+    for (final message in messages) {
+      if (!message.isFromOwner) continue;
+      if (!_isLandlordUpdate(message)) continue;
+      if (newest == null || message.timestamp.isAfter(newest)) {
+        newest = message.timestamp;
+      }
+    }
+
+    final isFirstEmission = !_updateBaselineSet;
+    _updateBaselineSet = true;
+
+    final previous = _latestUpdateAt;
+    final isNewer = newest != null && (previous == null || newest.isAfter(previous));
+    if (isNewer) _latestUpdateAt = newest;
+
+    if (!isFirstEmission && isNewer) onLandlordUpdate?.call();
   }
 
   /// Widens the live window and re-subscribes to pull in older history.

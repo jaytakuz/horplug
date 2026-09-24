@@ -19,6 +19,19 @@ class TenantShellViewModel extends ChangeNotifier with SafeNotifier {
   int unreadMessageCount = 0;
 
   StreamSubscription<void>? _messageSignalSubscription;
+  StreamSubscription<int?>? _roomSubscription;
+
+  final _dataRefreshController = StreamController<void>.broadcast();
+
+  /// สัญญาณให้แท็บหน้าหลัก/บิล/แจ้งซ่อม/โปรไฟล์ดึงข้อมูลใหม่ · ยิงตอนแอปกลับมา
+  /// อยู่หน้าจอ และตอนเจ้าของหอส่งข้อความเรื่องบิล/แจ้งซ่อมเข้ามาในแชท เพราะสอง
+  /// อย่างนี้บอกว่าข้อมูลฝั่งเจ้าของหออาจเปลี่ยนไปแล้ว แต่ผู้เช่าไม่มี realtime ของ
+  /// ตารางพวกนั้นให้รู้เอง
+  Stream<void> get dataRefreshSignal => _dataRefreshController.stream;
+
+  void requestDataRefresh() {
+    if (!_dataRefreshController.isClosed) _dataRefreshController.add(null);
+  }
 
   /// ฟังสัญญาณข้อความใหม่ตลอดที่แอปเปิดอยู่ (TenantShellViewModel มีชีวิต
   /// เดียวคลุมทุกแท็บผ่าน IndexedStack) badge จึงขึ้นสดแม้ผู้เช่ากำลังอยู่
@@ -32,9 +45,30 @@ class TenantShellViewModel extends ChangeNotifier with SafeNotifier {
     });
   }
 
+  /// ฟังแถวโปรไฟล์ของตัวเอง — เจ้าของหอเพิ่ม ย้าย หรือเอาผู้เช่าออกจากห้องขณะที่
+  /// แอปเปิดอยู่ แล้ว [onChanged] อ่านโปรไฟล์ใหม่ (ไม่พาไป splash) ห้องที่เปลี่ยน
+  /// ทำให้ TenantShell ถูกสร้างใหม่ตาม roomId เอง
+  ///
+  /// ต้องเปิด realtime ให้ตาราง tenant_profiles ก่อน (database/
+  /// tenant_profiles_realtime.sql) ไม่งั้นได้แค่ข้อมูลตอนสมัครรับแล้วเงียบ —
+  /// ไม่ error แค่ไม่มีอะไรมา ฟังก์ชันอื่นจึงไม่พังถ้ายังไม่ได้รัน
+  void startWatchingRoomAssignment(VoidCallback onChanged) {
+    final tenant = tenantId;
+    if (tenant == null) return;
+    _roomSubscription?.cancel();
+    _roomSubscription = _service.watchTenantRoomId(tenantId: tenant).listen(
+      (newRoomId) {
+        if (newRoomId != roomId) onChanged();
+      },
+      onError: (_) {},
+    );
+  }
+
   @override
   void dispose() {
     _messageSignalSubscription?.cancel();
+    _roomSubscription?.cancel();
+    _dataRefreshController.close();
     super.dispose();
   }
 

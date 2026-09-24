@@ -20,7 +20,8 @@ class TenantShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final profile = AuthScope.of(context).profile;
+    final auth = AuthScope.of(context);
+    final profile = auth.profile;
 
     return ChangeNotifierProvider(
       // key ตาม roomId เพื่อให้ ViewModel ถูกสร้างใหม่เมื่อผู้เช่าเพิ่งตอบรับคำขอ
@@ -31,7 +32,8 @@ class TenantShell extends StatelessWidget {
         tenantId: profile?.id,
       )
         ..refreshUnreadCount()
-        ..startListeningForNewMessages(),
+        ..startListeningForNewMessages()
+        ..startWatchingRoomAssignment(auth.reloadProfileInPlace),
       child: const _TenantShellView(),
     );
   }
@@ -44,8 +46,44 @@ class _TenantShellView extends StatefulWidget {
   State<_TenantShellView> createState() => _TenantShellViewState();
 }
 
-class _TenantShellViewState extends State<_TenantShellView> {
+class _TenantShellViewState extends State<_TenantShellView>
+    with WidgetsBindingObserver {
   int? _lastIndex;
+  DateTime? _lastResumeRefresh;
+
+  /// ตัวเลือกรูป/กล้องทำให้แอปสลับ inactive→resumed สั้นๆ ระหว่างส่งสลิป · ถ้า
+  /// ทุกครั้งดึงข้อมูลใหม่ทั้งชุด จะยิงคำขอเป็นสิบตัวโดยไม่จำเป็น
+  static const _resumeRefreshCooldown = Duration(seconds: 20);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// เจ้าของหอเปลี่ยนห้อง/ออกบิล/แก้ยอดระหว่างที่แอปอยู่เบื้องหลัง — ผู้เช่าไม่มี
+  /// realtime ของข้อมูลพวกนี้ จึงดึงใหม่ตอนกลับมาเปิดแอป · โปรไฟล์อ่านแบบ in place
+  /// (ไม่พาไป splash) ถ้าห้องเปลี่ยนจริง TenantShell จะถูกสร้างใหม่เองตาม roomId
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+
+    final now = DateTime.now();
+    final last = _lastResumeRefresh;
+    if (last != null && now.difference(last) < _resumeRefreshCooldown) return;
+    _lastResumeRefresh = now;
+
+    final shell = context.read<TenantShellViewModel>();
+    AuthScope.of(context).reloadProfileInPlace();
+    shell.requestDataRefresh();
+    shell.refreshUnreadCount();
+  }
 
   static const _paths = [
     '/tenant',

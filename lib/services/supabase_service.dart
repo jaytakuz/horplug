@@ -607,6 +607,19 @@ class SupabaseService {
   /// ก็ได้) ไม่ใช้เนื้อหาแถวที่ได้แสดงผลตรงๆ แค่ใช้จับจังหวะกระตุ้นให้ผู้เรียก
   /// ไปดึงจำนวน/รายการที่ถูกกรองสิทธิ์แล้วมาอีกที — แก้ปัญหา badge ข้อความ
   /// ยังไม่อ่านค้างจนกว่าจะสลับแท็บหรือดึงรีเฟรชเอง
+  /// room_id ปัจจุบันของผู้เช่าคนนี้ ส่งค่าใหม่ทุกครั้งที่แถวโปรไฟล์เปลี่ยน
+  ///
+  /// RLS ให้ผู้เช่าอ่านแถวของตัวเองได้อยู่แล้ว (tenant_profiles_select_own) ·
+  /// ต้องเปิด realtime ให้ตารางนี้ด้วย ดู database/tenant_profiles_realtime.sql
+  Stream<int?> watchTenantRoomId({required String tenantId}) {
+    return client
+        .from('tenant_profiles')
+        .stream(primaryKey: ['id'])
+        .eq('id', tenantId)
+        .where((rows) => rows.isNotEmpty)
+        .map((rows) => rows.first['room_id'] as int?);
+  }
+
   Stream<void> watchLatestMessageSignal() {
     return client
         .from('messages')
@@ -661,9 +674,17 @@ class SupabaseService {
   /// จำนวนข้อความที่ยังไม่ได้อ่านรวมทุกห้อง (ใช้กับ badge หน้าแดชบอร์ด)
   /// Total unread messages across a dormitory (badges) — reuses the same
   /// server-side aggregate as fetchChatPreviews instead of a bespoke query.
-  Future<int> countUnreadMessages({required int dormitoryId}) async {
+  ///
+  /// [excludeRoomId] คือห้องที่เจ้าของหอกำลังเปิดอ่านอยู่ตรงหน้า — ข้อความของห้อง
+  /// นั้นเห็นแล้วจึงไม่นับ แม้ last_read_at บนเซิร์ฟเวอร์ยังไม่ทันขยับตาม
+  Future<int> countUnreadMessages({
+    required int dormitoryId,
+    int? excludeRoomId,
+  }) async {
     final previews = await fetchChatPreviews(dormitoryId: dormitoryId);
-    return previews.fold<int>(0, (sum, preview) => sum + preview.unreadCount);
+    return previews
+        .where((preview) => preview.roomDbId != excludeRoomId)
+        .fold<int>(0, (sum, preview) => sum + preview.unreadCount);
   }
 
   /// จำนวนข้อความจากเจ้าของหอที่ผู้เช่ายังไม่ได้อ่านในห้องนี้

@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
+import '../../viewmodels/tenant_shell_view_model.dart';
 import '../../viewmodels/tenant_profile_view_model.dart';
 import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
@@ -21,10 +22,12 @@ class TenantProfileScreen extends StatelessWidget {
 
     return ChangeNotifierProvider(
       key: ValueKey(profile?.roomId),
-      create: (_) => TenantProfileViewModel(
+      create: (context) => TenantProfileViewModel(
         roomId: profile?.roomId,
         dormitoryId: profile?.dormitoryId,
-      )..load(),
+      )
+        ..load()
+        ..refreshWhen(context.read<TenantShellViewModel>().dataRefreshSignal),
       child: const _TenantProfileView(),
     );
   }
@@ -53,7 +56,7 @@ class _TenantProfileView extends StatelessWidget {
 
     return PullToRefresh(
       onRefresh: () async {
-        await auth.refreshProfile();
+        await auth.reloadProfileInPlace();
         await viewModel.load();
       },
       child: LayoutBuilder(

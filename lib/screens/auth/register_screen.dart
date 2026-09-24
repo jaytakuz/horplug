@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/password_form_field.dart';
 import '../../widgets/reusable_widgets.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -22,8 +23,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
+  final _passwordController = MaskedTextEditingController();
+  final _confirmPasswordController = MaskedTextEditingController();
   final _dormitoryNameController = TextEditingController();
   final _locationController = TextEditingController();
   final _totalFloorsController = TextEditingController();
@@ -46,8 +47,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   AppRole _selectedRole = AppRole.tenant;
   bool _isLoading = false;
-  bool _obscurePassword = true;
-  bool _obscureConfirm = true;
   String? _errorMessage;
 
   @override
@@ -252,21 +251,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         validator: (value) => _requiredValidator(value, 'เบอร์โทรศัพท์'),
                       ),
                       const SizedBox(height: 16),
-                      TextFormField(
+                      PasswordFormField(
                         controller: _passwordController,
                         focusNode: _passwordFocus,
-                        obscureText: _obscurePassword,
+                        labelText: 'รหัสผ่าน',
                         textInputAction: TextInputAction.next,
-                        decoration: InputDecoration(
-                          labelText: 'รหัสผ่าน',
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined),
-                            onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword),
-                          ),
-                        ),
                         onFieldSubmitted: (_) => _confirmPasswordFocus.requestFocus(),
                         validator: (value) {
                           final required = _requiredValidator(value, 'รหัสผ่าน');
@@ -276,21 +265,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      TextFormField(
+                      PasswordFormField(
                         controller: _confirmPasswordController,
                         focusNode: _confirmPasswordFocus,
-                        obscureText: _obscureConfirm,
+                        labelText: 'ยืนยันรหัสผ่าน',
                         textInputAction: isLandlord ? TextInputAction.next : TextInputAction.done,
-                        decoration: InputDecoration(
-                          labelText: 'ยืนยันรหัสผ่าน',
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscureConfirm
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined),
-                            onPressed: () => setState(
-                                () => _obscureConfirm = !_obscureConfirm),
-                          ),
-                        ),
                         onFieldSubmitted: (_) => isLandlord
                             ? _dormitoryNameFocus.requestFocus()
                             : (_isLoading ? null : _submit()),

@@ -18,7 +18,7 @@ String roomStatusLabel(RoomStatus status) {
 }
 
 class TenantProfileViewModel extends ChangeNotifier
-    with SafeNotifier, RefreshableViewModel {
+    with SafeNotifier, RefreshableViewModel, RefreshOnSignal {
   TenantProfileViewModel({
     required this.roomId,
     required this.dormitoryId,
@@ -33,6 +33,7 @@ class TenantProfileViewModel extends ChangeNotifier
   Room? room;
   DormitoryInfo? dormitory;
 
+  @override
   Future<void> load() async {
     final roomDbId = roomId;
     if (roomDbId == null) {

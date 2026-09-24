@@ -29,7 +29,11 @@ double totalPaidInYear(List<Invoice> bills, int year) => bills
     .fold<double>(0, (sum, bill) => sum + bill.total);
 
 class TenantBillsViewModel extends ChangeNotifier
-    with SafeNotifier, RefreshableViewModel, TenantSlipSubmission {
+    with
+        SafeNotifier,
+        RefreshableViewModel,
+        RefreshOnSignal,
+        TenantSlipSubmission {
   TenantBillsViewModel({
     required this.roomId,
     required this.dormitoryId,
@@ -60,6 +64,7 @@ class TenantBillsViewModel extends ChangeNotifier
     notifyListeners();
   }
 
+  @override
   Future<void> load() async {
     final room = roomId;
     if (room == null) {

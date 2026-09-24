@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 /// แยก "โหลดครั้งแรก" ออกจาก "ดึงข้อมูลใหม่ทั้งที่มีของอยู่แล้ว"
@@ -43,5 +45,28 @@ mixin RefreshableViewModel on ChangeNotifier {
       _hasLoadedOnce = true;
       notifyListeners();
     }
+  }
+}
+
+/// โหลดใหม่เองเมื่อมีสัญญาณ — ใช้กับแท็บที่ IndexedStack เก็บไว้ตลอดและไม่มี
+/// realtime ของตัวเอง (บิล/ห้องของผู้เช่า) ข้อมูลจึงไม่ค้างเก่าจนกว่าจะลากลง
+///
+/// คนยิงสัญญาณคือเจ้าของ (TenantShellViewModel) ไม่ใช่ตัวนี้ · ตัวนี้แค่เรียก
+/// [load] ซึ่งผ่าน [RefreshableViewModel.runLoad] อยู่แล้ว เนื้อหาเดิมจึงไม่หายไป
+/// ระหว่างโหลด
+mixin RefreshOnSignal on ChangeNotifier {
+  StreamSubscription<void>? _signalSubscription;
+
+  Future<void> load();
+
+  void refreshWhen(Stream<void> signal) {
+    _signalSubscription?.cancel();
+    _signalSubscription = signal.listen((_) => load());
+  }
+
+  @override
+  void dispose() {
+    _signalSubscription?.cancel();
+    super.dispose();
   }
 }

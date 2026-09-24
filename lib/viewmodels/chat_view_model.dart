@@ -18,6 +18,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     SupabaseService? service,
     InvoiceService? invoiceService,
     this.onRoomRead,
+    this.onViewedRoomChanged,
   })  : _service = service ?? SupabaseService(),
         _invoiceService = invoiceService ?? InvoiceService();
 
@@ -34,6 +35,12 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
   /// เพราะเป็นคนละ ViewModel กับตัวนี้ และไม่ได้ฟังการเปลี่ยนแปลงของตาราง
   /// message_reads ที่ markRoomRead เขียน
   final VoidCallback? onRoomRead;
+
+  /// บอก AdminShellViewModel ว่าตอนนี้เจ้าของหอกำลัง "มองเห็น" ห้องไหนอยู่ (null =
+  /// ไม่ได้อ่านห้องไหน) — ห้องนั้นถูกตัดออกจากตัวเลข badge ทันที ไม่ต้องรอให้
+  /// last_read_at บนเซิร์ฟเวอร์ขยับ ไม่งั้นข้อความที่เพิ่งเข้ามาระหว่างอ่านอยู่จะ
+  /// โผล่เป็น badge ค้างทั้งที่เห็นแล้ว
+  final ValueChanged<int?>? onViewedRoomChanged;
 
   static const String allFloors = 'ทั้งหมด';
 
@@ -69,6 +76,13 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
   }
 
   ChatPreview? selectedChat;
+
+  /// true เมื่อแท็บแชทเป็นแท็บที่แสดงอยู่จริง · IndexedStack สร้างทุกแท็บไว้ตั้งแต่
+  /// เฟรมแรกและไม่เคย dispose ห้องที่เปิดค้างไว้จึงยัง "เปิดอยู่" แม้ผู้ใช้ไปอยู่
+  /// แท็บอื่นแล้ว — ข้อความที่เข้ามาตอนนั้นยังไม่ได้อ่านจริง ต้องไม่ถูก mark
+  bool _tabVisible = false;
+  int? _reportedViewedRoom;
+
   List<ChatMessage> conversation = [];
   bool isSending = false;
   bool isUploadingImage = false;
@@ -140,15 +154,42 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     notifyListeners();
 
     _subscribeToMessages(chat.roomDbId, chat.tenantName);
-    // ไม่ await เพราะไม่ควรหน่วงการเปิดแชท แต่ต้องกลืน error เอง ไม่งั้น
-    // ถ้า upsert ล้ม (ออฟไลน์ / RLS) จะกลายเป็น unhandled async exception
-    // badge บนแท็บแชทต้องหายทันทีที่เปิดห้องนี้ ไม่ใช่รอจนกดย้อนกลับไปหน้า
-    // รายการห้อง — เรียก onRoomRead ทันทีที่ mark ผ่าน
+    _syncViewedRoom();
+    _loadInvoices(chat.roomDbId);
+  }
+
+  /// แท็บแชทถูกสลับเข้า/ออกจากหน้าจอ · เรียกจาก ChatScreen ตามตำแหน่งจริงของ
+  /// router ไม่ใช่ตามการแตะ nav bar เพราะเข้าแท็บนี้ได้จากทางลัดบนแดชบอร์ดด้วย
+  void setTabVisible(bool visible) {
+    if (_tabVisible == visible) return;
+    _tabVisible = visible;
+    _syncViewedRoom();
+    // กลับมาที่ห้องที่เปิดค้างไว้ — ข้อความที่เข้ามาระหว่างอยู่แท็บอื่นเพิ่งถูกเห็น
+    if (visible) _markViewedRoomRead();
+  }
+
+  int? get _viewedRoom => _tabVisible ? selectedChat?.roomDbId : null;
+
+  void _syncViewedRoom() {
+    final viewed = _viewedRoom;
+    if (viewed == _reportedViewedRoom) return;
+    _reportedViewedRoom = viewed;
+    onViewedRoomChanged?.call(viewed);
+    if (viewed != null) _markViewedRoomRead();
+  }
+
+  /// บันทึก last_read_at ของห้องที่กำลังมองอยู่ — ไม่ทำอะไรถ้าไม่ได้มองห้องไหน
+  ///
+  /// ไม่ await เพราะไม่ควรหน่วงการเปิดแชท แต่ต้องกลืน error เอง ไม่งั้นถ้า upsert
+  /// ล้ม (ออฟไลน์ / RLS) จะกลายเป็น unhandled async exception · เรียก onRoomRead
+  /// ทันทีที่ mark ผ่าน เพื่อให้ badge นับใหม่จากค่าที่ถูกต้อง
+  void _markViewedRoomRead() {
+    final roomId = _viewedRoom;
+    if (roomId == null) return;
     _service
-        .markRoomRead(roomId: chat.roomDbId, userId: ownerId)
+        .markRoomRead(roomId: roomId, userId: ownerId)
         .then((_) => onRoomRead?.call())
         .catchError((_) {});
-    _loadInvoices(chat.roomDbId);
   }
 
   /// รีโหลดแผนที่บิลของห้องที่เปิดอยู่ตอนนี้
@@ -178,6 +219,10 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
       conversation = messages;
       isLoadingMore = false;
       notifyListeners();
+      // ข้อความใหม่ที่เข้ามาขณะกำลังอ่านห้องนี้อยู่ถือว่าอ่านแล้ว · เดิม mark แค่ตอน
+      // เปิดห้อง last_read_at จึงค้างอยู่ที่เวลาเปิด แล้วทุกข้อความหลังจากนั้นถูกนับ
+      // เป็นยังไม่อ่านทั้งที่เห็นอยู่ตรงหน้า
+      _markViewedRoomRead();
     });
   }
 
@@ -200,6 +245,7 @@ class ChatViewModel extends ChangeNotifier with SafeNotifier {
     conversation = [];
     invoicesById = {};
     notifyListeners();
+    _syncViewedRoom();
     loadChatPreviews();
   }
 
