@@ -53,7 +53,7 @@ class _TenantProfileView extends StatelessWidget {
 
     return PullToRefresh(
       onRefresh: () async {
-        await auth.refreshProfile();
+        await auth.reloadProfileInPlace();
         await viewModel.load();
       },
       child: LayoutBuilder(

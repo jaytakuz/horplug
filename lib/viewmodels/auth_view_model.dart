@@ -57,16 +57,18 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final profile = await _authService.fetchCurrentUserProfile();
+      var profile = await _authService.fetchCurrentUserProfile();
+      // ต้องรอห้อง/หอของผู้เช่าให้ครบก่อนประกาศว่า authenticated · roomId ไม่ใช่
+      // ข้อมูลเสริม — มันตัดสินว่าหน้าหลักจะเป็น "รอเจ้าของหอเพิ่มเข้าห้อง" หรือ
+      // แดชบอร์ดจริง เดิมโหลดตามหลังเลยเห็นหน้ารอห้องวาบหนึ่งทุกครั้งที่เปิดแอป
+      if (profile != null && profile.role == AppRole.tenant) {
+        profile = await _withTenantRoom(profile);
+      }
       _profile = profile;
       _status = profile == null
           ? AuthStatus.unauthenticated
           : AuthStatus.authenticated;
       notifyListeners();
-
-      if (profile?.role == AppRole.tenant) {
-        _loadTenantOptionalFields(profile!);
-      }
       return;
     } catch (e) {
       _profile = null;
@@ -77,17 +79,34 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _loadTenantOptionalFields(UserProfile profile) async {
+  /// อ่านโปรไฟล์ใหม่โดยไม่ออกจากหน้าที่อยู่ — ต่างจาก [refreshProfile] ที่ตั้ง
+  /// status เป็น loading ซึ่งทำให้ router พาทั้งแอปกลับไปหน้า splash แล้วโหลดทุก
+  /// อย่างใหม่ · ใช้กับท่าลากลงเพื่อรีเฟรช ที่ผู้ใช้คาดว่าแค่ข้อมูลในหน้านี้อัปเดต
+  ///
+  /// ล้มหรือหาโปรไฟล์ไม่เจอก็ไม่ทำอะไร คงข้อมูลเดิมไว้ · ท่าลากรีเฟรชต้องไม่ทำให้
+  /// ผู้ใช้หลุดออกจากระบบ
+  Future<void> reloadProfileInPlace() async {
     try {
-      final enrichedProfile = await _authService.enrichTenantProfile(profile);
-      if (_profile?.id != enrichedProfile.id || _profile?.role != AppRole.tenant) {
-        return;
+      var profile = await _authService.fetchCurrentUserProfile();
+      if (profile == null) return;
+      if (profile.role == AppRole.tenant) {
+        profile = await _withTenantRoom(profile);
       }
-
-      _profile = enrichedProfile;
+      _profile = profile;
       notifyListeners();
-    } catch (_) {
-      // Optional tenant fields should not affect authenticated state.
+    } catch (e) {
+      debugPrint('[AuthViewModel] reloadProfileInPlace error: $e');
+    }
+  }
+
+  /// โหลดห้อง/หอของผู้เช่า · ถ้าล้ม (เช่นออฟไลน์กลางทาง) ยังให้เข้าแอปด้วยโปรไฟล์
+  /// พื้นฐาน ผู้เช่าเห็นหน้ารอห้องพร้อมปุ่มรีเฟรช ดีกว่าเด้งออกจากระบบ
+  Future<UserProfile> _withTenantRoom(UserProfile profile) async {
+    try {
+      return await _authService.enrichTenantProfile(profile);
+    } catch (e) {
+      debugPrint('[AuthViewModel] enrichTenantProfile error: $e');
+      return profile;
     }
   }
 

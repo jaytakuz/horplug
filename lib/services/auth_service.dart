@@ -182,31 +182,30 @@ class AuthService {
     final dormitoryId = tenantExtendedRow['dorm_id'] as int?;
     final roomId = tenantExtendedRow['room_id'] as int?;
 
-    String? dormitoryName;
-    if (dormitoryId != null) {
-      final dormitoryRow = await _client
-          .from('dormitories')
-          .select('name')
-          .eq('id', dormitoryId)
-          .maybeSingle();
-      dormitoryName = dormitoryRow?['name'] as String?;
-    }
+    // สองคำถามนี้ไม่ขึ้นต่อกัน · ยิงพร้อมกันเพราะผู้เช่ารอผลนี้อยู่บนหน้า splash
+    final Future<Map<String, dynamic>?> dormitoryQuery = dormitoryId == null
+        ? Future.value(null)
+        : _client
+            .from('dormitories')
+            .select('name')
+            .eq('id', dormitoryId)
+            .maybeSingle();
+    final Future<Map<String, dynamic>?> roomQuery = roomId == null
+        ? Future.value(null)
+        : _client
+            .from('rooms')
+            .select('room_number')
+            .eq('id', roomId)
+            .maybeSingle();
 
-    String? roomNumber;
-    if (roomId != null) {
-      final roomRow = await _client
-          .from('rooms')
-          .select('room_number')
-          .eq('id', roomId)
-          .maybeSingle();
-      roomNumber = roomRow?['room_number'] as String?;
-    }
+    final rows =
+        await Future.wait<Map<String, dynamic>?>([dormitoryQuery, roomQuery]);
 
     return profile.copyWith(
       dormitoryId: dormitoryId,
-      dormitoryName: dormitoryName,
+      dormitoryName: rows[0]?['name'] as String?,
       roomId: roomId,
-      roomNumber: roomNumber,
+      roomNumber: rows[1]?['room_number'] as String?,
     );
   }
 }

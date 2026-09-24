@@ -88,7 +88,7 @@ class _TenantDashboardView extends StatelessWidget {
 
     return PullToRefresh(
       onRefresh: () async {
-        await auth.refreshProfile();
+        await auth.reloadProfileInPlace();
         await viewModel.load();
       },
       child: LayoutBuilder(
@@ -151,7 +151,7 @@ class _TenantDashboardView extends StatelessWidget {
               label: 'รีเฟรช',
               icon: Icons.refresh,
               onPressed: () async {
-                await AuthScope.of(context).refreshProfile();
+                await AuthScope.of(context).reloadProfileInPlace();
                 await viewModel.load();
               },
             ),
