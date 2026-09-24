@@ -476,6 +476,22 @@ class SupabaseService {
     );
   }
 
+  static const int _signedUrlSeconds = 3600;
+
+  /// ใช้ URL เดิมซ้ำได้อีกนานเท่านี้ — สั้นกว่าอายุจริง (1 ชั่วโมง) เผื่อเวลาที่ผู้ใช้
+  /// เปิดรูปไว้ก่อนหมดอายุ
+  static const Duration _signedUrlReuseWindow = Duration(minutes: 50);
+
+  /// path → URL ที่เซ็นไว้แล้ว · static เพราะ ViewModel แต่ละตัวสร้าง
+  /// SupabaseService ของตัวเอง แต่ทุกตัวอ่านรูปชุดเดียวกัน
+  ///
+  /// สตรีมข้อความส่งรายการใหม่ทั้งชุดทุกครั้งที่มีข้อความเข้า ถ้าเซ็น URL ใหม่ทุก
+  /// รอบ รูปเดิมจะได้ URL คนละอัน (token ต่างกัน) แล้วแอปถือว่าเป็นรูปใหม่ โหลด
+  /// ซ้ำจนกล่องรูปกลายเป็นก้อนว่างชั่วครู่ทุกครั้งที่มีข้อความใหม่ · URL เดิมทำให้
+  /// รูปที่โหลดแล้วอยู่ในแคชของแอปต่อ ไม่กระพริบ และไม่ต้องยิงขอเซ็นซ้ำอีกด้วย
+  static final Map<String, ({String url, DateTime signedAt})> _signedUrlCache =
+      {};
+
   /// แปลง storage path ในคอลัมน์ attachment_url ให้เป็น signed URL ที่แสดงผลได้
   /// (bucket เป็น private) — สร้างเป็น batch เดียวเพื่อลดจำนวน round-trip
   Future<Map<String, String>> _resolveAttachmentUrls(
@@ -487,14 +503,29 @@ class SupabaseService {
         .toList();
     if (paths.isEmpty) return {};
 
+    final now = DateTime.now();
+    final result = <String, String>{};
+    final missing = <String>[];
+    for (final path in paths) {
+      final cached = _signedUrlCache[path];
+      if (cached != null &&
+          now.difference(cached.signedAt) < _signedUrlReuseWindow) {
+        result[path] = cached.url;
+      } else {
+        missing.add(path);
+      }
+    }
+    if (missing.isEmpty) return result;
+
     final signed = await client.storage
         .from(_chatImageBucket)
-        .createSignedUrls(paths, 3600);
+        .createSignedUrls(missing, _signedUrlSeconds);
 
-    final result = <String, String>{};
     for (final entry in signed) {
       if (entry.signedUrl.isNotEmpty) {
         result[entry.path] = entry.signedUrl;
+        _signedUrlCache[entry.path] =
+            (url: entry.signedUrl, signedAt: now);
       }
     }
     return result;

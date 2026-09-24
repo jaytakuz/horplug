@@ -318,9 +318,23 @@ class _ChatConversationViewState extends State<ChatConversationView> {
                             ),
                           );
                         }
-                        final message =
-                            widget.messages.reversed.toList()[index];
-                        return _buildChatBubble(context, message);
+                        final message = widget.messages[
+                            widget.messages.length - 1 - index];
+                        // key ตาม id — ข้อความใหม่ดันทุกแถวลงหนึ่งตำแหน่ง ถ้าไม่มี
+                        // key Flutter จะจับคู่แถวตามตำแหน่งแล้วสร้างบับเบิลของรูป
+                        // ใหม่ทุกครั้ง
+                        return KeyedSubtree(
+                          key: ValueKey(message.id),
+                          child: _buildChatBubble(context, message),
+                        );
+                      },
+                      findChildIndexCallback: (key) {
+                        if (key is! ValueKey<String>) return null;
+                        final position = widget.messages
+                            .indexWhere((message) => message.id == key.value);
+                        return position < 0
+                            ? null
+                            : widget.messages.length - 1 - position;
                       },
                     ),
                   ),
