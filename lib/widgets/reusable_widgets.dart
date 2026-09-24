@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../theme/breakpoints.dart';
 import '../utils/formatters.dart' show formatBaht;
 
 class PaperCard extends StatelessWidget {
@@ -271,7 +272,11 @@ class MobileHeader extends StatelessWidget implements PreferredSizeWidget {
     final name = dormitoryName?.trim();
 
     return AppBar(
-      backgroundColor: AppColors.background,
+      // จอกว้างมีแถบนำทางข้างสีขาว · header สีเดียวกันทำให้ทั้งสองต่อกันเป็นกรอบ
+      // เดียวล้อมพื้นที่เนื้อหาสีครีม · จอแคบไม่มีแถบข้าง header จึงกลืนไปกับ
+      // พื้นหลังเหมือนเดิม
+      backgroundColor:
+          context.isCompact ? AppColors.background : AppColors.card,
       elevation: 0,
       scrolledUnderElevation: 0,
       titleSpacing: 16,
