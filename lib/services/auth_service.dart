@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/models.dart';
@@ -28,9 +29,16 @@ class AuthService {
   }
 
   Future<void> sendPasswordResetEmail({required String email}) async {
+    // มือถือจับ custom scheme เองไม่ได้ผ่านเบราว์เซอร์ · บนเว็บใช้ origin ของ
+    // หน้าปัจจุบันแทน (ไม่ hardcode โดเมน) เผื่อ deploy ไปคนละที่ เช่น preview
+    // URL ของ Vercel ที่ไม่ใช่โดเมนหลัก
+    final redirectTo = kIsWeb
+        ? '${Uri.base.origin}/reset-callback'
+        : 'horplug://reset-callback';
+
     await _client.auth.resetPasswordForEmail(
       email,
-      redirectTo: 'horplug://reset-callback',
+      redirectTo: redirectTo,
     );
   }
 

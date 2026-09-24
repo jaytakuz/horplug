@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../viewmodels/auth_view_model.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/password_form_field.dart';
 import '../../widgets/reusable_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -17,11 +18,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _passwordController = MaskedTextEditingController();
   final _passwordFocusNode = FocusNode();
 
   bool _isLoading = false;
-  bool _obscurePassword = true;
   String? _errorMessage;
 
   @override
@@ -116,21 +116,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      TextFormField(
+                      PasswordFormField(
                         controller: _passwordController,
                         focusNode: _passwordFocusNode,
-                        obscureText: _obscurePassword,
+                        labelText: 'รหัสผ่าน',
                         textInputAction: TextInputAction.done,
-                        decoration: InputDecoration(
-                          labelText: 'รหัสผ่าน',
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined),
-                            onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword),
-                          ),
-                        ),
                         onFieldSubmitted: (_) => _isLoading ? null : _submit(),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
