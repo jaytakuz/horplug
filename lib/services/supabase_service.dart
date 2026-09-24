@@ -607,6 +607,19 @@ class SupabaseService {
   /// ก็ได้) ไม่ใช้เนื้อหาแถวที่ได้แสดงผลตรงๆ แค่ใช้จับจังหวะกระตุ้นให้ผู้เรียก
   /// ไปดึงจำนวน/รายการที่ถูกกรองสิทธิ์แล้วมาอีกที — แก้ปัญหา badge ข้อความ
   /// ยังไม่อ่านค้างจนกว่าจะสลับแท็บหรือดึงรีเฟรชเอง
+  /// room_id ปัจจุบันของผู้เช่าคนนี้ ส่งค่าใหม่ทุกครั้งที่แถวโปรไฟล์เปลี่ยน
+  ///
+  /// RLS ให้ผู้เช่าอ่านแถวของตัวเองได้อยู่แล้ว (tenant_profiles_select_own) ·
+  /// ต้องเปิด realtime ให้ตารางนี้ด้วย ดู database/tenant_profiles_realtime.sql
+  Stream<int?> watchTenantRoomId({required String tenantId}) {
+    return client
+        .from('tenant_profiles')
+        .stream(primaryKey: ['id'])
+        .eq('id', tenantId)
+        .where((rows) => rows.isNotEmpty)
+        .map((rows) => rows.first['room_id'] as int?);
+  }
+
   Stream<void> watchLatestMessageSignal() {
     return client
         .from('messages')

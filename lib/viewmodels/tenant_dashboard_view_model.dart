@@ -116,7 +116,11 @@ BadgeVariant billStatusVariant(InvoiceStatus status) {
 // ── ViewModel ───────────────────────────────────────────────────────────────
 
 class TenantDashboardViewModel extends ChangeNotifier
-    with SafeNotifier, RefreshableViewModel, TenantSlipSubmission {
+    with
+        SafeNotifier,
+        RefreshableViewModel,
+        RefreshOnSignal,
+        TenantSlipSubmission {
   TenantDashboardViewModel({
     required this.roomId,
     this.dormitoryId,
@@ -160,6 +164,7 @@ class TenantDashboardViewModel extends ChangeNotifier
   /// กำลังส่งคำขอแจ้งซ่อม/ทำความสะอาดจากปุ่มทางลัด
   bool isSubmittingRequest = false;
 
+  @override
   Future<void> load() {
     return runLoad(() async {
       // คำขอเข้าหอต้องโหลดเสมอ แม้ยังไม่มีห้อง

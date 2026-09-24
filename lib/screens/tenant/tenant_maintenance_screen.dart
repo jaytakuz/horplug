@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
 import '../../viewmodels/tenant_maintenance_view_model.dart';
+import '../../viewmodels/tenant_shell_view_model.dart';
 import '../../widgets/maintenance_request_card.dart';
 import '../../widgets/maintenance_request_dialog.dart';
 import '../../widgets/maintenance_search_and_filter.dart';
@@ -21,10 +22,12 @@ class TenantMaintenanceScreen extends StatelessWidget {
 
     return ChangeNotifierProvider(
       key: ValueKey(profile?.roomId),
-      create: (_) => TenantMaintenanceViewModel(
+      create: (context) => TenantMaintenanceViewModel(
         roomId: profile?.roomId,
         tenantId: profile?.id,
-      )..loadRequests(),
+      )
+        ..loadRequests()
+        ..refreshWhen(context.read<TenantShellViewModel>().dataRefreshSignal),
       child: const _TenantMaintenanceView(),
     );
   }

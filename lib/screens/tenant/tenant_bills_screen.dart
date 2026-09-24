@@ -6,6 +6,7 @@ import '../../services/invoice_pdf.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/breakpoints.dart';
 import '../../viewmodels/auth_view_model.dart';
+import '../../viewmodels/tenant_shell_view_model.dart';
 import '../../viewmodels/error_message.dart';
 import '../../viewmodels/tenant_bills_view_model.dart';
 import '../../widgets/payment_sheet.dart';
@@ -23,10 +24,12 @@ class TenantBillsScreen extends StatelessWidget {
 
     return ChangeNotifierProvider(
       key: ValueKey(profile?.roomId),
-      create: (_) => TenantBillsViewModel(
+      create: (context) => TenantBillsViewModel(
         roomId: profile?.roomId,
         dormitoryId: profile?.dormitoryId,
-      )..load(),
+      )
+        ..load()
+        ..refreshWhen(context.read<TenantShellViewModel>().dataRefreshSignal),
       child: const _TenantBillsView(),
     );
   }

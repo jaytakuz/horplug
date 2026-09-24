@@ -33,14 +33,16 @@ class TenantDashboardScreen extends StatelessWidget {
       key: ValueKey(profile?.roomId),
       providers: [
         ChangeNotifierProvider(
-          create: (_) => TenantDashboardViewModel(
+          create: (context) => TenantDashboardViewModel(
             roomId: profile?.roomId,
             dormitoryId: profile?.dormitoryId,
             tenantId: profile?.id,
             tenantName: profile?.fullName.isNotEmpty == true
                 ? profile!.fullName
                 : 'ผู้พักอาศัย',
-          )..load(),
+          )
+            ..load()
+            ..refreshWhen(context.read<TenantShellViewModel>().dataRefreshSignal),
         ),
         // แยก provider เพราะทางลัดอ่านจากดิสก์ ไม่ใช่เครือข่าย — การรีเฟรช
         // แดชบอร์ดจึงไม่ทำให้ปุ่มกระพริบ และการจัดปุ่มไม่ทำให้ต้องโหลดบิลใหม่

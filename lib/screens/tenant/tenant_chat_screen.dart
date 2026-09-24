@@ -5,6 +5,7 @@ import '../../models/models.dart';
 import '../../models/picked_image.dart';
 import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_view_model.dart';
+import '../../viewmodels/tenant_shell_view_model.dart';
 import '../../viewmodels/tenant_chat_view_model.dart';
 import '../../viewmodels/tenant_dashboard_view_model.dart' show billStatusLabelOf;
 import '../../widgets/chat_conversation_view.dart';
@@ -53,11 +54,13 @@ class TenantChatScreen extends StatelessWidget {
         profile?.fullName.isNotEmpty == true ? profile!.fullName : 'ผู้พักอาศัย';
 
     return ChangeNotifierProvider(
-      create: (_) => TenantChatViewModel(
+      create: (context) => TenantChatViewModel(
         roomId: roomId,
         tenantId: profile!.id,
         tenantName: tenantName,
         dormitoryId: profile.dormitoryId,
+        onLandlordUpdate: () =>
+            context.read<TenantShellViewModel>().requestDataRefresh(),
       )..start(),
       child: _TenantChatView(embedded: embedded),
     );
