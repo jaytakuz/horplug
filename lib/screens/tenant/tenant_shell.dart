@@ -122,6 +122,7 @@ class _TenantShellViewState extends State<_TenantShellView>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final viewModel = context.read<TenantShellViewModel>();
+      viewModel.setChatVisible(activeIndex == _chatIndex);
 
       if (activeIndex == _chatIndex) {
         await viewModel.markChatRead();

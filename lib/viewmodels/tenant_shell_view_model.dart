@@ -72,16 +72,38 @@ class TenantShellViewModel extends ChangeNotifier with SafeNotifier {
     super.dispose();
   }
 
+  /// true เมื่อแท็บแชทเป็นแท็บที่แสดงอยู่ · ตั้งจาก TenantShell ตามตำแหน่งจริงของ
+  /// router (ไม่ใช่ตามการแตะ nav bar)
+  bool _chatVisible = false;
+
+  /// นับรอบล่าสุดที่ยิง — คำตอบของรอบเก่าที่มาช้าต้องไม่ทับตัวเลขที่เคลียร์ไปแล้ว
+  int _refreshGeneration = 0;
+
+  void setChatVisible(bool visible) => _chatVisible = visible;
+
   Future<void> refreshUnreadCount() async {
     final room = roomId;
     final user = tenantId;
     if (room == null || user == null) return;
 
+    // กำลังอ่านแชทอยู่ตรงหน้า ข้อความที่เพิ่งเข้ามาถือว่าเห็นแล้ว · เดิมนับใหม่จาก
+    // last_read_at ซึ่งค้างอยู่ที่เวลาที่เปิดแท็บ ข้อความทุกอันหลังจากนั้นเลยกลาย
+    // เป็น badge ทั้งที่เห็นอยู่ จนกว่าจะออกจากแท็บ
+    if (_chatVisible) {
+      await markChatRead();
+      return;
+    }
+
+    final generation = ++_refreshGeneration;
     try {
-      unreadMessageCount = await _service.countUnreadMessagesForRoom(
+      final count = await _service.countUnreadMessagesForRoom(
         roomId: room,
         userId: user,
       );
+      // ระหว่างรอ ผู้ใช้อาจเข้าแท็บแชทไปแล้ว (markChatRead เคลียร์เป็น 0) — ผลที่มา
+      // ช้าต้องไม่เอาเลขเก่ากลับมา
+      if (generation != _refreshGeneration || _chatVisible) return;
+      unreadMessageCount = count;
       notifyListeners();
     } catch (_) {
       // ไม่ critical — badge คงค่าเดิมไว้ ดีกว่าขึ้น error ให้ผู้ใช้
@@ -95,6 +117,7 @@ class TenantShellViewModel extends ChangeNotifier with SafeNotifier {
     final user = tenantId;
     if (room == null || user == null) return;
 
+    _refreshGeneration++;
     if (unreadMessageCount != 0) {
       unreadMessageCount = 0;
       notifyListeners();
