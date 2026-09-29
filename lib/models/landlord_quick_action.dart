@@ -40,7 +40,7 @@ enum LandlordQuickAction implements QuickActionSpec {
         LandlordQuickAction.maintenanceHistory =>
           'ดูห้องที่มีประวัติแจ้งซ่อม/ทำความสะอาดทั้งหอ',
         LandlordQuickAction.paymentChannel =>
-          'ตั้งเลขพร้อมเพย์และบัญชีธนาคารของหอ',
+          'ตั้งเลขพร้อมเพย์และบัญชีธนาคารของหอ (ในหน้าโปรไฟล์)',
       };
 }
 

@@ -1,131 +1,67 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 
-import '../../models/thai_bank.dart';
-import '../../services/promptpay.dart';
-import '../../theme/app_theme.dart';
-import '../../theme/breakpoints.dart';
-import '../../utils/formatters.dart';
-import '../../viewmodels/payment_channel_view_model.dart';
-import '../../widgets/promptpay_qr.dart';
-import '../../widgets/reusable_widgets.dart';
+import '../models/thai_bank.dart';
+import '../services/promptpay.dart';
+import '../theme/app_theme.dart';
+import '../utils/formatters.dart';
+import '../viewmodels/payment_channel_view_model.dart';
+import 'promptpay_qr.dart';
+import 'reusable_widgets.dart';
 
-/// เปิดหน้าตั้งค่าช่องทางชำระเงินของหอ · คืน true เมื่อบันทึกสำเร็จ
-Future<bool> showPaymentChannelScreen(
-  BuildContext context, {
-  required int dormitoryId,
-}) async {
-  final saved = await Navigator.of(context).push<bool>(
-    MaterialPageRoute(
-      builder: (_) => ChangeNotifierProvider(
-        create: (_) =>
-            PaymentChannelViewModel(dormitoryId: dormitoryId)..load(),
-        child: const _PaymentChannelScreen(),
-      ),
-    ),
-  );
-  return saved ?? false;
-}
+/// ช่องกรอกช่องทางรับเงินของหอ (พร้อมเพย์ บัญชีธนาคาร ชื่อบัญชี)
+///
+/// ต้องอยู่ใต้ [Form] ของหน้าที่ใช้ · ปุ่มบันทึกเป็นของหน้านั้น ไม่ใช่ของส่วนนี้
+///
+/// เดิมเป็นหน้าแยกที่เปิดจากหน้าบิล ย้ายมาอยู่ในหน้าโปรไฟล์เจ้าของหอ เพราะเป็น
+/// การตั้งค่าที่ทำครั้งเดียวตอนเปิดหอ อยู่กลุ่มเดียวกับชื่อหอและอัตราค่าไฟ
+/// ไม่ใช่งานประจำเดือนแบบการออกบิล
+///
+/// ตัวตรวจทุกตัวทำงานเฉพาะตอนที่ส่วนนี้ถูกแก้ ([PaymentChannelViewModel.hasChanges])
+/// — หอที่ยังไม่เคยตั้งช่องทางต้องบันทึกชื่อหรือค่าไฟในหน้าเดียวกันได้ โดยไม่
+/// โดนบังคับกรอกพร้อมเพย์ก่อน
+class PaymentChannelFields extends StatelessWidget {
+  const PaymentChannelFields({super.key, required this.viewModel});
 
-class _PaymentChannelScreen extends StatefulWidget {
-  const _PaymentChannelScreen();
+  final PaymentChannelViewModel viewModel;
 
-  @override
-  State<_PaymentChannelScreen> createState() => _PaymentChannelScreenState();
-}
-
-class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
-  final _formKey = GlobalKey<FormState>();
-
-  Future<void> _save() async {
-    final viewModel = context.read<PaymentChannelViewModel>();
-    if (viewModel.isSaving) return;
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    final result = await viewModel.save();
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(result.message)));
-    if (result.success) Navigator.of(context).pop(true);
-  }
+  String? _gate(String? message) => viewModel.hasChanges ? message : null;
 
   @override
   Widget build(BuildContext context) {
-    final viewModel = context.watch<PaymentChannelViewModel>();
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.card,
-        elevation: 0,
-        title: const Text('ช่องทางชำระเงิน'),
-      ),
-      body: viewModel.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: Form(
-                key: _formKey,
-                // SingleChildScrollView + Column ไม่ใช่ ListView — ListView
-                // สร้าง children แบบ lazy ช่องที่เลื่อนพ้นจอจะถูกถอดออกจาก tree
-                // แล้ว deregister ตัวเองจาก Form ทำให้ validate() ข้ามช่องนั้นไป
-                // เงียบๆ ด่านตรวจจริงจึงเหลือแค่ CHECK ในฐานข้อมูล ซึ่งเด้ง
-                // ข้อความคนละแบบกลับมา · ฟอร์มนี้มีไม่กี่ช่อง การสร้างทั้งหมด
-                // พร้อมกันจึงไม่มีต้นทุนที่ต้องกังวล
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: ContentBounds(
-                    maxWidth: 640,
-                    child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (viewModel.errorMessage != null) ...[
-                        SectionErrorNote(message: viewModel.errorMessage!),
-                        const SizedBox(height: 16),
-                      ],
-                      Text(
-                        'ผู้เช่าจะเห็นข้อมูลนี้ตอนกดชำระเงิน และคิวอาร์จะฝังยอด'
-                        'ของบิลแต่ละใบให้อัตโนมัติ',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.mutedForeground,
-                            ),
-                      ),
-                      const SizedBox(height: 20),
-                      _buildPromptPaySection(context, viewModel),
-                      const SizedBox(height: 20),
-                      _buildBankSection(context, viewModel),
-                      const SizedBox(height: 20),
-                      _buildAccountNameField(viewModel),
-                      const SizedBox(height: 12),
-                      // ตรวจ "ต้องมีอย่างน้อยหนึ่งช่องทาง" ที่ระดับฟอร์ม ไม่ใช่ราย
-                      // ช่อง เพราะเป็นเงื่อนไขข้ามช่อง — ผูกไว้กับ FormField ที่ไม่มี
-                      // ช่องกรอกของตัวเอง เพื่อให้เข้าร่วม validate() ตามปกติ
-                      FormField<void>(
-                        validator: (_) => validateHasAnyChannel(
-                          promptPayId: viewModel.promptPayId,
-                          bankName: viewModel.bankName,
-                          accountNo: viewModel.accountNo,
-                        ),
-                        builder: (field) => field.hasError
-                            ? SectionErrorNote(message: field.errorText!)
-                            : const SizedBox.shrink(),
-                      ),
-                      const SizedBox(height: 12),
-                      PrimaryButton(
-                        label: 'บันทึก',
-                        icon: Icons.save_outlined,
-                        fullWidth: true,
-                        isLoading: viewModel.isSaving,
-                        onPressed: _save,
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                    ),
-                  ),
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'ผู้เช่าจะเห็นข้อมูลนี้ตอนกดชำระเงิน และคิวอาร์จะฝังยอด'
+          'ของบิลแต่ละใบให้อัตโนมัติ',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.mutedForeground,
               ),
-            ),
+        ),
+        const SizedBox(height: 12),
+        _buildPromptPaySection(context, viewModel),
+        const SizedBox(height: 12),
+        _buildBankSection(context, viewModel),
+        const SizedBox(height: 12),
+        _buildAccountNameField(viewModel),
+        // ตรวจ "ต้องมีอย่างน้อยหนึ่งช่องทาง" ที่ระดับฟอร์ม ไม่ใช่รายช่อง เพราะ
+        // เป็นเงื่อนไขข้ามช่อง — ผูกไว้กับ FormField ที่ไม่มีช่องกรอกของตัวเอง
+        // เพื่อให้เข้าร่วม validate() ตามปกติ
+        FormField<void>(
+          validator: (_) => _gate(validateHasAnyChannel(
+            promptPayId: viewModel.promptPayId,
+            bankName: viewModel.bankName,
+            accountNo: viewModel.accountNo,
+          )),
+          builder: (field) => field.hasError
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: SectionErrorNote(message: field.errorText!),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
     );
   }
 
@@ -154,7 +90,7 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
               helperText: 'เบอร์โทร 10 หลัก หรือเลขบัตรประชาชน 13 หลัก',
               border: OutlineInputBorder(),
             ),
-            validator: validatePromptPayId,
+            validator: (value) => _gate(validatePromptPayId(value)),
             onChanged: (value) => viewModel.update(promptPayId: value),
           ),
           const SizedBox(height: 16),
@@ -261,14 +197,15 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
               ...ThaiBank.values.map(
                 (bank) => DropdownMenuItem(
                   value: bank,
-                  child: Text(bank.displayName, overflow: TextOverflow.ellipsis),
+                  child:
+                      Text(bank.displayName, overflow: TextOverflow.ellipsis),
                 ),
               ),
             ],
-            validator: (_) => validateBankPair(
+            validator: (_) => _gate(validateBankPair(
               bankName: viewModel.bankName,
               accountNo: viewModel.accountNo,
-            ),
+            )),
             onChanged: viewModel.selectBank,
           ),
           const SizedBox(height: 12),
@@ -280,10 +217,10 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
               hintText: '1438323216',
               border: OutlineInputBorder(),
             ),
-            validator: (value) => validateBankPair(
+            validator: (value) => _gate(validateBankPair(
               bankName: viewModel.bankName,
               accountNo: value ?? '',
-            ),
+            )),
             onChanged: (value) => viewModel.update(accountNo: value),
           ),
         ],
@@ -301,8 +238,8 @@ class _PaymentChannelScreenState extends State<_PaymentChannelScreen> {
           helperText: 'ผู้เช่าใช้ชื่อนี้ตรวจปลายทางก่อนกดโอน',
           border: OutlineInputBorder(),
         ),
-        validator: (value) =>
-            (value?.trim().isEmpty ?? true) ? 'กรุณากรอกชื่อบัญชี' : null,
+        validator: (value) => _gate(
+            (value?.trim().isEmpty ?? true) ? 'กรุณากรอกชื่อบัญชี' : null),
         onChanged: (value) => viewModel.update(accountName: value),
       ),
     );

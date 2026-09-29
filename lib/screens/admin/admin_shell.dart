@@ -13,6 +13,7 @@ import 'billing_screen.dart';
 import 'chat_screen.dart';
 import 'lease_screen.dart';
 import 'maintenance_overview_screen.dart';
+import 'landlord_profile_screen.dart';
 
 class AdminShell extends StatelessWidget {
   const AdminShell({super.key});
@@ -106,6 +107,23 @@ class _AdminShellView extends StatelessWidget {
       appBar: MobileHeader(
         dormitoryName: auth.dormitoryName,
         actions: [
+          // ปุ่มมีป้ายกำกับ ไม่ใช่ไอคอนลอยๆ แบบปุ่มออกจากระบบ — ไอคอนคนเดียว
+          // ไม่บอกว่ากดแล้วได้อะไร และ tooltip ไม่มีอยู่จริงบนจอสัมผัส · ไม่อยู่ใน
+          // แถบเมนูล่าง เพราะเป็นหน้าตั้งค่าที่เปิดขึ้นมาทับ ไม่ใช่แท็บที่สลับไปมา
+          if (dormitoryId != null)
+            TextButton.icon(
+              icon: const Icon(Icons.account_circle_outlined, size: 20),
+              label: const Text('โปรไฟล์'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                minimumSize: const Size(48, 48),
+              ),
+              onPressed: () {
+                FocusManager.instance.primaryFocus?.unfocus();
+                showLandlordProfileScreen(context);
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.primary),
             tooltip: 'ออกจากระบบ',

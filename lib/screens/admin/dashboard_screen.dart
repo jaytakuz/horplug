@@ -13,7 +13,7 @@ import '../../widgets/quick_actions_editor.dart';
 import '../../widgets/refreshable.dart';
 import '../../widgets/reusable_widgets.dart';
 import '../../utils/formatters.dart';
-import 'payment_channel_screen.dart';
+import 'landlord_profile_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   final int dormitoryId;
@@ -893,9 +893,11 @@ class _QuickActions extends StatelessWidget {
         LandlordQuickAction.chat => () => context.go('/landlord/chat'),
         LandlordQuickAction.maintenanceHistory => () =>
             context.go('/landlord/maintenance'),
-        LandlordQuickAction.paymentChannel => () => showPaymentChannelScreen(
+        // ช่องทางรับเงินย้ายไปอยู่ในหน้าโปรไฟล์แล้ว · ทางลัดยังพาไปถึงส่วนนั้น
+        // ตรงๆ ไม่ใช่ทิ้งเจ้าของหอไว้ที่หัวหน้าโปรไฟล์ให้เลื่อนหาเอง
+        LandlordQuickAction.paymentChannel => () => showLandlordProfileScreen(
               context,
-              dormitoryId: viewModel.dormitoryId,
+              focusPaymentChannel: true,
             ),
       };
 

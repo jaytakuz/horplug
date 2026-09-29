@@ -615,6 +615,40 @@ class PaymentChannel {
       accountNo!.trim().isNotEmpty;
 }
 
+/// ข้อมูลที่เจ้าของหอแก้ได้ในหน้าโปรไฟล์ · มาจากสองตาราง
+///
+/// ส่วนตัว (landlord_profiles) กับหอ (dormitories) อยู่คนละตาราง แต่เจ้าของหอ
+/// มองเป็นหน้าเดียว "ข้อมูลของฉัน" จึงรวมไว้ในก้อนเดียวให้หน้าจอเทียบค่าเดิม
+/// กับค่าที่แก้ได้ในที่เดียว
+class LandlordSettings {
+  final String firstName;
+  final String lastName;
+  final String phone;
+
+  /// อีเมลที่ใช้เข้าสู่ระบบ · อ่านอย่างเดียว เพราะผูกกับบัญชี auth
+  final String email;
+
+  final String dormitoryName;
+  final String location;
+
+  /// บาทต่อหน่วย · ใช้กับงวดที่ยังไม่ได้จดมิเตอร์เท่านั้น
+  final double baseElectricityRate;
+
+  /// ค่าน้ำเหมาจ่ายต่อห้องต่อเดือน
+  final double baseWaterRate;
+
+  const LandlordSettings({
+    required this.firstName,
+    required this.lastName,
+    required this.phone,
+    required this.email,
+    required this.dormitoryName,
+    required this.location,
+    required this.baseElectricityRate,
+    required this.baseWaterRate,
+  });
+}
+
 enum MaintenanceRequestType { repair, cleaning }
 
 enum MaintenanceStatus { pending, inProgress, completed, cancelled }

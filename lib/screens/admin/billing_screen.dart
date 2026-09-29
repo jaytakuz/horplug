@@ -9,7 +9,6 @@ import '../../viewmodels/auth_view_model.dart' show AuthScope;
 import '../../viewmodels/billing_view_model.dart';
 import '../../viewmodels/invoice_actions_view_model.dart';
 import '../../utils/formatters.dart';
-import 'payment_channel_screen.dart';
 import '../../widgets/issue_invoices_dialog.dart';
 import '../../widgets/invoice_detail_sheet.dart';
 import '../../widgets/slip_review_sheet.dart';
@@ -89,33 +88,6 @@ class _BillingView extends StatelessWidget {
           ),
         ),
         _buildPeriodSelector(viewModel),
-        // ตั้งค่าช่องทางรับเงินอยู่หน้านี้เพราะเป็นเรื่องของบิลโดยตรง แต่เป็น
-        // งานที่ทำครั้งเดียวตอนเปิดหอ ไม่ใช่ทุกเดือนแบบการออกบิล จึงไม่ควรไป
-        // เบียดพื้นที่หัวหน้าจอกับปุ่มหลัก
-        //
-        // มีป้ายกำกับ ไม่ใช่ไอคอนคิวอาร์ลอยๆ แบบเดิม — ไอคอนเปล่าไม่ได้บอกใคร
-        // ว่ากดแล้วเกิดอะไร และ tooltip ไม่มีอยู่จริงบนจอสัมผัส
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              icon: const Icon(Icons.qr_code_2, size: 18),
-              label: const Text('ตั้งค่าช่องทางรับเงิน'),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.mutedForeground,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: const Size(0, 36),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: AppFonts.base.copyWith(fontSize: 12),
-              ),
-              onPressed: () => showPaymentChannelScreen(
-                context,
-                dormitoryId: viewModel.dormitoryId,
-              ),
-            ),
-          ),
-        ),
         _buildFilters(viewModel),
         Expanded(
           child: viewModel.isLoading
@@ -123,7 +95,7 @@ class _BillingView extends StatelessWidget {
               // ท่าทางลากครอบทั้งสามสถานะ ไม่ใช่เฉพาะตอนมีรายการ — หน้าที่ว่าง
               // หรือโหลดล้มคือหน้าที่ผู้ใช้อยากลองใหม่มากที่สุด
               //
-              // หัวหน้าจอ ตัวเลือกงวด ลิงก์ตั้งค่าช่องทางรับเงิน และชิปตัวกรอง
+              // หัวหน้าจอ ตัวเลือกงวด และชิปตัวกรอง
               // อยู่นอกกรอบนี้ทั้งหมด จึงนิ่งขณะลาก
               : PullToRefresh(
                   onRefresh: () => _handleRefresh(context, viewModel),

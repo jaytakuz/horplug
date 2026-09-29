@@ -57,6 +57,26 @@ class PaymentChannelViewModel extends ChangeNotifier with SafeNotifier {
   String accountNo = '';
   String accountName = '';
 
+  /// ค่าที่อยู่ในฐานข้อมูลตอนนี้ · ใช้เทียบว่าฟอร์มถูกแก้หรือยัง
+  ///
+  /// ฟอร์มนี้อยู่ในหน้าโปรไฟล์ร่วมกับส่วนอื่น หอที่ยังไม่เคยตั้งช่องทางต้องเปิด
+  /// หน้าโปรไฟล์ไปแก้ชื่อตัวเองได้โดยไม่โดนบังคับกรอกพร้อมเพย์ — ส่วนนี้จึง
+  /// ตรวจและบันทึกเฉพาะตอนที่ถูกแก้จริง
+  List<String> _saved = const ['', '', '', ''];
+
+  List<String> get _current => [
+        promptPayId.trim(),
+        bankName.trim(),
+        accountNo.trim(),
+        accountName.trim(),
+      ];
+
+  /// true เมื่อค่าในฟอร์มต่างจากที่บันทึกไว้ · ยอดคิวอาร์ตัวอย่างไม่นับ
+  bool get hasChanges => !listEquals(_current, _saved);
+
+  /// true เมื่อหอนี้เคยตั้งช่องทางรับเงินไว้แล้ว
+  bool isConfigured = false;
+
   /// ยอดเริ่มต้นของคิวอาร์ตัวอย่าง
   static const defaultPreviewAmount = 1234.56;
 
@@ -107,6 +127,8 @@ class PaymentChannelViewModel extends ChangeNotifier with SafeNotifier {
         accountNo = channel.accountNo ?? '';
         accountName = channel.accountName;
       }
+      isConfigured = channel != null;
+      _saved = _current;
     } catch (error) {
       errorMessage = formatErrorMessage(error);
     } finally {
@@ -173,6 +195,8 @@ class PaymentChannelViewModel extends ChangeNotifier with SafeNotifier {
           accountNo: accountNo.trim().isEmpty ? null : accountNo.trim(),
         ),
       );
+      _saved = _current;
+      isConfigured = true;
       return const ActionResult(
         success: true,
         message: 'บันทึกช่องทางชำระเงินแล้ว',
