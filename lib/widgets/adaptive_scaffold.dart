@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../theme/breakpoints.dart';
+import 'web_safe_area.dart';
 
 /// ปลายทางหนึ่งอันของแถบนำทาง
 class NavDestination {
@@ -107,19 +108,37 @@ class _BottomBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
 
+  /// ระยะที่เติมเหนือและใต้แถบ · ความสูงมาตรฐาน 56px ของ BottomNavigationBar
+  /// เตี้ยเกินไปเมื่อป้ายเป็นภาษาไทยที่มีสระบนล่าง และดูอึดอัดบนมือถือจอสูง
+  static const _verticalPadding = 6.0;
+
   @override
   Widget build(BuildContext context) {
+    // พึ่ง sizeOf เพื่อให้วัดใหม่ทุกครั้งที่จอหมุนหรือหน้าต่างเปลี่ยนขนาด
+    // ซึ่งเป็นจังหวะที่ safe area ของเบราว์เซอร์เปลี่ยนตาม
+    MediaQuery.sizeOf(context);
+    final homeIndicatorInset = webSafeAreaBottom();
+
     return Container(
       decoration: const BoxDecoration(
+        // พื้นขาวต้องอยู่ที่ Container ด้วย ไม่งั้นช่วง padding รอบแถบจะโปร่ง
+        color: AppColors.card,
         boxShadow: [
           BoxShadow(
               color: Colors.black12, blurRadius: 10, offset: Offset(0, -2)),
         ],
       ),
+      padding: EdgeInsets.only(
+        top: _verticalPadding,
+        bottom: _verticalPadding + homeIndicatorInset,
+      ),
       child: BottomNavigationBar(
         currentIndex: selectedIndex,
         onTap: onDestinationSelected,
         type: BottomNavigationBarType.fixed,
+        // เงาอยู่ที่ Container แล้ว · ถ้าปล่อย elevation เดิมไว้ จะมีเส้นเงาซ้อน
+        // อยู่ใต้ขอบบนของแถบ ตรงรอยต่อกับ padding
+        elevation: 0,
         backgroundColor: AppColors.card,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.mutedForeground,

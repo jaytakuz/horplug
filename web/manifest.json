@@ -3,7 +3,7 @@
     "short_name": "HorPlug",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#F5F7FA",
+    "background_color": "#1B3A5C",
     "theme_color": "#1B3A5C",
     "description": "ออกบิลค่าเช่า ค่าน้ำค่าไฟ รับชำระผ่านพร้อมเพย์ และคุยกับผู้เช่าในที่เดียว",
     "lang": "th",
