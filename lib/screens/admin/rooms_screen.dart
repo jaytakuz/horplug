@@ -154,8 +154,10 @@ class _RoomsViewState extends State<_RoomsView> {
 
   Widget _buildRoomStatsSection(
       BuildContext context, RoomsViewModel viewModel, Map<String, int> stats) {
+    // ขอบบน 16 ให้ตรงกับ ScreenHeader ของหน้ามิเตอร์/บิล — ไม่งั้นหัวข้อหน้านี้
+    // ชิดขอบบนกว่าหน้าอื่น สลับแท็บแล้วเนื้อหากระโดดขึ้นลง
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
