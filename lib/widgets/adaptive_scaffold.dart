@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../theme/breakpoints.dart';
-import 'web_safe_area.dart';
 
 /// ปลายทางหนึ่งอันของแถบนำทาง
 class NavDestination {
@@ -114,10 +113,10 @@ class _BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // พึ่ง sizeOf เพื่อให้วัดใหม่ทุกครั้งที่จอหมุนหรือหน้าต่างเปลี่ยนขนาด
-    // ซึ่งเป็นจังหวะที่ safe area ของเบราว์เซอร์เปลี่ยนตาม
-    MediaQuery.sizeOf(context);
-    final homeIndicatorInset = webSafeAreaBottom();
+    // BottomNavigationBar เว้นที่ให้ home indicator เองจาก viewPadding (บนเว็บ
+    // ได้ค่ามาจาก WebSafeArea) · จอที่มี home indicator จึงไม่ต้องเติมด้านล่าง
+    // อีก ไม่งั้นแถบจะสูงเกินไปเมื่อเทียบกับแถบแท็บของ iOS
+    final hasHomeIndicator = MediaQuery.viewPaddingOf(context).bottom > 0;
 
     return Container(
       decoration: const BoxDecoration(
@@ -130,7 +129,7 @@ class _BottomBar extends StatelessWidget {
       ),
       padding: EdgeInsets.only(
         top: _verticalPadding,
-        bottom: _verticalPadding + homeIndicatorInset,
+        bottom: hasHomeIndicator ? 0 : _verticalPadding,
       ),
       child: BottomNavigationBar(
         currentIndex: selectedIndex,

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../theme/breakpoints.dart';
 import '../utils/formatters.dart' show formatBaht;
 
 class PaperCard extends StatelessWidget {
@@ -272,11 +271,14 @@ class MobileHeader extends StatelessWidget implements PreferredSizeWidget {
     final name = dormitoryName?.trim();
 
     return AppBar(
-      // จอกว้างมีแถบนำทางข้างสีขาว · header สีเดียวกันทำให้ทั้งสองต่อกันเป็นกรอบ
-      // เดียวล้อมพื้นที่เนื้อหาสีครีม · จอแคบไม่มีแถบข้าง header จึงกลืนไปกับ
-      // พื้นหลังเหมือนเดิม
-      backgroundColor:
-          context.isCompact ? AppColors.background : AppColors.card,
+      // สีขาวทุกขนาดจอ · จอกว้าง header ต่อกับแถบนำทางข้างเป็นกรอบเดียวล้อม
+      // พื้นที่เนื้อหาสีครีม · จอแคบต่อกับแถบสถานะของเบราว์เซอร์ (theme-color
+      // ใน web/index.html ก็เป็นสีขาว) และเข้าคู่กับแถบเมนูล่าง · เดิมจอแคบ
+      // เป็นสีครีม ซึ่งเกิดรอยต่อกับแถบสถานะสีขาวตรงขอบบนของจอ
+      backgroundColor: AppColors.card,
+      // เส้นขอบล่างสีเดียวกับเส้นคั่นของแถบนำทางข้าง · ไม่มีเส้นนี้ ขอบของ
+      // header สีขาวบนพื้นครีมจะดูจางจนแยกไม่ออกว่าหัวจบตรงไหน
+      shape: const Border(bottom: BorderSide(color: AppColors.border)),
       elevation: 0,
       scrolledUnderElevation: 0,
       titleSpacing: 16,

@@ -24,6 +24,7 @@ import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/splash_screen.dart';
 import 'screens/tenant/tenant_shell.dart';
 import 'theme/app_theme.dart';
+import 'widgets/web_safe_area.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -141,6 +142,9 @@ class HorPlugApp extends StatelessWidget {
         scrollBehavior: const _AppScrollBehavior(),
         routerConfig: _buildRouter(authController),
         debugShowCheckedModeBanner: false,
+        // บนเว็บ Flutter ไม่รู้ขอบปลอดภัยของจอ · ใส่ไว้ที่รากที่เดียว ทุกหน้า
+        // (AppBar, SafeArea, แถบเมนูล่าง) จึงเว้นที่ให้รอยบากเหมือนแอป native
+        builder: (context, child) => WebSafeArea(child: child!),
       ),
     );
   }

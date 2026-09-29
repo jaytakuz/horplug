@@ -11,11 +11,11 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="description" content="ระบบจัดการหอพัก — ออกบิลค่าเช่า ค่าน้ำค่าไฟ รับชำระผ่านพร้อมเพย์ และคุยกับผู้เช่าในที่เดียว">
-  <meta name="theme-color" content="#1B3A5C">
+  <meta name="theme-color" content="#FFFFFF">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="HorPlug">
   <!--
     ไอคอนของ iOS ต้องเป็นไฟล์แยก ไม่ใช่ Icon-192 ที่ใช้กับ PWA — สองอย่างนี้
@@ -61,16 +61,17 @@
       unicode-range: U+0E00-0E7F, U+200B-200D, U+25CC;
     }
 
-    /* สีกรมท่าเดียวกับ AppColors.primary และ theme-color ด้านบน · Safari บน
-       iOS รุ่นใหม่ไม่อ่าน theme-color แล้ว แต่ย้อมแถบสถานะ (เวลา แบตเตอรี่)
-       ตามสีพื้นหลังของหน้าแทน ถ้าปล่อยเป็นสีเทาอ่อน แถบบน iPhone จะไม่ตรงกับ
-       Android · Flutter วาดทับพื้นหลังนี้ทั้งจอ จึงเห็นสีนี้แค่ใต้แถบสถานะและ
-       ระหว่างที่ engine ยังโหลดไม่เสร็จ */
+    /* สีขาวเดียวกับ AppColors.card และ theme-color ด้านบน · เลือกขาวแทนสีครีม
+       เพราะเข้ากับทุกขนาดจอ (header บนจอกว้างเป็นสีขาว) · Safari บน iOS รุ่น
+       ใหม่ไม่อ่าน theme-color แล้ว แต่ย้อมแถบสถานะ (เวลา แบตเตอรี่) ตามสีพื้น
+       หลังของหน้าแทน ถ้าสองค่านี้ไม่ตรงกัน แถบบน iPhone กับ Android จะคนละสี ·
+       Flutter วาดทับพื้นหลังนี้ทั้งจอ จึงเห็นสีนี้แค่ใต้แถบสถานะและระหว่างที่
+       engine ยังโหลดไม่เสร็จ */
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
-      background-color: #1B3A5C;
+      background-color: #FFFFFF;
       /* กันการลากหน้าเว็บทั้งหน้าบน iOS Safari ซึ่งทำให้เนื้อหาเด้งพ้นจอ
          ระหว่างที่ผู้ใช้เลื่อนรายการภายในแอป */
       overscroll-behavior: none;
@@ -87,7 +88,7 @@
          ขึ้นด้วยฟอนต์ระบบก่อนระหว่างรอไฟล์ แล้วค่อยสลับ แทนที่จะว่างเปล่า
          ส่วนตัวที่ไม่ใช่ไทย (…) ตกไปฟอนต์ระบบตามเดิม */
       font-family: "Google Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-      color: rgba(255, 255, 255, 0.8);
+      color: #5A6B80;
       font-size: 14px;
     }
   </style>
@@ -95,21 +96,43 @@
 <body>
   <div id="loading">กำลังโหลด…</div>
   <!--
-    Flutter บนเว็บไม่อ่าน env(safe-area-inset-*) · MediaQuery.viewPadding จึง
-    เป็น 0 เสมอ แถบเมนูล่างเลยไปชิดแถบ home indicator ของ iPhone · วัดค่าจริง
-    ด้วย element ตัวอย่างแล้วเปิดให้ Dart อ่านผ่าน window.horplugSafeAreaBottom
-    (ดู lib/widgets/web_safe_area.dart) · วัดใหม่ทุกครั้งที่ถูกเรียก เพราะค่า
-    เปลี่ยนเมื่อหมุนจอหรือแถบเครื่องมือของ Safari ยุบ/ขยาย
+    ขอบปลอดภัยของจอ (รอยบาก แถบ home indicator) มีสองปัญหาซ้อนกัน
+
+    1. engine ของ Flutter ลบ <meta name="viewport"> ของเราทิ้งแล้วใส่ของตัวเอง
+       ซึ่งไม่มี viewport-fit=cover · ไม่มีค่านี้ env(safe-area-inset-*) จะเป็น
+       0 ทุกด้าน · จึงคอยเติมกลับทุกครั้งที่ engine สร้าง tag ใหม่ (รวมถึงตอน
+       hot restart)
+    2. Flutter บนเว็บไม่อ่าน env(safe-area-inset-*) เลย · MediaQuery.viewPadding
+       จึงเป็น 0 เสมอ · วัดค่าจริงด้วย element ตัวอย่าง แล้วเปิดให้ Dart อ่านผ่าน
+       window.horplugSafeAreaInsets (ดู lib/widgets/web_safe_area.dart) · วัดใหม่
+       ทุกครั้งที่ถูกเรียก เพราะค่าเปลี่ยนเมื่อหมุนจอหรือแถบของ Safari ยุบ/ขยาย
   -->
   <script>
-    window.horplugSafeAreaBottom = function () {
+    (function () {
+      function ensureViewportFitCover() {
+        document.querySelectorAll('meta[name="viewport"]').forEach(function (meta) {
+          var content = meta.getAttribute('content') || '';
+          if (content.indexOf('viewport-fit') === -1) {
+            meta.setAttribute('content', content + ', viewport-fit=cover');
+          }
+        });
+      }
+      new MutationObserver(ensureViewportFitCover)
+        .observe(document.head, { childList: true });
+    })();
+
+    window.horplugSafeAreaInsets = function () {
       var probe = document.createElement('div');
       probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;' +
-        'height:0;padding-bottom:env(safe-area-inset-bottom, 0px);';
+        'width:0;height:0;' +
+        'padding:env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) ' +
+        'env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);';
       document.body.appendChild(probe);
-      var value = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+      var style = getComputedStyle(probe);
+      var insets = [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft]
+        .map(function (value) { return parseFloat(value) || 0; });
       probe.remove();
-      return value;
+      return insets;
     };
   </script>
   <script src="flutter_bootstrap.js" async></script>

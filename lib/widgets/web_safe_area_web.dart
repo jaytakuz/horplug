@@ -1,13 +1,17 @@
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
-/// เรียก window.horplugSafeAreaBottom ที่ประกาศไว้ใน web/index.html
+import 'package:flutter/widgets.dart';
+
+/// เรียก window.horplugSafeAreaInsets ที่ประกาศไว้ใน web/index.html
 ///
-/// คืน 0 เมื่อไม่มีฟังก์ชันนี้ (เช่น index.html รุ่นเก่าที่ยังค้างใน cache)
-/// แทนที่จะโยน error แล้วทำให้แถบเมนูวาดไม่ขึ้นทั้งแถบ
-double webSafeAreaBottom() {
-  if (!globalContext.has('horplugSafeAreaBottom')) return 0;
-  final value =
-      globalContext.callMethod<JSNumber?>('horplugSafeAreaBottom'.toJS);
-  return value?.toDartDouble ?? 0;
+/// คืน [EdgeInsets.zero] เมื่อไม่มีฟังก์ชันนี้ (เช่น index.html รุ่นเก่าที่ยัง
+/// ค้างใน cache) แทนที่จะโยน error แล้วทำให้ทั้งแอปวาดไม่ขึ้น
+EdgeInsets webSafeAreaInsets() {
+  if (!globalContext.has('horplugSafeAreaInsets')) return EdgeInsets.zero;
+  final result = globalContext
+      .callMethod<JSArray<JSNumber>?>('horplugSafeAreaInsets'.toJS);
+  final values = result?.toDart.map((value) => value.toDartDouble).toList();
+  if (values == null || values.length != 4) return EdgeInsets.zero;
+  return EdgeInsets.fromLTRB(values[3], values[0], values[1], values[2]);
 }
