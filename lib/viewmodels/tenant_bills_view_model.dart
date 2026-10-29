@@ -4,7 +4,6 @@ import '../models/models.dart';
 import '../services/tenant_billing_source.dart';
 import 'error_message.dart';
 import 'refreshable.dart';
-import 'tenant_dashboard_view_model.dart' show billStatusLabel;
 import 'safe_notifier.dart';
 import 'tenant_slip_submission.dart';
 
@@ -15,9 +14,20 @@ const tenantBillFilters = [
   'ชำระแล้ว',
 ];
 
+/// กรองตามสถานะของบิล ไม่ใช่ตามป้าย — ป้ายของบิล pending คือ "รอยืนยัน" ซึ่ง
+/// ไม่ตรงกับชิป "รอตรวจสลิป" การเทียบข้อความจึงไม่เคยเจอบิลเลย · ชิปนี้รวมทั้ง
+/// บิลที่แนบสลิปและที่แจ้งเงินสด เหมือนหน้าบิลฝั่งเจ้าของหอ
 List<Invoice> filterBills(List<Invoice> bills, String filter) {
-  if (filter == 'ทั้งหมด') return bills;
-  return bills.where((bill) => billStatusLabel(bill.status) == filter).toList();
+  switch (filter) {
+    case 'ค้างชำระ':
+      return bills.where((bill) => bill.status == InvoiceStatus.unpaid).toList();
+    case 'รอตรวจสลิป':
+      return bills.where((bill) => bill.status == InvoiceStatus.pending).toList();
+    case 'ชำระแล้ว':
+      return bills.where((bill) => bill.status == InvoiceStatus.paid).toList();
+    default:
+      return bills;
+  }
 }
 
 double totalOutstanding(List<Invoice> bills) => bills
