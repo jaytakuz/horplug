@@ -41,11 +41,14 @@ class SupabaseTenantBillingSource implements TenantBillingSource {
   SupabaseTenantBillingSource({
     InvoiceService? invoiceService,
     SupabaseService? service,
+    PaymentChannelService? paymentChannelService,
   })  : _injectedInvoices = invoiceService,
-        _injectedService = service;
+        _injectedService = service,
+        _injectedChannels = paymentChannelService;
 
   final InvoiceService? _injectedInvoices;
   final SupabaseService? _injectedService;
+  final PaymentChannelService? _injectedChannels;
   InvoiceService? _resolvedInvoices;
   SupabaseService? _resolvedService;
   PaymentChannelService? _resolvedChannels;
@@ -56,8 +59,8 @@ class SupabaseTenantBillingSource implements TenantBillingSource {
       _resolvedInvoices ??= (_injectedInvoices ?? InvoiceService());
   SupabaseService get _service =>
       _resolvedService ??= (_injectedService ?? SupabaseService());
-  PaymentChannelService get _channels =>
-      _resolvedChannels ??= PaymentChannelService(service: _service);
+  PaymentChannelService get _channels => _resolvedChannels ??=
+      (_injectedChannels ?? PaymentChannelService(service: _service));
 
   @override
   Future<Invoice?> fetchCurrentBill({
