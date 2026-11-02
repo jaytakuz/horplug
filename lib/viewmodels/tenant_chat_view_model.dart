@@ -72,6 +72,12 @@ class TenantChatViewModel extends ChangeNotifier
   int _messageLimit = _pageSize;
   StreamSubscription<List<ChatMessage>>? _subscription;
 
+  /// id ของข้อความที่เคยเห็นแล้ว ไว้แยกข้อความ "ใหม่" ออกจากที่เคยประมวลผลแล้ว
+  /// เมื่อ stream ส่งรายการทั้งก้อนมาซ้ำทุกครั้งที่มีการเปลี่ยนแปลง — ใช้ทั้งกับ
+  /// การเช็คบิลที่ต้องโหลดใหม่และ (ในอนาคต) อย่างอื่นที่ต้องรู้ว่า "เพิ่งมาถึง"
+  bool _invoiceBaselineSet = false;
+  Set<String> _knownMessageIds = {};
+
   void start() {
     isLoading = true;
     errorMessage = null;
@@ -123,24 +129,57 @@ class TenantChatViewModel extends ChangeNotifier
       isLoadingMore = false;
       notifyListeners();
       _signalIfNewLandlordUpdate(messages);
-
-      // invoicesById โหลดครั้งเดียวตอน start()/reloadAfterSlip() — บิลที่ออก
-      // ใหม่ระหว่างที่แชทเปิดค้างอยู่แล้ว (IndexedStack ไม่เคย dispose แท็บนี้)
-      // จะมาถึงเป็นข้อความจริงผ่าน stream นี้ แต่การ์ดยังไม่มีข้อมูลบิลให้แสดง
-      // (ตกไปเป็นข้อความสำรอง กดจ่ายไม่ได้) จนกว่าจะ resolve เพิ่ม — เช็คว่ามี
-      // ข้อความประเภทบิลที่ยังไม่มีใน map ไหม ถ้ามีค่อยโหลด invoicesById ใหม่
-      // แทนที่จะโหลดทุกครั้งที่มีข้อความมา ซึ่งจะยิง query เกินจำเป็น
-      final hasUnresolvedInvoice = messages.any((message) =>
-          message.type == MessageType.invoice &&
-          message.invoiceId != null &&
-          !invoicesById.containsKey(message.invoiceId));
-      if (hasUnresolvedInvoice) _loadInvoices();
+      _reloadInvoicesIfNewCardArrived(messages);
     }, onError: (error) {
-      errorMessage = error.toString();
+      errorMessage = formatErrorMessage(error);
       isLoading = false;
       isLoadingMore = false;
       notifyListeners();
     });
+  }
+
+  /// เรียกจากปุ่ม "ลองใหม่" หลังการเชื่อมต่อแบบเรียลไทม์ล้มเหลว
+  ///
+  /// แท็บนี้ไม่เคย dispose ตราบใดที่แอปยังเปิดอยู่ (อยู่ใน IndexedStack ของ
+  /// TenantShell) ถ้าปล่อยให้ errorMessage ค้างอยู่เฉยๆ ผู้เช่าจะเห็นข้อความ
+  /// นี้ไปตลอดจนกว่าจะปิดแอปทั้งแอปแล้วเปิดใหม่
+  void retryConnection() {
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+    _subscribeToMessages();
+  }
+
+  /// รีเฟรช invoicesById เมื่อการ์ดบิล "ใหม่" โผล่เข้ามาในแชท — ทั้งบิลที่ไม่
+  /// เคยเห็นมาก่อน (ออกบิลใหม่) และบิลเดิมที่เจ้าของหอส่งการ์ดซ้ำหลังสถานะ
+  /// เปลี่ยน เช่น ปฏิเสธการแจ้งเงินสดแล้วส่งการ์ดเดิมอีกครั้ง
+  ///
+  /// เดิมเช็คแค่ "invoiceId ที่ยังไม่มีใน invoicesById" ซึ่งพลาดกรณีที่สอง —
+  /// บิลที่เคย resolve ไปแล้วครั้งหนึ่ง (ตอนสถานะยังเป็นรอยืนยันรับเงินสด) จะไม่
+  /// ถูกโหลดสถานะใหม่เลยแม้สถานะจริงในฐานข้อมูลเปลี่ยนไปแล้ว ผู้เช่าเห็นสถานะ
+  /// เก่าค้างอยู่บนการ์ด กดจ่ายไม่ได้ (canOpenPaymentSheet เช็คจากสถานะเก่า)
+  /// ทั้งที่เจ้าของหอเพิ่งส่งการ์ดใหม่มาเตือนให้จ่ายจริง — ขัดกับที่
+  /// invoicesByIdForRoom ตั้งใจให้การ์ดแสดง "สถานะสด ไม่ใช่สถานะตอนส่ง"
+  ///
+  /// เช็คจาก id ข้อความที่เคยเห็นแล้วแทน id ของบิล เพื่อแยก "การ์ดที่เพิ่งส่ง
+  /// มาใหม่" ออกจาก "การ์ดเก่าที่ยังอยู่ในหน้าต่างข้อความเดิม" (ซึ่ง stream
+  /// ส่งรายการทั้งก้อนมาซ้ำทุกครั้ง ไม่ใช่เฉพาะที่เปลี่ยน) การส่งครั้งแรกเป็น
+  /// แค่ฐานเทียบ ไม่โหลดซ้ำกับที่ start() โหลดไปแล้ว
+  void _reloadInvoicesIfNewCardArrived(List<ChatMessage> messages) {
+    final currentIds = messages.map((message) => message.id).toSet();
+
+    if (!_invoiceBaselineSet) {
+      _invoiceBaselineSet = true;
+      _knownMessageIds = currentIds;
+      return;
+    }
+
+    final hasNewInvoiceCard = messages.any((message) =>
+        message.type == MessageType.invoice &&
+        message.invoiceId != null &&
+        !_knownMessageIds.contains(message.id));
+    _knownMessageIds = currentIds;
+    if (hasNewInvoiceCard) _loadInvoices();
   }
 
   static bool _isLandlordUpdate(ChatMessage message) =>

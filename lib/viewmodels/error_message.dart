@@ -26,6 +26,9 @@ String formatErrorMessage(Object error) {
   if (error is AuthException) {
     return 'เซสชันหมดอายุหรือเข้าสู่ระบบไม่สำเร็จ กรุณาเข้าสู่ระบบใหม่';
   }
+  if (error is RealtimeSubscribeException) {
+    return 'เชื่อมต่อแบบไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
+  }
 
   final message = error.toString().trim();
   final normalized = message.startsWith('Exception: ')

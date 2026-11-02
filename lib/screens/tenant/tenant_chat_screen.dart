@@ -10,6 +10,7 @@ import '../../viewmodels/tenant_chat_view_model.dart';
 import '../../viewmodels/tenant_dashboard_view_model.dart' show billStatusLabelOf;
 import '../../widgets/chat_conversation_view.dart';
 import '../../widgets/payment_sheet.dart';
+import '../../widgets/reusable_widgets.dart';
 
 class TenantChatScreen extends StatelessWidget {
   /// [embedded] = true เมื่อถูกวางเป็นแท็บใน TenantShell ซึ่งมี Scaffold และ
@@ -133,6 +134,12 @@ class _TenantChatView extends StatelessWidget {
                           viewModel.errorMessage!,
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 16),
+                        PrimaryButton(
+                          label: 'ลองใหม่',
+                          icon: Icons.refresh,
+                          onPressed: viewModel.retryConnection,
                         ),
                       ],
                     ),
